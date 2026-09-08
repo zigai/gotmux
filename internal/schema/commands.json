@@ -1,0 +1,1250 @@
+{
+  "schema": 1,
+  "exhaustive_flag_parity": false,
+  "pinned_releases": [
+    "3.6",
+    "3.6a",
+    "3.6b",
+    "3.7c"
+  ],
+  "entries": [
+    {
+      "command": "attach-session",
+      "symbol": "Server.OpenControl; PrepareAttach",
+      "minimum_version": "3.6",
+      "transport": "control; advanced subprocess",
+      "completion": "control lifetime / caller-owned terminal process",
+      "implemented_flags": [
+        "-t",
+        "-f",
+        "-r",
+        "-E"
+      ],
+      "test": "TestIntegrationControlParityAndExplicitAuxiliary",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "bind-key",
+      "symbol": "Server.Bind",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "install binding",
+      "implemented_flags": [
+        "-T",
+        "-r",
+        "-N"
+      ],
+      "test": "TestHookAndBindingPayloadsNeverEvaluate",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "break-pane",
+      "symbol": "Pane.Break",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "creation slot",
+      "implemented_flags": [
+        "-P",
+        "-F",
+        "-s",
+        "-t",
+        "-d",
+        "-n"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "capture-pane",
+      "symbol": "Pane.Capture",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "owned screen/history bytes",
+      "implemented_flags": [
+        "-p",
+        "-t",
+        "-S",
+        "-E",
+        "-J",
+        "-e",
+        "-N",
+        "-a",
+        "-M"
+      ],
+      "test": "TestIntegrationControlParityAndExplicitAuxiliary",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "choose-buffer",
+      "symbol": "Pane.ChooseBuffer",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "mode installed, not selection",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "choose-client",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Explicit-client selection UI coverage is not completed."
+    },
+    {
+      "command": "choose-tree",
+      "symbol": "Pane.ChooseTree",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "mode installed, not selection",
+      "implemented_flags": [
+        "-t",
+        "-s",
+        "-w",
+        "-Z"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "clear-history",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Not yet a typed method; consumer requirement review pending."
+    },
+    {
+      "command": "clock-mode",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Optional terminal-facing mode is not yet typed."
+    },
+    {
+      "command": "command-prompt",
+      "symbol": "Client.Prompt",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "prompt scheduling/completion, not parsed choice",
+      "implemented_flags": [
+        "-t",
+        "-p",
+        "-I",
+        "-1",
+        "-N"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "confirm-before",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Interactive command confirmation semantics are not yet typed."
+    },
+    {
+      "command": "copy-mode",
+      "symbol": "Pane.CopyMode",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "mode entry",
+      "implemented_flags": [
+        "-t",
+        "-u",
+        "-e",
+        "-M"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "customize-mode",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Deeply diagnostic/customization UI remains raw in this alpha."
+    },
+    {
+      "command": "delete-buffer",
+      "symbol": "Server.DeleteBuffer",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-b"
+      ],
+      "test": "TestIntegrationBinaryBufferAndLiteralInput",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "detach-client",
+      "symbol": "Client.Detach",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "client departure",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "display-menu",
+      "symbol": "Client.Menu",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "tmux completion, no invented user choice",
+      "implemented_flags": [
+        "-c",
+        "-T",
+        "-x",
+        "-y",
+        "-M"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "display-message",
+      "symbol": "Server.Probe; Info methods; Pane.Format; Client.Message",
+      "minimum_version": "3.6",
+      "transport": "both for records; subprocess for UI",
+      "completion": "metadata, format, message",
+      "implemented_flags": [
+        "-p",
+        "-F",
+        "-t",
+        "-c"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "display-panes",
+      "symbol": "Client.DisplayPanes",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "UI scheduling",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "display-popup",
+      "symbol": "Client.Popup",
+      "minimum_version": "3.6",
+      "transport": "subprocess UI",
+      "completion": "tmux completion, no invented user choice",
+      "implemented_flags": [
+        "-c",
+        "-d",
+        "-T",
+        "-w",
+        "-h",
+        "-E",
+        "-B"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "find-window",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Application matching policy is outside the core; exact IDs and custom Format queries are available."
+    },
+    {
+      "command": "has-session",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Exact existence is implemented through verified typed lookups; direct command remains raw."
+    },
+    {
+      "command": "if-shell",
+      "symbol": "Server.IfFormat; internal guards",
+      "minimum_version": "3.6",
+      "transport": "both for internal guarded typed plans",
+      "completion": "synchronous format condition / structured sequence",
+      "implemented_flags": [
+        "-F",
+        "-t"
+      ],
+      "test": "TestGuardQueueAndUnwrap",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "join-pane",
+      "symbol": "Pane.Join; Pane.Move",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-s",
+        "-t",
+        "-h",
+        "-v",
+        "-l",
+        "-b",
+        "-d"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "kill-pane",
+      "symbol": "Pane.Kill",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "TestIntegrationTwoServersAndReplacement",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "kill-server",
+      "symbol": "Server.Kill; KillIfIdentity",
+      "minimum_version": "3.6",
+      "transport": "subprocess; control may lose acknowledgment",
+      "completion": "daemon exit",
+      "implemented_flags": [],
+      "test": "TestIntegrationTwoServersAndReplacement",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "kill-session",
+      "symbol": "Session.Kill",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation / possible connection exit",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "kill-window",
+      "symbol": "Window.Kill",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "shared-window destruction",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "last-pane",
+      "symbol": "Window.LastPane",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "focus selection",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "last-window",
+      "symbol": "Session.LastWindow",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "focus selection",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "link-window",
+      "symbol": "Window.Link",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "mutation then observed slot",
+      "implemented_flags": [
+        "-d",
+        "-k",
+        "-s",
+        "-t"
+      ],
+      "test": "TestIntegrationLinkedGraphAndStaleIndex",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-buffers",
+      "symbol": "Server.Buffers",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-F"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-clients",
+      "symbol": "Server.Clients; Client.Info; Snapshot",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-F"
+      ],
+      "test": "TestIntegrationControlParityAndExplicitAuxiliary",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-commands",
+      "symbol": "Server.Capabilities",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-F"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-keys",
+      "symbol": "Server.Bindings",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "serialized payload observation",
+      "implemented_flags": [
+        "-T"
+      ],
+      "test": "TestHookAndBindingPayloadsNeverEvaluate",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-panes",
+      "symbol": "Server.Panes; Window.Panes; Snapshot",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-a",
+        "-F",
+        "-f",
+        "-t"
+      ],
+      "test": "TestIntegrationControlParityAndExplicitAuxiliary",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-sessions",
+      "symbol": "Server.Sessions; FindSession; Snapshot",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-F",
+        "-f"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "list-windows",
+      "symbol": "Server.Windows; Session.Windows; Window.Links; Snapshot",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "metadata",
+      "implemented_flags": [
+        "-a",
+        "-F",
+        "-f",
+        "-t"
+      ],
+      "test": "TestIntegrationLinkedGraphAndStaleIndex",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "load-buffer",
+      "symbol": "Server.WriteBuffer; LoadBufferFile",
+      "minimum_version": "3.6",
+      "transport": "subprocess stdin; file mode both",
+      "completion": "buffer input/file completion",
+      "implemented_flags": [
+        "-b"
+      ],
+      "test": "TestIntegrationBinaryBufferAndLiteralInput",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "lock-client",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Terminal lock-command behavior is not yet typed."
+    },
+    {
+      "command": "lock-server",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Terminal lock-command behavior is not yet typed."
+    },
+    {
+      "command": "lock-session",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Terminal lock-command behavior is not yet typed."
+    },
+    {
+      "command": "move-pane",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Pane.Move uses join-pane semantics; direct alias remains raw."
+    },
+    {
+      "command": "move-window",
+      "symbol": "WindowLink.Move",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "mutation then observed slot",
+      "implemented_flags": [
+        "-d",
+        "-k",
+        "-s",
+        "-t"
+      ],
+      "test": "TestIntegrationLinkedGraphAndStaleIndex",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "new-session",
+      "symbol": "Server.NewSession",
+      "minimum_version": "3.6",
+      "transport": "both; startup subprocess",
+      "completion": "creation ID",
+      "implemented_flags": [
+        "-d",
+        "-P",
+        "-F",
+        "-s",
+        "-n",
+        "-t",
+        "-x",
+        "-y",
+        "-c"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "new-window",
+      "symbol": "Session.NewWindow",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "creation slot",
+      "implemented_flags": [
+        "-d",
+        "-P",
+        "-F",
+        "-t",
+        "-n",
+        "-c"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "next-layout",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Window.NextLayout uses select-layout -n; direct alias remains raw."
+    },
+    {
+      "command": "next-window",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Navigation policy/flag coverage remains unfinished; exact WindowLink.Select is typed."
+    },
+    {
+      "command": "paste-buffer",
+      "symbol": "Pane.PasteBuffer",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "input paste, not program completion",
+      "implemented_flags": [
+        "-b",
+        "-t",
+        "-d",
+        "-p",
+        "-r",
+        "-s"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "pipe-pane",
+      "symbol": "Pane.Pipe; StopPipe",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "pipe scheduling",
+      "implemented_flags": [
+        "-t",
+        "-I",
+        "-O",
+        "-o"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "previous-layout",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Window.PreviousLayout uses select-layout -p; direct alias remains raw."
+    },
+    {
+      "command": "previous-window",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Navigation policy/flag coverage remains unfinished; exact WindowLink.Select is typed."
+    },
+    {
+      "command": "refresh-client",
+      "symbol": "Client.Refresh; Connection.WatchFormat; UnwatchFormat; SetPaneOutput",
+      "minimum_version": "3.6",
+      "transport": "both; subscriptions control",
+      "completion": "refresh / subscription scheduling",
+      "implemented_flags": [
+        "-t",
+        "-S",
+        "-C",
+        "-f",
+        "-B",
+        "-A"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "rename-session",
+      "symbol": "Session.Rename",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "rename-window",
+      "symbol": "Window.Rename",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "resize-pane",
+      "symbol": "Pane.Resize; ToggleZoom",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t",
+        "-x",
+        "-y",
+        "-U",
+        "-D",
+        "-L",
+        "-R",
+        "-Z"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "resize-window",
+      "symbol": "Window.Resize",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t",
+        "-x",
+        "-y"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "respawn-pane",
+      "symbol": "Pane.Respawn",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "program launch, not program completion",
+      "implemented_flags": [
+        "-t",
+        "-k",
+        "-c"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "respawn-window",
+      "symbol": "Window.Respawn",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "program launch, not program completion",
+      "implemented_flags": [
+        "-t",
+        "-k",
+        "-c"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "rotate-window",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Not yet typed."
+    },
+    {
+      "command": "run-shell",
+      "symbol": "Server.RunShell",
+      "minimum_version": "3.6",
+      "transport": "subprocess output; restricted control",
+      "completion": "explicit script scheduling/completion",
+      "implemented_flags": [
+        "-b"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "save-buffer",
+      "symbol": "Server.SaveBufferFile",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "file write acknowledgment",
+      "implemented_flags": [
+        "-b",
+        "-a"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "select-layout",
+      "symbol": "Window.SelectLayout; NextLayout; PreviousLayout",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t",
+        "-n",
+        "-p"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "select-pane",
+      "symbol": "Pane.Select; SetTitle; SetInputEnabled",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-t",
+        "-T",
+        "-e",
+        "-d"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "select-window",
+      "symbol": "WindowLink.Select",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "focus selection",
+      "implemented_flags": [
+        "-t"
+      ],
+      "test": "TestIntegrationLinkedGraphAndStaleIndex",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "send-keys",
+      "symbol": "Pane.SendText; SendKeys; Submit; CopyAction",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "ordered input, not shell completion",
+      "implemented_flags": [
+        "-t",
+        "-l",
+        "-X"
+      ],
+      "test": "TestIntegrationBinaryBufferAndLiteralInput",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "server-access",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Server access-control management not yet typed."
+    },
+    {
+      "command": "set-buffer",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Binary replacement uses bounded load-buffer stdin. Append/rename/clipboard flags need a full typed design."
+    },
+    {
+      "command": "set-environment",
+      "symbol": "EnvironmentScope.Set; SetHidden; Unset; Remove",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-g",
+        "-t",
+        "-h",
+        "-u",
+        "-r"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "set-hook",
+      "symbol": "HookScope.Set; Unset",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "install/remove, never eager execution",
+      "implemented_flags": [
+        "-g",
+        "-w",
+        "-p",
+        "-t",
+        "-u"
+      ],
+      "test": "TestHookAndBindingPayloadsNeverEvaluate",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "set-option",
+      "symbol": "scope-specific option writes and arrays",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-s",
+        "-g",
+        "-w",
+        "-p",
+        "-t",
+        "-u"
+      ],
+      "test": "TestIntegrationOptionsInheritanceAndEmpty",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "set-window-option",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Equivalent window-scope writes use set-option -w; direct alias remains raw."
+    },
+    {
+      "command": "show-buffer",
+      "symbol": "Server.ReadBuffer",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "owned binary bytes",
+      "implemented_flags": [
+        "-b"
+      ],
+      "test": "TestIntegrationBinaryBufferAndLiteralInput",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "show-environment",
+      "symbol": "EnvironmentScope.Get",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "observation",
+      "implemented_flags": [
+        "-g",
+        "-t",
+        "-h"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "show-hooks",
+      "symbol": "HookScope.List",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "serialized payload observation",
+      "implemented_flags": [
+        "-g",
+        "-w",
+        "-p",
+        "-t"
+      ],
+      "test": "TestHookAndBindingPayloadsNeverEvaluate",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "show-messages",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Diagnostic history remains raw."
+    },
+    {
+      "command": "show-options",
+      "symbol": "scope-specific option reads and arrays",
+      "minimum_version": "3.6",
+      "transport": "subprocess; explicit auxiliary",
+      "completion": "observation",
+      "implemented_flags": [
+        "-v",
+        "-q",
+        "-A",
+        "-s",
+        "-g",
+        "-w",
+        "-p",
+        "-t"
+      ],
+      "test": "TestIntegrationOptionsInheritanceAndEmpty",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "show-prompt-history",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Diagnostic/history output remains raw."
+    },
+    {
+      "command": "show-window-options",
+      "symbol": "Server.Run",
+      "minimum_version": "unverified per-release inventory",
+      "transport": "subprocess",
+      "completion": "raw result",
+      "implemented_flags": [],
+      "test": "raw path tests; command-specific integration pending",
+      "status": "raw-only-alpha",
+      "reason": "Equivalent window-scope reads use show-options -w; direct alias remains raw."
+    },
+    {
+      "command": "source-file",
+      "symbol": "Server.SourceFile",
+      "minimum_version": "3.6",
+      "transport": "subprocess",
+      "completion": "configuration execution",
+      "implemented_flags": [
+        "-q",
+        "-n",
+        "-v"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "split-window",
+      "symbol": "Pane.Split",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "creation ID",
+      "implemented_flags": [
+        "-P",
+        "-F",
+        "-t",
+        "-h",
+        "-v",
+        "-d",
+        "-b",
+        "-f",
+        "-l",
+        "-c"
+      ],
+      "test": "TestIntegrationInspectCreateAndCapture",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "start-server",
+      "symbol": "Server.NewSession (AllowStart internal startup)",
+      "minimum_version": "3.6",
+      "transport": "subprocess",
+      "completion": "startup",
+      "implemented_flags": [],
+      "test": "TestIntegrationNoServerAndExistingOnly",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "swap-pane",
+      "symbol": "Pane.Swap",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-s",
+        "-t",
+        "-d",
+        "-Z"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "swap-window",
+      "symbol": "WindowLink.Swap",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "acknowledged mutation",
+      "implemented_flags": [
+        "-d",
+        "-s",
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "switch-client",
+      "symbol": "Client.Switch",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "client selection",
+      "implemented_flags": [
+        "-c",
+        "-t",
+        "-r",
+        "-E"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "unbind-key",
+      "symbol": "Server.Unbind",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "remove binding",
+      "implemented_flags": [
+        "-T"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "unlink-window",
+      "symbol": "WindowLink.Unlink; UnlinkWith",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "one membership removal",
+      "implemented_flags": [
+        "-k",
+        "-t"
+      ],
+      "test": "integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    },
+    {
+      "command": "wait-for",
+      "symbol": "Server.WaitFor; Signal; Lock; Unlock",
+      "minimum_version": "3.6",
+      "transport": "both",
+      "completion": "wait/signal/lock acknowledgment",
+      "implemented_flags": [
+        "-S",
+        "-L",
+        "-U"
+      ],
+      "test": "dispatcher model; real integration pending",
+      "status": "implemented-unverified-on-real-tmux",
+      "reason": null
+    }
+  ]
+}

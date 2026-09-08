@@ -1,0 +1,6 @@
+ok  	example.com/tmux	1.434s
+ok  	example.com/tmux/internal/codec	1.110s
+?   	example.com/tmux/internal/lifecycle	[no test files]
+?   	example.com/tmux/internal/schema	[no test files]
+?   	example.com/tmux/tmuxtest	[no test files]
+ok  	example.com/tmux/internal/exec	4.606s

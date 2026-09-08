@@ -1,0 +1,21 @@
+{
+  "release_ready": false,
+  "gates": {
+    "go127-native": "open",
+    "tmux36-linux": "open",
+    "tmux36-macos": "open",
+    "tmux36a-linux": "open",
+    "tmux36a-macos": "open",
+    "tmux36b-linux": "open",
+    "tmux36b-macos": "open",
+    "tmux37c-linux": "open",
+    "tmux37c-macos": "open",
+    "guarded-terminal-attach": "open",
+    "exhaustive-flag-ledger": "open",
+    "full-options-ledger": "open",
+    "builder-memory-accounting": "open",
+    "consumer-migrations": "open",
+    "performance-evidence": "open",
+    "published-module-identity": "open"
+  }
+}

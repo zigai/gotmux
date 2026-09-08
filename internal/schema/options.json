@@ -1,0 +1,373 @@
+{
+  "minimum_version": "3.6",
+  "source": "https://raw.githubusercontent.com/tmux/tmux/3.6/options-table.c",
+  "fields": {
+    "ServerOptions": [
+      [
+        "EscapeTime",
+        "escape-time",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "BufferLimit",
+        "buffer-limit",
+        "int",
+        1,
+        2147483647
+      ],
+      [
+        "ExitEmpty",
+        "exit-empty",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "ExitUnattached",
+        "exit-unattached",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "DefaultTerminal",
+        "default-terminal",
+        "string",
+        0,
+        0
+      ],
+      [
+        "SetClipboard",
+        "set-clipboard",
+        "ClipboardMode",
+        0,
+        0
+      ],
+      [
+        "HistoryFile",
+        "history-file",
+        "string",
+        0,
+        0
+      ]
+    ],
+    "SessionOptions": [
+      [
+        "HistoryLimit",
+        "history-limit",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "BaseIndex",
+        "base-index",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "DisplayTime",
+        "display-time",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "RepeatTime",
+        "repeat-time",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "Mouse",
+        "mouse",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "SetTitles",
+        "set-titles",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "DefaultShell",
+        "default-shell",
+        "string",
+        0,
+        0
+      ],
+      [
+        "DefaultCommand",
+        "default-command",
+        "string",
+        0,
+        0
+      ],
+      [
+        "DefaultSize",
+        "default-size",
+        "string",
+        0,
+        0
+      ],
+      [
+        "StatusLeft",
+        "status-left",
+        "string",
+        0,
+        0
+      ],
+      [
+        "StatusRight",
+        "status-right",
+        "string",
+        0,
+        0
+      ],
+      [
+        "StatusStyle",
+        "status-style",
+        "string",
+        0,
+        0
+      ],
+      [
+        "StatusPosition",
+        "status-position",
+        "StatusPosition",
+        0,
+        0
+      ],
+      [
+        "Status",
+        "status",
+        "StatusMode",
+        0,
+        0
+      ],
+      [
+        "Prefix",
+        "prefix",
+        "Key",
+        0,
+        0
+      ],
+      [
+        "DetachOnDestroy",
+        "detach-on-destroy",
+        "DetachPolicy",
+        0,
+        0
+      ]
+    ],
+    "WindowOptions": [
+      [
+        "AutomaticRename",
+        "automatic-rename",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "AllowRename",
+        "allow-rename",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "AggressiveResize",
+        "aggressive-resize",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "PaneBaseIndex",
+        "pane-base-index",
+        "int",
+        0,
+        2147483647
+      ],
+      [
+        "ModeKeys",
+        "mode-keys",
+        "ModeKeys",
+        0,
+        0
+      ],
+      [
+        "WindowSize",
+        "window-size",
+        "WindowSizePolicy",
+        0,
+        0
+      ],
+      [
+        "RemainOnExit",
+        "remain-on-exit",
+        "RemainOnExitPolicy",
+        0,
+        0
+      ],
+      [
+        "SynchronizePanes",
+        "synchronize-panes",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "PaneBorderStatus",
+        "pane-border-status",
+        "PaneBorderStatus",
+        0,
+        0
+      ],
+      [
+        "PaneBorderFormat",
+        "pane-border-format",
+        "string",
+        0,
+        0
+      ],
+      [
+        "ModeStyle",
+        "mode-style",
+        "string",
+        0,
+        0
+      ],
+      [
+        "WindowStatusFormat",
+        "window-status-format",
+        "string",
+        0,
+        0
+      ],
+      [
+        "WindowStatusCurrentFormat",
+        "window-status-current-format",
+        "string",
+        0,
+        0
+      ],
+      [
+        "AllowPassthrough",
+        "allow-passthrough",
+        "PassthroughPolicy",
+        0,
+        0
+      ]
+    ],
+    "PaneOptions": [
+      [
+        "RemainOnExit",
+        "remain-on-exit",
+        "RemainOnExitPolicy",
+        0,
+        0
+      ],
+      [
+        "SynchronizePanes",
+        "synchronize-panes",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "AllowPassthrough",
+        "allow-passthrough",
+        "PassthroughPolicy",
+        0,
+        0
+      ],
+      [
+        "AllowRename",
+        "allow-rename",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "ScrollOnClear",
+        "scroll-on-clear",
+        "bool",
+        0,
+        0
+      ],
+      [
+        "WindowStyle",
+        "window-style",
+        "string",
+        0,
+        0
+      ],
+      [
+        "WindowActiveStyle",
+        "window-active-style",
+        "string",
+        0,
+        0
+      ]
+    ]
+  },
+  "enums": {
+    "ClipboardMode": {
+      "ClipboardOff": "off",
+      "ClipboardOn": "on",
+      "ClipboardExternal": "external"
+    },
+    "StatusPosition": {
+      "StatusTop": "top",
+      "StatusBottom": "bottom"
+    },
+    "StatusMode": {
+      "StatusOff": "off",
+      "StatusOn": "on",
+      "StatusTwoLines": "2",
+      "StatusThreeLines": "3",
+      "StatusFourLines": "4",
+      "StatusFiveLines": "5"
+    },
+    "DetachPolicy": {
+      "DetachOff": "off",
+      "DetachOn": "on",
+      "DetachNoDetached": "no-detached",
+      "DetachPrevious": "previous",
+      "DetachNext": "next"
+    },
+    "ModeKeys": {
+      "ModeKeysVi": "vi",
+      "ModeKeysEmacs": "emacs"
+    },
+    "WindowSizePolicy": {
+      "WindowSizeLargest": "largest",
+      "WindowSizeSmallest": "smallest",
+      "WindowSizeManual": "manual",
+      "WindowSizeLatest": "latest"
+    },
+    "RemainOnExitPolicy": {
+      "RemainOff": "off",
+      "RemainOn": "on",
+      "RemainFailed": "failed"
+    },
+    "PaneBorderStatus": {
+      "BorderOff": "off",
+      "BorderTop": "top",
+      "BorderBottom": "bottom"
+    },
+    "PassthroughPolicy": {
+      "PassthroughOff": "off",
+      "PassthroughOn": "on",
+      "PassthroughAll": "all"
+    }
+  }
+}

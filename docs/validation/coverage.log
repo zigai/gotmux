@@ -1,0 +1,6 @@
+ok  	example.com/tmux	0.211s	coverage: 24.4% of statements
+ok  	example.com/tmux/internal/codec	0.024s	coverage: 73.5% of statements
+	example.com/tmux/internal/lifecycle		coverage: 0.0% of statements
+	example.com/tmux/internal/schema		coverage: 0.0% of statements
+	example.com/tmux/tmuxtest		coverage: 0.0% of statements
+ok  	example.com/tmux/internal/exec	0.189s	coverage: 92.2% of statements

@@ -1,0 +1,52 @@
+{
+  "recorded_utc": "2026-09-08T07:55:58+00:00",
+  "environment": {
+    "go": "go1.23.2",
+    "os": "linux",
+    "arch": "amd64",
+    "tmux": null
+  },
+  "offline_copy_only": true,
+  "top_level_unit_tests": 64,
+  "executable_examples": 1,
+  "fuzz_seed_subtests": 10,
+  "integration_skips": [
+    "TestIntegrationInspectCreateAndCapture",
+    "TestIntegrationBinaryBufferAndLiteralInput",
+    "TestIntegrationOptionsInheritanceAndEmpty",
+    "TestIntegrationLinkedGraphAndStaleIndex",
+    "TestIntegrationTwoServersAndReplacement",
+    "TestIntegrationControlParityAndExplicitAuxiliary",
+    "TestIntegrationNoServerAndExistingOnly"
+  ],
+  "fuzz_smoke_executions": {
+    "FuzzControlFrames": 9080,
+    "FuzzEmbeddedFrameDelimiters": 4610,
+    "FuzzOctal": 32877,
+    "FuzzQuoted": 31349,
+    "FuzzRecords": 35766
+  },
+  "checks": [
+    {
+      "name": "generated",
+      "command": "python3 internal/schema/generate.py --check",
+      "exit_code": 0
+    },
+    {
+      "name": "ledger",
+      "command": "python3 scripts/check_ledger.py",
+      "exit_code": 0
+    },
+    {
+      "name": "release-gates",
+      "command": "python3 scripts/check_release.py",
+      "exit_code": 1
+    },
+    {
+      "name": "gofmt",
+      "command": "gofmt -l .",
+      "exit_code": 0
+    }
+  ],
+  "v1_ready": false
+}

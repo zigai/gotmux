@@ -1,0 +1,10 @@
+*.test
+*.out
+*.prof
+coverage.html
+/dist/
+/tmp/
+__pycache__/
+coverage.out
+dist/
+.DS_Store
