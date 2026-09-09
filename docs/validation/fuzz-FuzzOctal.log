@@ -1,6 +1,0 @@
-fuzz: elapsed: 0s, gathering baseline coverage: 0/1 completed
-fuzz: elapsed: 0s, gathering baseline coverage: 1/1 completed, now fuzzing with 2 workers
-fuzz: elapsed: 3s, execs: 32877 (10951/sec), new interesting: 12 (total: 13)
-fuzz: elapsed: 3s, execs: 32877 (0/sec), new interesting: 12 (total: 13)
-PASS
-ok  	example.com/tmux/internal/codec	3.049s

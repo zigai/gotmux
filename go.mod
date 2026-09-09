@@ -1,4 +1,4 @@
-module example.com/tmux
+module github.com/zigai/gotmux
 
 go 1.27.0
 

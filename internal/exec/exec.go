@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os/exec"
 	"sync"
 	"time"
@@ -16,18 +15,16 @@ import (
 
 const ShutdownBudget = 5 * time.Second
 
-var ErrOutputLimit = errors.New("process output limit")
-var ErrShutdownIncomplete = errors.New("process shutdown incomplete")
+var (
+	ErrOutputLimit        = errors.New("process output limit")
+	ErrShutdownIncomplete = errors.New("process shutdown incomplete")
+)
 
 type Runner struct {
 	Binary string
 	Env    []string
 	Dir    string
 	slots  *semaphore.Weighted
-}
-
-func New(binary string, env []string, dir string, concurrent int) *Runner {
-	return &Runner{Binary: binary, Env: append([]string{}, env...), Dir: dir, slots: semaphore.NewWeighted(int64(concurrent))}
 }
 
 type Result struct {
@@ -47,69 +44,94 @@ type Buffer struct {
 	overflowed bool
 }
 
+func NewBuffer(limit int64, overflow func()) *Buffer {
+	return &Buffer{Limit: limit, Overflow: overflow, mu: sync.Mutex{}, b: bytes.Buffer{}, overflowed: false}
+}
+
 func (b *Buffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	n := len(p)
 	left := b.Limit - int64(b.b.Len())
+
 	take := int64(n)
 	if take > left {
 		take = max(left, 0)
 	}
+
 	if take > 0 {
 		b.b.Write(p[:int(take)])
 	}
+
 	over := int64(n) > left && !b.overflowed
 	if over {
 		b.overflowed = true
 	}
+
 	f := b.Overflow
 	b.mu.Unlock()
+
 	if over && f != nil {
 		f()
 	}
+
 	return n, nil
 }
+
 func (b *Buffer) Bytes() []byte    { b.mu.Lock(); defer b.mu.Unlock(); return bytes.Clone(b.b.Bytes()) }
 func (b *Buffer) Overflowed() bool { b.mu.Lock(); defer b.mu.Unlock(); return b.overflowed }
+func New(binary string, env []string, dir string, concurrent int) *Runner {
+	return &Runner{Binary: binary, Env: append([]string{}, env...), Dir: dir, slots: semaphore.NewWeighted(int64(concurrent))}
+}
 
 func (r *Runner) Run(ctx context.Context, args []string, input []byte, outMax, errMax int64) Result {
-	result := Result{ExitCode: -1}
+	result := Result{Stdout: nil, Stderr: nil, ExitCode: -1, Started: false, Err: nil}
 	if e := r.slots.Acquire(ctx, 1); e != nil {
 		result.Err = e
 		return result
 	}
 	defer r.slots.Release(1)
+
 	if e := ctx.Err(); e != nil {
 		result.Err = e
 		return result
 	}
+
 	child, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+
 	cmd := r.Command(child, args)
-	stdout := &Buffer{Limit: outMax, Overflow: func() { cancel(ErrOutputLimit) }}
-	stderr := &Buffer{Limit: errMax, Overflow: func() { cancel(ErrOutputLimit) }}
+	stdout := NewBuffer(outMax, func() { cancel(ErrOutputLimit) })
+	stderr := NewBuffer(errMax, func() { cancel(ErrOutputLimit) })
 	cmd.Stdout = stdout
+
 	cmd.Stderr = stderr
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
 	}
+
 	e := cmd.Start()
 	if e == nil {
 		result.Started = true
 		e = cmd.Wait()
 	}
+
 	result.Stdout = stdout.Bytes()
+
 	result.Stderr = stderr.Bytes()
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
+
 	if cause := context.Cause(child); cause != nil {
 		e = errors.Join(e, cause)
 	}
+
 	if errors.Is(e, exec.ErrWaitDelay) {
 		e = errors.Join(e, ErrShutdownIncomplete)
 	}
+
 	result.Err = e
+
 	return result
 }
 
@@ -120,10 +142,6 @@ func (r *Runner) Command(ctx context.Context, args []string) *exec.Cmd {
 	cmd.Env = append([]string{}, r.Env...)
 	cmd.Dir = r.Dir
 	cmd.WaitDelay = ShutdownBudget
-	return cmd
-}
-func CopyBounded(dst *Buffer, src io.Reader) error { _, e := io.Copy(dst, src); return e }
 
-func NewBuffer(limit int64, overflow func()) *Buffer {
-	return &Buffer{Limit: limit, Overflow: overflow}
+	return cmd
 }

@@ -3,320 +3,320 @@
   "source": "https://raw.githubusercontent.com/tmux/tmux/3.6/options-table.c",
   "fields": {
     "ServerOptions": [
-      [
-        "EscapeTime",
-        "escape-time",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "BufferLimit",
-        "buffer-limit",
-        "int",
-        1,
-        2147483647
-      ],
-      [
-        "ExitEmpty",
-        "exit-empty",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "ExitUnattached",
-        "exit-unattached",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "DefaultTerminal",
-        "default-terminal",
-        "string",
-        0,
-        0
-      ],
-      [
-        "SetClipboard",
-        "set-clipboard",
-        "ClipboardMode",
-        0,
-        0
-      ],
-      [
-        "HistoryFile",
-        "history-file",
-        "string",
-        0,
-        0
-      ]
+      {
+        "method": "EscapeTime",
+        "name": "escape-time",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "BufferLimit",
+        "name": "buffer-limit",
+        "type": "int",
+        "min": 1,
+        "max": 2147483647
+      },
+      {
+        "method": "ExitEmpty",
+        "name": "exit-empty",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ExitUnattached",
+        "name": "exit-unattached",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultTerminal",
+        "name": "default-terminal",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Clipboard",
+        "name": "set-clipboard",
+        "type": "ClipboardMode",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "HistoryFile",
+        "name": "history-file",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      }
     ],
     "SessionOptions": [
-      [
-        "HistoryLimit",
-        "history-limit",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "BaseIndex",
-        "base-index",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "DisplayTime",
-        "display-time",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "RepeatTime",
-        "repeat-time",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "Mouse",
-        "mouse",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "SetTitles",
-        "set-titles",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "DefaultShell",
-        "default-shell",
-        "string",
-        0,
-        0
-      ],
-      [
-        "DefaultCommand",
-        "default-command",
-        "string",
-        0,
-        0
-      ],
-      [
-        "DefaultSize",
-        "default-size",
-        "string",
-        0,
-        0
-      ],
-      [
-        "StatusLeft",
-        "status-left",
-        "string",
-        0,
-        0
-      ],
-      [
-        "StatusRight",
-        "status-right",
-        "string",
-        0,
-        0
-      ],
-      [
-        "StatusStyle",
-        "status-style",
-        "string",
-        0,
-        0
-      ],
-      [
-        "StatusPosition",
-        "status-position",
-        "StatusPosition",
-        0,
-        0
-      ],
-      [
-        "Status",
-        "status",
-        "StatusMode",
-        0,
-        0
-      ],
-      [
-        "Prefix",
-        "prefix",
-        "Key",
-        0,
-        0
-      ],
-      [
-        "DetachOnDestroy",
-        "detach-on-destroy",
-        "DetachPolicy",
-        0,
-        0
-      ]
+      {
+        "method": "HistoryLimit",
+        "name": "history-limit",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "BaseIndex",
+        "name": "base-index",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "DisplayTime",
+        "name": "display-time",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "RepeatTime",
+        "name": "repeat-time",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "Mouse",
+        "name": "mouse",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Titles",
+        "name": "set-titles",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultShell",
+        "name": "default-shell",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultCommand",
+        "name": "default-command",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultSize",
+        "name": "default-size",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusLeft",
+        "name": "status-left",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusRight",
+        "name": "status-right",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusStyle",
+        "name": "status-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusPosition",
+        "name": "status-position",
+        "type": "StatusPosition",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Status",
+        "name": "status",
+        "type": "StatusMode",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Prefix",
+        "name": "prefix",
+        "type": "Key",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DetachOnDestroy",
+        "name": "detach-on-destroy",
+        "type": "DetachPolicy",
+        "min": 0,
+        "max": 0
+      }
     ],
     "WindowOptions": [
-      [
-        "AutomaticRename",
-        "automatic-rename",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "AllowRename",
-        "allow-rename",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "AggressiveResize",
-        "aggressive-resize",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "PaneBaseIndex",
-        "pane-base-index",
-        "int",
-        0,
-        2147483647
-      ],
-      [
-        "ModeKeys",
-        "mode-keys",
-        "ModeKeys",
-        0,
-        0
-      ],
-      [
-        "WindowSize",
-        "window-size",
-        "WindowSizePolicy",
-        0,
-        0
-      ],
-      [
-        "RemainOnExit",
-        "remain-on-exit",
-        "RemainOnExitPolicy",
-        0,
-        0
-      ],
-      [
-        "SynchronizePanes",
-        "synchronize-panes",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "PaneBorderStatus",
-        "pane-border-status",
-        "PaneBorderStatus",
-        0,
-        0
-      ],
-      [
-        "PaneBorderFormat",
-        "pane-border-format",
-        "string",
-        0,
-        0
-      ],
-      [
-        "ModeStyle",
-        "mode-style",
-        "string",
-        0,
-        0
-      ],
-      [
-        "WindowStatusFormat",
-        "window-status-format",
-        "string",
-        0,
-        0
-      ],
-      [
-        "WindowStatusCurrentFormat",
-        "window-status-current-format",
-        "string",
-        0,
-        0
-      ],
-      [
-        "AllowPassthrough",
-        "allow-passthrough",
-        "PassthroughPolicy",
-        0,
-        0
-      ]
+      {
+        "method": "AutomaticRename",
+        "name": "automatic-rename",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowRename",
+        "name": "allow-rename",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AggressiveResize",
+        "name": "aggressive-resize",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBaseIndex",
+        "name": "pane-base-index",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "ModeKeys",
+        "name": "mode-keys",
+        "type": "ModeKeys",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowSize",
+        "name": "window-size",
+        "type": "WindowSizePolicy",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RemainOnExit",
+        "name": "remain-on-exit",
+        "type": "RemainOnExitPolicy",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SynchronizePanes",
+        "name": "synchronize-panes",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderStatus",
+        "name": "pane-border-status",
+        "type": "PaneBorderStatus",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderFormat",
+        "name": "pane-border-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ModeStyle",
+        "name": "mode-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStatusFormat",
+        "name": "window-status-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStatusCurrentFormat",
+        "name": "window-status-current-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowPassthrough",
+        "name": "allow-passthrough",
+        "type": "PassthroughPolicy",
+        "min": 0,
+        "max": 0
+      }
     ],
     "PaneOptions": [
-      [
-        "RemainOnExit",
-        "remain-on-exit",
-        "RemainOnExitPolicy",
-        0,
-        0
-      ],
-      [
-        "SynchronizePanes",
-        "synchronize-panes",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "AllowPassthrough",
-        "allow-passthrough",
-        "PassthroughPolicy",
-        0,
-        0
-      ],
-      [
-        "AllowRename",
-        "allow-rename",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "ScrollOnClear",
-        "scroll-on-clear",
-        "bool",
-        0,
-        0
-      ],
-      [
-        "WindowStyle",
-        "window-style",
-        "string",
-        0,
-        0
-      ],
-      [
-        "WindowActiveStyle",
-        "window-active-style",
-        "string",
-        0,
-        0
-      ]
+      {
+        "method": "RemainOnExit",
+        "name": "remain-on-exit",
+        "type": "RemainOnExitPolicy",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SynchronizePanes",
+        "name": "synchronize-panes",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowPassthrough",
+        "name": "allow-passthrough",
+        "type": "PassthroughPolicy",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowRename",
+        "name": "allow-rename",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ScrollOnClear",
+        "name": "scroll-on-clear",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStyle",
+        "name": "window-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowActiveStyle",
+        "name": "window-active-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      }
     ]
   },
   "enums": {

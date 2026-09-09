@@ -13,9 +13,13 @@ test:
 race:
     go test -race ./...
 
+# Run go vet
+vet:
+    go vet ./...
+
 # Run integration tests against a real tmux server
 integration:
-    TMUX_INTEGRATION_REQUIRED=1 go test -tags=integration -count=1 ./...
+    TMUX_INTEGRATION_REQUIRED=1 go test -tags=integration -count=1 -timeout=5m ./...
 
 # Run tests and display coverage
 coverage:
@@ -48,28 +52,20 @@ lint:
     golangci-lint run
 
 # Run all non-mutating quality checks
-check: mod-check test lint
+check: mod-check check-generated test lint
     golangci-lint fmt --diff
 
-# Regenerate schema and generated code
+# Regenerate scoped option accessors
 generate:
-    python3 internal/schema/generate.py
+    go generate ./tmux
 
 # Verify generated code matches schema
 check-generated:
-    python3 internal/schema/generate.py --check
+    go run ./internal/schema/generate -check
 
-# Verify command and flag coverage ledger
-check-ledger:
-    python3 scripts/check_ledger.py
-
-# Verify release gates
-release-check:
-    python3 scripts/check_release.py
-
-# Build a clean external consumer without replace directives
+# Build and run a clean external consumer without replace directives (requires zip)
 consumer:
-    python3 scripts/test_consumer.py
+    sh scripts/test_consumer.sh
 
 # Build all packages
 build:
@@ -77,7 +73,7 @@ build:
 
 # Remove build and test artifacts
 clean:
-    rm -rf dist/ coverage.out coverage.html *.prof *.test
+    rm -rf dist/ coverage.out coverage.html *.prof *.test lint-report.json
 
 alias cov := coverage
 alias fmt := format

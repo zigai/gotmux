@@ -1,5 +1,0 @@
---- FAIL: TestIntegrationNoServerAndExistingOnly (0.00s)
-    integration_test.go:300: tmux fixture executable: exec: "tmux": executable file not found in $PATH
-FAIL
-FAIL	example.com/tmux	0.013s
-FAIL

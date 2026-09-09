@@ -10,7 +10,7 @@ formatters:
   settings:
     goimports:
       local-prefixes:
-        - example.com/tmux
+        - github.com/zigai/gotmux
 
 linters:
   enable:

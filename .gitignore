@@ -1,10 +1,18 @@
+# Go test and profiling artifacts
 *.test
-*.out
 *.prof
-coverage.html
+/coverage.out
+/coverage.html
+/lint-report.json
+
+# Local build and scratch directories
 /dist/
 /tmp/
-__pycache__/
-coverage.out
-dist/
+
+# tmux debug logs
+tmux-client-*.log
+tmux-server-*.log
+tmux-out-*.log
+
+# OS metadata
 .DS_Store
