@@ -3,7 +3,9 @@ package tmux
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/zigai/gotmux/internal/wire"
 )
@@ -396,7 +398,7 @@ func splitArgs(paneID string, opts SplitOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(PaneKind)), "-t", paneID}
+	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(PaneKind)), "-t", paneID}
 	if opts.Direction == Horizontal {
 		args = append(args, "-h")
 	} else {
@@ -459,4 +461,24 @@ func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
 	}
 
 	return nil
+}
+
+func splitRecordFormat(fields []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s%d:", wire.RecordPrefix, len(fields))
+
+	for _, f := range fields {
+		if f == "pane_current_command" {
+			// pane_current_command reads the process name from /proc.
+			// At the moment of split-window, the child process is forking/execing,
+			// causing a race where #{n:...} and #{...} evaluate to different process names.
+			// Emitting an empty string (0:,) avoids this race while keeping field count aligned.
+			b.WriteString("0:,")
+			continue
+		}
+
+		fmt.Fprintf(&b, "#{n:%s}:#{%s},", f, f)
+	}
+
+	return b.String()
 }
