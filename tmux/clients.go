@@ -128,6 +128,9 @@ type (
 		// StayOpen keeps the menu open after an item is selected. (Unsupported in stock tmux).
 		StayOpen bool
 
+		// NoCloseOnOverlap prevents the menu from closing when clicked outside or when another menu opens (-O flag).
+		NoCloseOnOverlap bool
+
 		// X specifies the menu horizontal position (-x flag).
 		X string
 
@@ -584,6 +587,10 @@ func menuArgsWithTarget(targetFlag, targetID string, o MenuOptions) ([]string, e
 	args := []string{targetFlag, targetID}
 	if !o.Mouse {
 		args = append(args, "-M")
+	}
+
+	if o.NoCloseOnOverlap {
+		args = append(args, "-O")
 	}
 
 	if o.X != "" {

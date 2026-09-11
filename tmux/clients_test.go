@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -154,5 +155,23 @@ func TestMessageValidation(t *testing.T) {
 
 	if err := s.Message(t.Context(), "text"); !errors.Is(err, ErrInvalidHandle) {
 		t.Fatalf("expected ErrInvalidHandle on nil server, got %v", err)
+	}
+}
+
+func TestMenuArgsNoCloseOnOverlap(t *testing.T) {
+	args, err := menuArgsWithTarget("-t", "%0", MenuOptions{
+		Title:            "My Menu",
+		Mouse:            true,
+		StayOpen:         false,
+		NoCloseOnOverlap: true,
+		X:                "M",
+		Y:                "M",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(args, "-O") {
+		t.Fatalf("expected -O flag in menuArgsWithTarget, got %v", args)
 	}
 }
