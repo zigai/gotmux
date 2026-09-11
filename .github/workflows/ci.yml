@@ -27,7 +27,7 @@ jobs:
       - run: go build ./...
         env: {CGO_ENABLED: '0', GOWORK: 'off'}
       - run: go run ./internal/schema/generate -check
-      - run: sh scripts/test_consumer.sh
+      - run: sh scripts/verify_downstream.sh
   integration:
     strategy:
       fail-fast: false
