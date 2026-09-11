@@ -34,6 +34,15 @@ func RecordFormat(fields []string) string {
 	fmt.Fprintf(&b, "%s%d:", RecordPrefix, len(fields))
 
 	for _, f := range fields {
+		if f == "pane_current_command" {
+			// pane_current_command reads the live process name from /proc/<pid>.
+			// Evaluating #{n:...}:#{...} evaluates the field twice, causing format tearing
+			// if the process is in the middle of fork/exec. Using fixed-width padding (64 bytes)
+			// guarantees the length prefix and value are always exactly 64 bytes with a single evaluation.
+			b.WriteString("64:#{p64:#{=64:pane_current_command}},")
+			continue
+		}
+
 		fmt.Fprintf(&b, "#{n:%s}:#{%s},", f, f)
 	}
 

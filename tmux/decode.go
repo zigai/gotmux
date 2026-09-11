@@ -250,7 +250,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		Index:          d.nonnegative("pane_index"),
 		Title:          d.str("pane_title"),
 		CurrentPath:    d.str("pane_current_path"),
-		CurrentCommand: d.str("pane_current_command"),
+		CurrentCommand: strings.TrimRight(d.str("pane_current_command"), " "),
 		PID:            d.nonnegative("pane_pid"),
 		TTY:            d.str("pane_tty"),
 		Width:          d.nonnegative("pane_width"),
