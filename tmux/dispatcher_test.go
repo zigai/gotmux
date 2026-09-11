@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/sync/semaphore"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 // This is a deterministic peer model, NOT evidence of tmux compatibility. The
@@ -89,7 +89,7 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 	num := uint64(17)
 
 	for {
-		wire, e := r.ReadString('\n')
+		wireStr, e := r.ReadString('\n')
 		if e != nil {
 			return
 		}
@@ -100,7 +100,7 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 		}
 
 		select {
-		case p.writes <- wire:
+		case p.writes <- wireStr:
 		case <-c.stopCh:
 			return
 		}
@@ -112,7 +112,7 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 		}
 
 		value := "second"
-		if strings.Contains(wire, "first") {
+		if strings.Contains(wireStr, "first") {
 			value = "first"
 
 			select {
@@ -122,7 +122,7 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 			}
 		}
 
-		if !sendMockFrame(c, codec.EncodeRecord([]string{value}), &num) {
+		if !sendMockFrame(c, wire.EncodeRecord([]string{value}), &num) {
 			return
 		}
 
@@ -133,7 +133,7 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 }
 
 func parseEndWords(end string) ([]string, bool) {
-	words, err := codec.ParseWords(strings.TrimSuffix(end, "\n"))
+	words, err := wire.ParseWords(strings.TrimSuffix(end, "\n"))
 	if err != nil || len(words) != 3 {
 		return nil, false
 	}
@@ -208,7 +208,7 @@ func TestDispatcherCancellationDrainsBeforeNext(t *testing.T) {
 
 	reply := <-second
 
-	rows, e := codec.ParseRecords(reply.result.Stdout, 1)
+	rows, e := wire.ParseRecords(reply.result.Stdout, 1)
 	if reply.err != nil || e != nil || len(rows) != 1 || rows[0][0] != "second" {
 		t.Fatalf("late reply misattribution: %#v %v %v", rows, e, reply.err)
 	}

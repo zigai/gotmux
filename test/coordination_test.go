@@ -122,7 +122,8 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sequence := testSequence(t,
+	sequence := testSequence(
+		t,
 		testCommand(t, "set-hook", "-u", "-t", string(session.ID()), "after-set-option[0]"),
 		testCommand(t, "set-option", "-t", string(survivor.ID()), "@first-step", "confirmed"),
 		testCommand(t, "kill-session", "-t", string(session.ID())),

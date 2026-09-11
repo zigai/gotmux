@@ -8,40 +8,7 @@ import (
 	"testing"
 
 	tmux "github.com/zigai/gotmux/tmux"
-	"github.com/zigai/gotmux/tmuxtest"
 )
-
-func apiFixture(t *testing.T) (*tmux.Server, tmux.Session, context.Context) {
-	t.Helper()
-	server := tmuxtest.NewServer(t)
-	ctx := integrationContext(t)
-
-	session, err := server.FindSession(ctx, "fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return server, session, ctx
-}
-
-func apiControl(t *testing.T, server *tmux.Server, session tmux.Session, ctx context.Context) *tmux.Connection {
-	t.Helper()
-
-	var options tmux.ControlOptions
-
-	connection, err := server.OpenControl(ctx, session, options)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	t.Cleanup(func() {
-		if err := connection.Close(); err != nil {
-			t.Error(err)
-		}
-	})
-
-	return connection
-}
 
 func TestIntegrationAPIScalarOptions(t *testing.T) {
 	_, session, ctx := apiFixture(t)
@@ -411,5 +378,195 @@ func installSlotConflict(t *testing.T, destination tmux.Session, ctx context.Con
 
 	if err := destination.Hooks().Set(ctx, "after-list-windows", 0, sequence); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestIntegrationWindowInfosAndLinkNames(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+
+	windows, links, err := session.WindowInfos(ctx)
+	if err != nil {
+		t.Fatalf("WindowInfos failed: %v", err)
+	}
+
+	if len(windows) == 0 || len(links) == 0 {
+		t.Fatalf("expected windows and links, got %d windows, %d links", len(windows), len(links))
+	}
+
+	if links[0].WindowName == "" {
+		t.Fatal("expected non-empty WindowName on WindowLinkInfo")
+	}
+
+	if links[0].WindowName != windows[0].Name {
+		t.Fatalf("expected WindowName %q to match window.Name %q", links[0].WindowName, windows[0].Name)
+	}
+}
+
+func TestIntegrationPaneInfoParentMetadata(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	panes, err := server.Panes(ctx)
+	if err != nil {
+		t.Fatalf("Panes failed: %v", err)
+	}
+
+	if len(panes) == 0 {
+		t.Fatal("expected at least one pane")
+	}
+
+	p := panes[0]
+	sid, ok := p.SessionID.Get()
+	if !ok || sid != session.ID() {
+		t.Fatalf("expected pane session ID %v, got %v (ok=%v)", session.ID(), sid, ok)
+	}
+
+	sname, ok := p.SessionName.Get()
+	if !ok || sname == "" {
+		t.Fatalf("expected non-empty session name on pane, got %q (ok=%v)", sname, ok)
+	}
+
+	wname, ok := p.WindowName.Get()
+	if !ok || wname == "" {
+		t.Fatalf("expected non-empty window name on pane, got %q (ok=%v)", wname, ok)
+	}
+
+	widx, ok := p.WindowIndex.Get()
+	if !ok || widx < 0 {
+		t.Fatalf("expected non-negative window index on pane, got %d (ok=%v)", widx, ok)
+	}
+}
+
+func TestIntegrationInfoWithExtraFields(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatal(err)
+	}
+
+	info, err := panes[0].Handle().InfoWith(ctx, tmux.QueryOptions{
+		ExtraFields: []string{"session_name", "window_name"},
+	})
+	if err != nil {
+		t.Fatalf("InfoWith failed: %v", err)
+	}
+
+	raw, ok := info.Raw("session_name")
+	if !ok || len(raw) == 0 {
+		t.Fatalf("expected Raw('session_name') to be present, got %q (ok=%v)", string(raw), ok)
+	}
+}
+
+func TestIntegrationCaptureWithTitle(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatal(err)
+	}
+
+	pane := panes[0].Handle()
+	res, err := pane.CaptureWithTitle(ctx, tmux.CaptureOptions{})
+	if err != nil {
+		t.Fatalf("CaptureWithTitle failed: %v", err)
+	}
+
+	plain, err := pane.Capture(ctx, tmux.CaptureOptions{})
+	if err != nil {
+		t.Fatalf("Capture failed: %v", err)
+	}
+
+	if string(res.Output) != string(plain) {
+		t.Fatalf("expected capture output %q to match plain capture %q", string(res.Output), string(plain))
+	}
+}
+
+func TestIntegrationUnprobedPaneHandle(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatal(err)
+	}
+
+	unprobed, err := server.PaneHandle(panes[0].ID)
+	if err != nil {
+		t.Fatalf("PaneHandle failed: %v", err)
+	}
+
+	data, err := unprobed.Capture(ctx, tmux.CaptureOptions{})
+	if err != nil {
+		t.Fatalf("unprobed Capture failed: %v", err)
+	}
+
+	expected, err := panes[0].Handle().Capture(ctx, tmux.CaptureOptions{})
+	if err != nil {
+		t.Fatalf("verified Capture failed: %v", err)
+	}
+
+	if string(data) != string(expected) {
+		t.Fatalf("expected %q, got %q", string(expected), string(data))
+	}
+}
+
+func TestEnvironmentOperationNames(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+
+	err := session.Environment().Unset(ctx, "invalid=name")
+	if err == nil {
+		t.Fatal("expected error on invalid env name")
+	}
+	var opErr *tmux.OperationError
+	if errors.As(err, &opErr) {
+		if opErr.Operation != "Environment.Unset" {
+			t.Errorf("expected opErr.Operation to be 'Environment.Unset', got %q", opErr.Operation)
+		}
+	} else {
+		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
+	}
+
+	err = session.Environment().Remove(ctx, "invalid=name")
+	if err == nil {
+		t.Fatal("expected error on invalid env name")
+	}
+	if errors.As(err, &opErr) {
+		if opErr.Operation != "Environment.Remove" {
+			t.Errorf("expected opErr.Operation to be 'Environment.Remove', got %q", opErr.Operation)
+		}
+	} else {
+		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
+	}
+}
+
+func TestMissingObjectEffect(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	_, err := server.Session(ctx, "$99999")
+	if err == nil {
+		t.Fatal("expected error looking up nonexistent session")
+	}
+	if !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	var opErr *tmux.OperationError
+	if errors.As(err, &opErr) {
+		if opErr.Outcome.Effect == tmux.Confirmed {
+			t.Errorf("read-only missing session lookup reported Effect: Confirmed! Must not be Confirmed.")
+		}
+	}
+}
+
+func TestCaptureRangeEntireHistoryWithEnd(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	pane := firstPane(t, server, ctx)
+
+	end := 10
+	_, err := pane.Capture(ctx, tmux.CaptureOptions{
+		EntireHistory: true,
+		End:           &end,
+	})
+	if err != nil {
+		t.Fatalf("pane.Capture with EntireHistory and End failed: %v", err)
 	}
 }

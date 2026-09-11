@@ -9,12 +9,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 func TestControlFramingAdversarialRecord(t *testing.T) {
 	data := []string{"\n%end 5 99 1\n%begin 7 123 1\nTGO-DONE:fake\n\xff", ""}
-	payload := codec.EncodeRecord(data)
+	payload := wire.EncodeRecord(data)
 	wire := append([]byte("%begin 5 99 1\n"), payload...)
 	wire = append(wire, []byte("%end 5 99 1\n")...)
 
@@ -125,9 +125,80 @@ func TestEventByteOwnership(t *testing.T) {
 	}
 }
 
+func TestControlEmptyOutputNotification(t *testing.T) {
+	e, err := decodeEvent([]byte("%output %1\n"), 4096)
+	if err != nil {
+		t.Fatalf("decodeEvent(%%output %%1) failed: %v", err)
+	}
+
+	poe, ok := e.(PaneOutputEvent)
+	if !ok || poe.PaneID != "%1" || len(poe.Data()) != 0 {
+		t.Fatalf("unexpected event: %+v", e)
+	}
+}
+
+func TestControlCommandErrorStartingWithPercent(t *testing.T) {
+	wire := "%begin 1 4 1\n%: not a real event\n%error 1 4 1\n"
+
+	u, err := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 4096, func(Event) {})
+	if err != nil {
+		t.Fatalf("readControlUnit failed on percent-prefixed error: %v", err)
+	}
+
+	if u.frame == nil || !u.frame.failed || string(u.frame.data) != "%: not a real event\n" {
+		t.Fatalf("unexpected frame: %+v", u.frame)
+	}
+}
+
+func TestControlInterleavedEventsDoNotExhaustFrameBytes(t *testing.T) {
+	var events []Event
+
+	// Frame bytes limit is 256 bytes.
+	// We send 10 interleaved %output events of 100 bytes each (total 1000 bytes).
+	var b bytes.Buffer
+	b.WriteString("%begin 1 10 1\n")
+
+	for i := range 10 {
+		fmt.Fprintf(&b, "%%output %%1 %s\n", strings.Repeat("a", 50))
+
+		rec := wire.EncodeRecord([]string{fmt.Sprintf("data-%d", i)})
+		b.Write(rec)
+	}
+
+	b.WriteString("%end 1 10 1\n")
+
+	u, err := readControlUnit(bufio.NewReader(&b), 512, func(e Event) {
+		events = append(events, e)
+	})
+	if err != nil {
+		t.Fatalf("readControlUnit failed with interleaved events: %v", err)
+	}
+
+	if u.frame == nil || u.frame.failed {
+		t.Fatalf("frame failed: %+v", u.frame)
+	}
+
+	if len(events) != 10 {
+		t.Fatalf("expected 10 events, got %d", len(events))
+	}
+}
+
 func FuzzControlFrames(f *testing.F) {
 	f.Add([]byte("%begin 1 4 1\n%end 1 4 1\n"))
 	f.Add([]byte("%output %1 foo\\012bar\n"))
+	f.Add([]byte("%extended-output %1 1250 : payload\\012data\n"))
+	f.Add([]byte("%layout-change @1 100x30,0,0,0 [100x30,0,0,0] 0\n"))
+	f.Add([]byte("%window-add @2 my-window\n"))
+	f.Add([]byte("%window-close @2\n"))
+	f.Add([]byte("%window-renamed @2 new-name\n"))
+	f.Add([]byte("%session-changed $1 work\n"))
+	f.Add([]byte("%sessions-changed\n"))
+	f.Add([]byte("%subscription-changed sub1 $1 @2 %3 : payload data\n"))
+	f.Add([]byte("%client-session-changed /dev/pts/1 $1\n"))
+	f.Add([]byte("%client-detached /dev/pts/1\n"))
+	f.Add([]byte("%exit\n"))
+	f.Add([]byte("%error 1 2 1\nunknown command\n%end 1 2 1\n"))
+
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 8192 {
 			return
@@ -144,14 +215,14 @@ func FuzzEmbeddedFrameDelimiters(f *testing.F) {
 			return
 		}
 
-		wire := fmt.Sprintf("%%begin 1 2 1\n%s%%end 1 2 1\n", codec.EncodeRecord([]string{s}))
+		rawWire := fmt.Sprintf("%%begin 1 2 1\n%s%%end 1 2 1\n", wire.EncodeRecord([]string{s}))
 
-		u, e := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 8192, func(Event) {})
+		u, e := readControlUnit(bufio.NewReader(strings.NewReader(rawWire)), 8192, func(Event) {})
 		if e != nil {
 			t.Fatal(e)
 		}
 
-		rows, e := codec.ParseRecords(u.frame.data, 1)
+		rows, e := wire.ParseRecords(u.frame.data, 1)
 		if e != nil || rows[0][0] != s {
 			t.Fatal(e)
 		}

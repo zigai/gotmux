@@ -113,6 +113,14 @@ func TestEnvironmentNilVersusEmpty(t *testing.T) {
 }
 
 func TestParseEnvironment(t *testing.T) {
+	testParseEnvironment3Part(t)
+	testParseEnvironment2Part(t)
+	testParseEnvironmentInvalid(t)
+}
+
+func testParseEnvironment3Part(t *testing.T) {
+	t.Helper()
+
 	h, e := ParseEnvironment(Environment{TMUX: "/tmp/a,b,123,0", TMUXPane: "%17"})
 	if e != nil || h.SocketPath != "/tmp/a,b" || h.SessionID != "$0" {
 		t.Fatalf("%#v %v", h, e)
@@ -121,6 +129,24 @@ func TestParseEnvironment(t *testing.T) {
 	if p, ok := h.PaneID.Get(); !ok || p != "%17" {
 		t.Fatal(h)
 	}
+}
+
+func testParseEnvironment2Part(t *testing.T) {
+	t.Helper()
+
+	h2, e2 := ParseEnvironment(Environment{TMUX: "/tmp/a,b,123", TMUXPane: "%17"})
+	if e2 != nil || h2.SocketPath != "/tmp/a,b" || h2.PID != 123 || h2.SessionID != "" {
+		t.Fatalf("%#v %v", h2, e2)
+	}
+
+	h3, e3 := ParseEnvironment(Environment{TMUX: "/tmp/default,456", TMUXPane: ""})
+	if e3 != nil || h3.SocketPath != "/tmp/default" || h3.PID != 456 || h3.SessionID != "" {
+		t.Fatalf("%#v %v", h3, e3)
+	}
+}
+
+func testParseEnvironmentInvalid(t *testing.T) {
+	t.Helper()
 
 	if _, e := ParseEnvironment(Environment{TMUX: "", TMUXPane: ""}); !errors.Is(e, ErrNotInsideTmux) {
 		t.Fatal(e)

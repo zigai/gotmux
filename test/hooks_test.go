@@ -172,3 +172,87 @@ func assertBinding(t *testing.T, binding tmux.BindingInfo, table tmux.KeyTable, 
 
 	assertPayload(t, binding.Payload, command)
 }
+
+func TestMultiCommandBinding(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	c1, err := tmux.NewCommand("set-option", "-t", string(session.ID()), "@e1", "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c2, err := tmux.NewCommand("set-option", "-t", string(session.ID()), "@e2", "2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	seq, err := tmux.Sequence(c1, c2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := tmux.Key("F12")
+	if err := server.Bind(ctx, "root", key, seq, tmux.BindOptions{Note: "multicmd"}); err != nil {
+		t.Fatal(err)
+	}
+
+	bindings, err := server.Bindings(ctx, "root")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var found *tmux.BindingInfo
+	for i := range bindings {
+		if bindings[i].Key == key {
+			found = &bindings[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("binding %v not found", key)
+	}
+
+	commands, ok := found.Payload.Commands()
+	if !ok {
+		t.Fatalf("payload not parsed: raw=%q", found.Payload.Raw())
+	}
+	if len(commands) != 2 {
+		t.Fatalf("expected 2 commands in binding sequence, got %d (commands=%+v)", len(commands), commands)
+	}
+	if commands[0].Name() != "set-option" || commands[1].Name() != "set-option" {
+		t.Fatalf("unexpected commands: %+v", commands)
+	}
+}
+
+func TestUnindexedHookList(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	cmd, err := tmux.NewCommand("set-hook", "-t", string(session.ID()), "after-new-window", "display-message hello")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub, err := server.UsingSubprocess()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sub.Run(ctx, cmd); err != nil {
+		t.Fatal(err)
+	}
+
+	hooks, err := session.Hooks().List(ctx)
+	if err != nil {
+		t.Fatalf("session.Hooks().List failed on unindexed hook: %v", err)
+	}
+
+	var found *tmux.HookInfo
+	for i := range hooks {
+		if hooks[i].Name == "after-new-window" {
+			found = &hooks[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("unindexed hook after-new-window not found in %+v", hooks)
+	}
+	if found.Index != 0 {
+		t.Fatalf("expected Index=0 for unindexed hook, got %d", found.Index)
+	}
+}

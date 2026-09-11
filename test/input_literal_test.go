@@ -10,31 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tmux "github.com/zigai/gotmux/tmux"
 )
-
-const observationInterval = 5 * time.Millisecond
-
-func awaitObservation(t *testing.T, ctx context.Context, description string, observe func() bool) {
-	t.Helper()
-
-	ticker := time.NewTicker(observationInterval)
-	defer ticker.Stop()
-
-	for {
-		if observe() {
-			return
-		}
-
-		select {
-		case <-ctx.Done():
-			t.Fatalf("waiting for %s: %v", description, ctx.Err())
-		case <-ticker.C:
-		}
-	}
-}
 
 func TestIntegrationLiteral(t *testing.T) {
 	_, session, ctx := apiFixture(t)

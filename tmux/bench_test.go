@@ -1,5 +1,3 @@
-//go:build go1.24
-
 package tmux
 
 import (
@@ -9,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 func BenchmarkMetadataDecode(b *testing.B) {
-	data := codec.EncodeRecord([]string{"%42", "path\twith\nseparators", "\xff", ""})
-	if _, err := codec.ParseRecords(data, 4); err != nil {
+	data := wire.EncodeRecord([]string{"%42", "path\twith\nseparators", "\xff", ""})
+	if _, err := wire.ParseRecords(data, 4); err != nil {
 		b.Fatal(err)
 	}
 
@@ -22,14 +20,14 @@ func BenchmarkMetadataDecode(b *testing.B) {
 	b.SetBytes(int64(len(data)))
 
 	for b.Loop() {
-		if _, err := codec.ParseRecords(data, 4); err != nil {
+		if _, err := wire.ParseRecords(data, 4); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkControlFramedMetadata(b *testing.B) {
-	wire := append([]byte("%begin 1 8 1\n"), codec.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...)
+	wire := append([]byte("%begin 1 8 1\n"), wire.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...)
 	wire = append(wire, []byte("%end 1 8 1\n")...)
 
 	b.ReportAllocs()

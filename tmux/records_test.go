@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zigai/gotmux/internal/codec"
 	"github.com/zigai/gotmux/internal/schema"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 func paneFixture(s *Server) map[string]string {
@@ -26,10 +26,95 @@ func paneFixture(s *Server) map[string]string {
 	m["version"] = "3.6"
 	m["pane_id"] = "%7"
 	m["window_id"] = "@2"
+	m["session_id"] = "$0"
+	m["session_name"] = "test"
+	m["window_name"] = "win"
+	m["window_index"] = "0"
 	m["pane_active"] = "1"
 	m["pane_width"] = "80"
 	m["pane_height"] = "24"
 	m["pane_title"] = "tabs\tnewline\n;#{pane_id}\xff"
+
+	return m
+}
+
+func sessionFixture(s *Server) map[string]string {
+	m := map[string]string{}
+	for _, f := range schema.WithIdentity(schema.Session) {
+		m[f] = "0"
+	}
+
+	for _, f := range []string{"session_path", "session_group"} {
+		m[f] = ""
+	}
+
+	m["pid"] = "42"
+	m["start_time"] = "100"
+	m["socket_path"] = s.endpoint.String()
+	m["version"] = "3.6"
+	m["session_id"] = "$0"
+	m["session_name"] = "unit-session"
+	m["session_created"] = "100"
+	m["session_activity"] = "100"
+	m["session_attached"] = "1"
+	m["session_windows"] = "1"
+	m["session_grouped"] = "0"
+
+	return m
+}
+
+func windowFixture(s *Server) map[string]string {
+	m := map[string]string{}
+	for _, f := range schema.WithIdentity(schema.Window) {
+		m[f] = "0"
+	}
+
+	for _, f := range []string{"window_flags"} {
+		m[f] = ""
+	}
+
+	m["pid"] = "42"
+	m["start_time"] = "100"
+	m["socket_path"] = s.endpoint.String()
+	m["version"] = "3.6"
+	m["window_id"] = "@2"
+	m["session_id"] = "$0"
+	m["window_name"] = "unit-window"
+	m["window_width"] = "80"
+	m["window_height"] = "24"
+	m["window_panes"] = "1"
+	m["window_layout"] = "bb62,80x24,0,0,1"
+	m["window_zoomed_flag"] = "0"
+	m["window_index"] = "0"
+	m["window_active"] = "1"
+
+	return m
+}
+
+func clientFixture(s *Server) map[string]string {
+	m := map[string]string{}
+	for _, f := range schema.WithIdentity(schema.Client) {
+		m[f] = "0"
+	}
+
+	for _, f := range []string{"client_flags"} {
+		m[f] = ""
+	}
+
+	m["pid"] = "42"
+	m["start_time"] = "100"
+	m["socket_path"] = s.endpoint.String()
+	m["version"] = "3.6"
+	m["client_name"] = "/dev/pts/1"
+	m["client_tty"] = "/dev/pts/1"
+	m["client_pid"] = "1234"
+	m["client_created"] = "100"
+	m["client_activity"] = "100"
+	m["client_width"] = "80"
+	m["client_height"] = "24"
+	m["session_id"] = "$0"
+	m["client_control_mode"] = "0"
+	m["client_readonly"] = "0"
 
 	return m
 }
@@ -232,17 +317,17 @@ func TestNestedCommandEncoding(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	words, e := codec.ParseWords(strings.TrimSuffix(text, "\n"))
+	words, e := wire.ParseWords(strings.TrimSuffix(text, "\n"))
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	branches, e := codec.SplitSequence(words[len(words)-2])
+	branches, e := wire.SplitSequence(words[len(words)-2])
 	if e != nil || len(branches) != 2 {
 		t.Fatal(branches, e)
 	}
 
-	w, e := codec.ParseWords(branches[1])
+	w, e := wire.ParseWords(branches[1])
 	if e != nil || w[len(w)-1] != want {
 		t.Fatal(w, e)
 	}
@@ -274,7 +359,7 @@ func TestCreationRecoveryUsesObjectIDNotPID(t *testing.T) {
 		values[i] = m[f]
 	}
 
-	objects := recoverCreated(codec.EncodeRecord(values), PaneKind)
+	objects := recoverCreated(wire.EncodeRecord(values), PaneKind)
 	if len(objects) != 1 || objects[0].RawID != "%7" || objects[0].Identity.State() != Unavailable {
 		t.Fatalf("%#v", objects)
 	}
@@ -284,5 +369,247 @@ func TestProbeFailureDoesNotDispatchRequestedMutation(t *testing.T) {
 	e := opError("NewSession", &discoveryError{Err: &CommandError{Command: "", Result: failedResult(), Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrNoServer}})
 	if outcomeOf(e).Effect != NotSent || !errors.Is(e, ErrNoServer) {
 		t.Fatal(e)
+	}
+}
+
+func TestQueryFieldsDeduplication(t *testing.T) {
+	base := []string{"pid", "start_time", "socket_path", "version"}
+	extra := []string{"socket_path", "session_id", "pid", "custom_field"}
+
+	fields, err := queryFields(base, extra)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	expected := []string{"pid", "start_time", "socket_path", "version", "session_id", "custom_field"}
+	if len(fields) != len(expected) {
+		t.Fatalf("expected %v, got %v", expected, fields)
+	}
+
+	for i, f := range expected {
+		if fields[i] != f {
+			t.Fatalf("at %d: expected %s, got %s", i, f, fields[i])
+		}
+	}
+}
+
+func TestUnprobedHandles(t *testing.T) {
+	s := localServer(t)
+
+	p, err := s.PaneHandle("%42")
+	if err != nil || !p.Valid() || p.ID() != "%42" {
+		t.Fatalf("pane handle: %v %v", p, err)
+	}
+
+	sess, err := s.SessionHandle("$1")
+	if err != nil || !sess.Valid() || sess.ID() != "$1" {
+		t.Fatalf("session handle: %v %v", sess, err)
+	}
+
+	w, err := s.WindowHandle("@3")
+	if err != nil || !w.Valid() || w.ID() != "@3" {
+		t.Fatalf("window handle: %v %v", w, err)
+	}
+
+	testInvalidUnprobedHandles(t, s)
+}
+
+func testInvalidUnprobedHandles(t *testing.T, s *Server) {
+	t.Helper()
+
+	if _, err := s.PaneHandle("invalid"); err == nil {
+		t.Fatal("expected error on invalid pane ID")
+	}
+
+	if _, err := s.SessionHandle("invalid"); err == nil {
+		t.Fatal("expected error on invalid session ID")
+	}
+
+	if _, err := s.WindowHandle("invalid"); err == nil {
+		t.Fatal("expected error on invalid window ID")
+	}
+}
+
+func TestSnapshotResolveEmpty(t *testing.T) {
+	var snap Snapshot
+
+	w, ok := snap.ResolveWindow("@1")
+	if ok || w.Valid() {
+		t.Fatalf("expected empty snapshot window resolution to fail, got ok=%v, w=%v", ok, w)
+	}
+
+	sess, ok := snap.ResolveSession("$0")
+	if ok || sess.Valid() {
+		t.Fatalf("expected empty snapshot session resolution to fail, got ok=%v, sess=%v", ok, sess)
+	}
+
+	c, ok := snap.ResolveClient("/dev/pts/1")
+	if ok || c.Valid() {
+		t.Fatalf("expected empty snapshot client resolution to fail, got ok=%v, c=%v", ok, c)
+	}
+}
+
+func assertResolvedWindow(t *testing.T, snap Snapshot, id WindowID, want Window, origin ServerIdentity) {
+	t.Helper()
+
+	w, ok := snap.ResolveWindow(id)
+	if !ok || !w.Valid() || w.ID() != id || !w.Equal(want) || !w.Identity().Equal(origin) {
+		t.Fatalf("unexpected window resolution: ok=%v, handle=%v", ok, w)
+	}
+
+	wInfo, ok := snap.Window(id)
+	if !ok || !wInfo.Handle().Equal(w) {
+		t.Fatalf("snapshot.Window mismatch: ok=%v, info=%v", ok, wInfo)
+	}
+}
+
+func assertResolvedSession(t *testing.T, snap Snapshot, id SessionID, want Session, origin ServerIdentity) {
+	t.Helper()
+
+	sess, ok := snap.ResolveSession(id)
+	if !ok || !sess.Valid() || sess.ID() != id || !sess.Equal(want) || !sess.Identity().Equal(origin) {
+		t.Fatalf("unexpected session resolution: ok=%v, handle=%v", ok, sess)
+	}
+
+	sInfo, ok := snap.Session(id)
+	if !ok || !sInfo.Handle().Equal(sess) {
+		t.Fatalf("snapshot.Session mismatch: ok=%v, info=%v", ok, sInfo)
+	}
+}
+
+func assertResolvedClient(t *testing.T, snap Snapshot, name ClientName, want Client, origin ServerIdentity) {
+	t.Helper()
+
+	c, ok := snap.ResolveClient(name)
+	if !ok || !c.Valid() || c.Name() != name || !c.Equal(want) || !c.Identity().Equal(origin) {
+		t.Fatalf("unexpected client resolution: ok=%v, handle=%v", ok, c)
+	}
+
+	cInfo, ok := snap.Client(name)
+	if !ok || !cInfo.Handle().Equal(c) {
+		t.Fatalf("snapshot.Client mismatch: ok=%v, info=%v", ok, cInfo)
+	}
+}
+
+func assertResolveMissing[K ~string, V interface{ Valid() bool }](t *testing.T, resolve func(K) (V, bool), keys []K) {
+	t.Helper()
+
+	for _, k := range keys {
+		v, ok := resolve(k)
+		if ok || v.Valid() {
+			t.Fatalf("expected missing resolution for %q to fail, got ok=%v, handle=%v", k, ok, v)
+		}
+	}
+}
+
+func TestSnapshotResolveSuccessAndProvenance(t *testing.T) {
+	s := localServer(t)
+
+	sessRecord, err := s.decodeSession(sessionFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	winRecord, _, err := s.decodeWindow(windowFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientRecord, err := s.decodeClient(clientFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedOrigin := fixtureIdentity(s)
+
+	//nolint:exhaustruct_v5 // testing snapshot resolve on decoded records
+	snap := Snapshot{
+		sessions: []SessionInfo{sessRecord},
+		windows:  []WindowInfo{winRecord},
+		clients:  []ClientInfo{clientRecord},
+	}
+
+	assertResolvedWindow(t, snap, "@2", winRecord.Handle(), expectedOrigin)
+	assertResolvedSession(t, snap, "$0", sessRecord.Handle(), expectedOrigin)
+	assertResolvedClient(t, snap, "/dev/pts/1", clientRecord.Handle(), expectedOrigin)
+}
+
+func TestSnapshotResolveMissing(t *testing.T) {
+	s := localServer(t)
+
+	sessRecord, err := s.decodeSession(sessionFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	winRecord, _, err := s.decodeWindow(windowFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	clientRecord, err := s.decodeClient(clientFixture(s), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//nolint:exhaustruct_v5 // testing snapshot resolve on decoded records
+	snap := Snapshot{
+		sessions: []SessionInfo{sessRecord},
+		windows:  []WindowInfo{winRecord},
+		clients:  []ClientInfo{clientRecord},
+	}
+
+	assertResolveMissing(t, snap.ResolveWindow, []WindowID{"@999", ""})
+	assertResolveMissing(t, snap.ResolveSession, []SessionID{"$999", ""})
+	assertResolveMissing(t, snap.ResolveClient, []ClientName{"/dev/pts/nonexistent", ""})
+}
+
+func TestResolveClientEqualityRecyclingAndDaemonIsolation(t *testing.T) {
+	s1 := localServer(t)
+
+	c1, err := s1.decodeClient(clientFixture(s1), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	h1 := c1.Handle()
+
+	// Different PID (same name and daemon)
+	mDiffPID := clientFixture(s1)
+	mDiffPID["client_pid"] = "9999"
+
+	cDiffPID, err := s1.decodeClient(mDiffPID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if h1.Equal(cDiffPID.Handle()) {
+		t.Fatal("expected different client PID to break handle equality")
+	}
+
+	// Different creation timestamp (same name, PID, and daemon)
+	mDiffCreated := clientFixture(s1)
+	mDiffCreated["client_created"] = "500"
+
+	cDiffCreated, err := s1.decodeClient(mDiffCreated, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if h1.Equal(cDiffCreated.Handle()) {
+		t.Fatal("expected different client creation timestamp to break handle equality")
+	}
+
+	// Different daemon origin (different localServer)
+	s2 := localServer(t)
+	mDiffDaemon := clientFixture(s2)
+
+	cDiffDaemon, err := s2.decodeClient(mDiffDaemon, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if h1.Equal(cDiffDaemon.Handle()) {
+		t.Fatal("expected different daemon origin to break handle equality")
 	}
 }

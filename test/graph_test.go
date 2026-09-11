@@ -235,3 +235,147 @@ func TestIntegrationGraphMissingLookups(t *testing.T) {
 		t.Fatalf("stale pane: %v", err)
 	}
 }
+
+func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	var winCreate tmux.NewWindowOptions
+	winCreate.Name = "win-initial"
+
+	winLink, err := session.NewWindow(ctx, winCreate)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	targetWin := winLink.Window()
+
+	var sessCreate tmux.NewSessionOptions
+	sessCreate.Name = "other-session"
+
+	otherSession, err := server.NewSession(ctx, sessCreate)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var ctrlOpts tmux.ControlOptions
+	conn, err := server.OpenControl(ctx, session, ctrlOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		_ = conn.Close()
+	})
+
+	snap, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Consistency != tmux.Consistent {
+		t.Fatalf("inconsistent snapshot: %+v", snap.MissingReferences())
+	}
+
+	var controlClientInfo tmux.ClientInfo
+	var found bool
+
+	for _, c := range snap.Clients() {
+		if c.Control {
+			controlClientInfo = c
+			found = true
+
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("control client not found in snapshot")
+	}
+
+	resSession, ok := snap.ResolveSession(session.ID())
+	if !ok || !resSession.Valid() || !resSession.Equal(session) || !resSession.Identity().Equal(snap.Identity) {
+		t.Fatalf("session resolution failed: ok=%v, resSession=%v", ok, resSession)
+	}
+
+	resWindow, ok := snap.ResolveWindow(targetWin.ID())
+	if !ok || !resWindow.Valid() || !resWindow.Equal(targetWin) || !resWindow.Identity().Equal(snap.Identity) {
+		t.Fatalf("window resolution failed: ok=%v, resWindow=%v", ok, resWindow)
+	}
+
+	resClient, ok := snap.ResolveClient(controlClientInfo.Name)
+	if !ok || !resClient.Valid() || !resClient.Equal(controlClientInfo.Handle()) || !resClient.Identity().Equal(snap.Identity) {
+		t.Fatalf("client resolution failed: ok=%v, resClient=%v", ok, resClient)
+	}
+
+	if _, ok := snap.ResolveSession(tmux.SessionID("$9999")); ok {
+		t.Fatal("expected decoy session resolution to fail")
+	}
+	if _, ok := snap.ResolveWindow(tmux.WindowID("@9999")); ok {
+		t.Fatal("expected decoy window resolution to fail")
+	}
+	if _, ok := snap.ResolveClient(tmux.ClientName("/dev/pts/nonexistent")); ok {
+		t.Fatal("expected decoy client resolution to fail")
+	}
+
+	foreignServer := tmuxtest.NewServer(t)
+	foreignSession, err := foreignServer.FindSession(ctx, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var swOpts tmux.SwitchOptions
+	if err := resClient.Switch(ctx, foreignSession, swOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
+		t.Fatalf("cross-server switch expected ErrInvalidHandle, got: %v", err)
+	}
+
+	var linkOpts tmux.LinkOptions
+	if _, err := resWindow.Link(ctx, foreignSession, linkOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
+		t.Fatalf("cross-server link expected ErrInvalidHandle, got: %v", err)
+	}
+
+	if err := resSession.Rename(ctx, "session-mutated"); err != nil {
+		t.Fatal(err)
+	}
+	sinfo, err := resSession.Info(ctx)
+	if err != nil || sinfo.Name != "session-mutated" {
+		t.Fatalf("expected renamed session name 'session-mutated', got: %v, err=%v", sinfo.Name, err)
+	}
+
+	if err := resWindow.Rename(ctx, "win-renamed"); err != nil {
+		t.Fatal(err)
+	}
+	winfo, err := resWindow.Info(ctx)
+	if err != nil || winfo.Name != "win-renamed" {
+		t.Fatalf("expected renamed window name 'win-renamed', got: %v, err=%v", winfo.Name, err)
+	}
+
+	if err := resClient.Switch(ctx, otherSession, swOpts); err != nil {
+		t.Fatal(err)
+	}
+	cinfo, err := resClient.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sessID, ok := cinfo.SessionID.Get(); !ok || sessID != otherSession.ID() {
+		t.Fatalf("expected switched client session %v, got ok=%v id=%v", otherSession.ID(), ok, sessID)
+	}
+
+	if err := resClient.Detach(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conn.Wait(ctx); !errors.Is(err, tmux.ErrClosed) {
+		t.Fatalf("expected ErrClosed on connection wait after detach, got: %v", err)
+	}
+
+	if _, err := resClient.Info(ctx); !errors.Is(err, tmux.ErrClientChanged) {
+		t.Fatalf("expected ErrClientChanged on detached client handle, got: %v", err)
+	}
+
+	snapPost, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := snapPost.ResolveClient(resClient.Name()); ok {
+		t.Fatalf("detached client %q still found in snapshot", resClient.Name())
+	}
+}

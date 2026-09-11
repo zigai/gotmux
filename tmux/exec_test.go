@@ -1,4 +1,4 @@
-package exec
+package tmux
 
 import (
 	"bytes"
@@ -56,38 +56,37 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-func testRunner(t *testing.T, concurrent int) *Runner {
+func testRunner(t *testing.T, concurrent int) *runner {
 	t.Helper()
 
 	exe, e := os.Executable()
 	if e != nil {
 		t.Fatal(e)
 	}
-	// An instrumented helper emits a warning on stderr without GOCOVERDIR.
-	// Give each helper a private destination rather than changing process globals.
-	return New(exe, []string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()}, t.TempDir(), concurrent)
+
+	return newRunner(exe, []string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()}, t.TempDir(), concurrent)
 }
 
 func TestRunnerStreamsAndStatus(t *testing.T) {
-	r := testRunner(t, 2).Run(context.Background(), []string{"streams"}, nil, 100, 100)
-	if !r.Started || r.ExitCode != 7 || r.Err == nil || !bytes.Equal(r.Stdout, []byte("stdout\x00\xff\n")) || string(r.Stderr) != "stderr\n" {
-		t.Fatalf("%#v", r)
+	r, started, err := testRunner(t, 2).run(context.Background(), []string{"streams"}, nil, 100, 100)
+	if !started || r.ExitCode != 7 || err == nil || !bytes.Equal(r.Stdout, []byte("stdout\x00\xff\n")) || string(r.Stderr) != "stderr\n" {
+		t.Fatalf("%#v started=%v err=%v", r, started, err)
 	}
 }
 
 func TestRunnerBinaryInput(t *testing.T) {
 	data := []byte("\x00\xff\r\n;$#{pane_id}")
 
-	r := testRunner(t, 1).Run(context.Background(), []string{"echo"}, data, 100, 100)
-	if r.Err != nil || !bytes.Equal(r.Stdout, data) {
-		t.Fatalf("%#v", r)
+	r, _, err := testRunner(t, 1).run(context.Background(), []string{"echo"}, data, 100, 100)
+	if err != nil || !bytes.Equal(r.Stdout, data) {
+		t.Fatalf("%#v err=%v", r, err)
 	}
 }
 
 func TestRunnerBoundedStreams(t *testing.T) {
-	r := testRunner(t, 1).Run(context.Background(), []string{"flood"}, nil, 63, 71)
-	if !errors.Is(r.Err, ErrOutputLimit) || len(r.Stdout) > 63 || len(r.Stderr) > 71 {
-		t.Fatalf("%#v", r)
+	r, _, err := testRunner(t, 1).run(context.Background(), []string{"flood"}, nil, 63, 71)
+	if !errors.Is(err, ErrOutputLimit) || len(r.Stdout) > 63 || len(r.Stderr) > 71 {
+		t.Fatalf("%#v err=%v", r, err)
 	}
 }
 
@@ -97,14 +96,14 @@ func TestRunnerTimeoutAndReadmission(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	out := r.Run(ctx, []string{"wait"}, nil, 100, 100)
-	if !errors.Is(out.Err, context.DeadlineExceeded) || !out.Started {
-		t.Fatalf("%#v", out)
+	out, started, err := r.run(ctx, []string{"wait"}, nil, 100, 100)
+	if !errors.Is(err, context.DeadlineExceeded) || !started {
+		t.Fatalf("%#v started=%v err=%v", out, started, err)
 	}
 
-	out = r.Run(context.Background(), []string{"success"}, nil, 100, 100)
-	if out.Err != nil || string(out.Stdout) != "ok" {
-		t.Fatalf("next result %#v", out)
+	out, _, err = r.run(context.Background(), []string{"success"}, nil, 100, 100)
+	if err != nil || string(out.Stdout) != "ok" {
+		t.Fatalf("next result %#v err=%v", out, err)
 	}
 }
 
@@ -117,27 +116,27 @@ func TestRunnerCanceledAdmission(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	out := r.Run(ctx, []string{"success"}, nil, 100, 100)
+	out, started, err := r.run(ctx, []string{"success"}, nil, 100, 100)
 	r.slots.Release(1)
 
-	if out.Started || !errors.Is(out.Err, context.Canceled) || out.ExitCode != -1 {
-		t.Fatalf("%#v", out)
+	if started || !errors.Is(err, context.Canceled) || out.ExitCode != -1 {
+		t.Fatalf("%#v started=%v err=%v", out, started, err)
 	}
 }
 
 func TestRunnerEnvironmentAndDirectory(t *testing.T) {
 	r := testRunner(t, 1)
 
-	out := r.Run(context.Background(), []string{"env"}, nil, 4096, 4096)
-	if out.Err != nil || string(out.Stdout) != "hello\n"+r.Dir {
-		t.Fatalf("%#v", out)
+	out, _, err := r.run(context.Background(), []string{"env"}, nil, 4096, 4096)
+	if err != nil || string(out.Stdout) != "hello\n"+r.dir {
+		t.Fatalf("%#v err=%v", out, err)
 	}
 }
 
 func TestBufferConcurrentAccounting(t *testing.T) {
 	var wg sync.WaitGroup
 
-	b := NewBuffer(1024, nil)
+	b := newBuffer(1024, nil)
 
 	for i := range 20 {
 		wg.Add(1)
