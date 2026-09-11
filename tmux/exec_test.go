@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,7 +65,12 @@ func testRunner(t *testing.T, concurrent int) *runner {
 		t.Fatal(e)
 	}
 
-	return newRunner(exe, []string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()}, t.TempDir(), concurrent)
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return newRunner(exe, []string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()}, dir, concurrent)
 }
 
 func TestRunnerStreamsAndStatus(t *testing.T) {
@@ -128,8 +134,27 @@ func TestRunnerEnvironmentAndDirectory(t *testing.T) {
 	r := testRunner(t, 1)
 
 	out, _, err := r.run(context.Background(), []string{"env"}, nil, 4096, 4096)
-	if err != nil || string(out.Stdout) != "hello\n"+r.dir {
+	if err != nil {
 		t.Fatalf("%#v err=%v", out, err)
+	}
+
+	lines := strings.SplitN(string(out.Stdout), "\n", 2)
+	if len(lines) != 2 || lines[0] != "hello" {
+		t.Fatalf("unexpected stdout: %q", string(out.Stdout))
+	}
+
+	actualDir, err := filepath.EvalSymlinks(lines[1])
+	if err != nil {
+		t.Fatalf("EvalSymlinks(actualDir): %v", err)
+	}
+
+	expectedDir, err := filepath.EvalSymlinks(r.dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(expectedDir): %v", err)
+	}
+
+	if actualDir != expectedDir {
+		t.Fatalf("dir = %q, want %q", actualDir, expectedDir)
 	}
 }
 
