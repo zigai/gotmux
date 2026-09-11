@@ -8,19 +8,14 @@ import (
 )
 
 const (
-	// NotSent indicates the command or mutation was never dispatched to tmux
-	// (for example, due to argument validation failure or pre-dispatch context cancellation).
-	// Callers can safely assume no daemon state was modified.
+	// NotSent indicates the command was never dispatched to tmux; no server state changed.
 	NotSent Effect = iota
 
 	// Unknown indicates the command was sent or partially processed, but an error
-	// occurred before confirmation (e.g. process timeout or connection drop).
-	// The mutation MAY have taken effect on the server; callers must NOT blindly retry.
+	// occurred before confirmation. The mutation MAY have taken effect on the server;
+	// callers must NOT blindly retry.
 	Unknown
-
-	// Confirmed indicates tmux successfully processed the command, but subsequent
-	// inspection or decoding failed (e.g. failure to parse the created object's ID).
-	// The server state HAS been modified.
+	// Confirmed indicates tmux processed the command, but subsequent inspection failed.
 	Confirmed
 )
 
@@ -33,103 +28,87 @@ const (
 )
 
 const (
-	// NoTimeout indicates the error was not caused by a timeout.
 	NoTimeout TimeoutSource = iota
-
-	// CallerTimeout indicates the caller's context deadline expired while waiting.
 	CallerTimeout
-
-	// LibraryTimeout indicates the library's internal CommandTimeout expired.
 	LibraryTimeout
 )
 
 var (
-	// ErrNotInsideTmux indicates that ambient tmux environment variables ($TMUX)
-	// were not found in the current process environment.
+	// ErrNotInsideTmux indicates $TMUX is missing from the environment.
 	ErrNotInsideTmux = errors.New("tmux: not inside tmux")
 
-	// ErrNoServer indicates that no tmux server daemon is listening on the target socket,
-	// and automatic startup was not permitted (via AllowStart or -N).
+	// ErrNoServer indicates no tmux daemon is listening on the selected socket.
 	ErrNoServer = errors.New("tmux: no server on selected endpoint")
 
-	// ErrNotFound indicates that the requested session, window, pane, client, or buffer does not exist.
+	// ErrNotFound indicates the target session, window, pane, client, or buffer does not exist.
 	ErrNotFound = errors.New("tmux: object not found")
 
-	// ErrAmbiguousTarget indicates that tmux found multiple matching targets for an unqualified name.
+	// ErrAmbiguousTarget indicates an unqualified target matched multiple objects.
 	ErrAmbiguousTarget = errors.New("tmux: ambiguous target")
 
-	// ErrInvalidHandle indicates that a handle lacks required provenance, refers to an invalid ID,
-	// or was used with a server from a different daemon lifetime or connection generation.
+	// ErrInvalidHandle indicates a handle lacks provenance or refers to an invalid ID.
 	ErrInvalidHandle = errors.New("tmux: invalid handle")
 
-	// ErrInvalidArgument indicates that an input parameter violated validation rules
-	// (e.g. negative dimensions, out-of-range indices, NUL bytes, or invalid option names).
+	// ErrInvalidArgument indicates an invalid parameter (out of range, NUL byte, etc.).
 	ErrInvalidArgument = errors.New("tmux: invalid argument")
 
-	// ErrServerChanged indicates that the answering daemon's PID, start time, or reported socket
-	// changed between handle creation and command execution, indicating a server crash/restart.
+	// ErrServerChanged indicates the daemon PID, start time, or socket changed since handle creation.
 	ErrServerChanged = errors.New("tmux: daemon identity changed")
 
-	// ErrLinkChanged indicates that the window at the target session slot index changed or was unlinked.
+	// ErrLinkChanged indicates the window at the target session slot index changed or was unlinked.
 	ErrLinkChanged = errors.New("tmux: window link changed")
 
-	// ErrClientChanged indicates that the target client terminal disconnected or changed identity.
+	// ErrClientChanged indicates the target client terminal disconnected or changed identity.
 	ErrClientChanged = errors.New("tmux: client identity changed")
 
-	// ErrUnsupported indicates that a requested command, flag, or option is not supported
-	// by the running tmux binary or daemon version.
+	// ErrUnsupported indicates a feature or flag is not supported by this tmux version.
 	ErrUnsupported = errors.New("tmux: unsupported feature or version")
 
-	// ErrTransportUnsupported indicates that the requested operation cannot be executed over
-	// the current transport (for example, running interactive UI or raw commands over control mode).
+	// ErrTransportUnsupported indicates the operation cannot run over the active transport.
 	ErrTransportUnsupported = errors.New("tmux: unsupported execution transport")
 
-	// ErrOutputLimit indicates that stdout/stderr output from tmux exceeded [Limits.OutputBytes].
+	// ErrOutputLimit indicates stdout/stderr exceeded [Limits.OutputBytes].
 	ErrOutputLimit = errors.New("tmux: output byte limit exceeded")
 
-	// ErrInputLimit indicates that input sent via stdin or command arguments exceeded [Limits.InputBytes].
+	// ErrInputLimit indicates payload sent to tmux exceeded [Limits.InputBytes].
 	ErrInputLimit = errors.New("tmux: input byte limit exceeded")
 
-	// ErrResourceLimit indicates that control queue depth or event buffer byte reservations
-	// would exceed configured capacity limits.
+	// ErrResourceLimit indicates queue or reservation limits would be exceeded.
 	ErrResourceLimit = errors.New("tmux: resource reservation cannot fit")
 
-	// ErrProtocol indicates that tmux emitted malformed control framing or an unexpected wire response.
+	// ErrProtocol indicates malformed control framing or an unexpected wire response.
 	ErrProtocol = errors.New("tmux: invalid control protocol")
 
-	// ErrEventsLost indicates that an event subscription overflowed its buffer capacity and was terminated.
+	// ErrEventsLost indicates an event subscription overflowed its buffer capacity and was dropped.
 	ErrEventsLost = errors.New("tmux: subscription events lost")
 
-	// ErrClosed indicates that the target control connection or event stream is closed.
+	// ErrClosed indicates the connection or event stream is closed.
 	ErrClosed = errors.New("tmux: closed")
 
-	// ErrShutdownIncomplete indicates that connection teardown timed out before background workers exited.
+	// ErrShutdownIncomplete indicates connection teardown timed out before background workers exited.
 	ErrShutdownIncomplete = errors.New("tmux: shutdown incomplete")
 
-	// ErrConcurrentRead indicates that multiple goroutines attempted concurrent reads on a single [EventStream].
+	// ErrConcurrentRead indicates multiple goroutines attempted concurrent reads on an [EventStream].
 	ErrConcurrentRead = errors.New("tmux: concurrent event reads")
 
-	// ErrInconsistent indicates that an observation detected an inconsistent or contradictory state
-	// during snapshot analysis or option hierarchy queries.
+	// ErrInconsistent indicates contradictory observation state during snapshot or option queries.
 	ErrInconsistent = errors.New("tmux: inconsistent observation")
 )
 
-// Effect describes our knowledge of whether a mutation was dispatched or acknowledged.
-// It does NOT indicate whether replaying the mutation would be safe or idempotent.
+// Effect describes whether a mutation was dispatched or acknowledged.
 type (
 	Effect uint8
 
-	// ObjectKind classifies a tmux object type (session, window, pane, client, or link).
+	// ObjectKind classifies a tmux object type.
 	ObjectKind string
 
-	// StepOutcome records the outcome of a single step within a multi-step operation.
+	// StepOutcome records the outcome of an individual step in a batch operation.
 	StepOutcome struct {
 		Index  int
 		Effect Effect
 	}
 
-	// CreatedObject records identity information recovered for an object created during an operation,
-	// even if a subsequent post-creation step (like inspection) failed.
+	// CreatedObject records identity information recovered for a newly created object.
 	CreatedObject struct {
 		Kind        ObjectKind
 		RawID       string
@@ -138,16 +117,14 @@ type (
 		WindowIndex Value[int]
 	}
 
-	// Outcome details the side-effect knowledge of an operation, including partial step
-	// progress and any objects known to have been created on the daemon.
+	// Outcome details the side-effect knowledge of an operation.
 	Outcome struct {
 		Effect  Effect
 		Steps   []StepOutcome
 		Created []CreatedObject
 	}
 
-	// TimeoutSource distinguishes whether an operation timed out because the caller's
-	// context deadline was reached or because the library's internal CommandTimeout expired.
+	// TimeoutSource indicates whether a timeout originated from the caller or library limits.
 	TimeoutSource uint8
 
 	// OperationError wraps every failing typed I/O operation. Err is safe to inspect
@@ -159,9 +136,8 @@ type (
 		Err       error
 	}
 
-	// CommandError provides low-level diagnostic details for command execution failures.
-	// Result contains bounded stdout/stderr copies. ExitCode is -1 for control-mode
-	// commands and for processes terminated by signals without an exit status.
+	// CommandError provides low-level diagnostics, including bounded stdout/stderr copies.
+	// ExitCode is -1 for control-mode commands and for processes terminated without exit status.
 	CommandError struct {
 		Command string
 		Result  Result
@@ -169,8 +145,7 @@ type (
 		Timeout TimeoutSource
 		Err     error
 	}
-
-	// DecodeError records a failure while decoding a structured tmux record field.
+	// DecodeError records a failure decoding a structured record field.
 	DecodeError struct {
 		Record string
 		Field  string
@@ -178,8 +153,7 @@ type (
 		Err    error
 	}
 
-	// UnsupportedError describes a feature, command, or version incompatible with the
-	// current daemon or execution transport.
+	// UnsupportedError describes a feature incompatible with the current daemon or transport.
 	UnsupportedError struct {
 		Feature   string
 		Version   Version

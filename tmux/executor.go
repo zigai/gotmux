@@ -6,8 +6,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-
-	process "github.com/zigai/gotmux/internal/exec"
 )
 
 type operation struct {
@@ -49,22 +47,12 @@ func (s *Server) begin(ctx context.Context) (context.Context, *operation, error)
 }
 
 func (s *Server) executeProcess(ctx context.Context, op *operation, args []string, input []byte) (Result, error) {
-	r := s.runner.Run(ctx, args, input, max(op.output, 0), max(op.stderr, 0))
-	result := Result{Stdout: r.Stdout, Stderr: r.Stderr, ExitCode: r.ExitCode}
-	op.output -= int64(len(r.Stdout))
+	result, started, err := s.runner.run(ctx, args, input, max(op.output, 0), max(op.stderr, 0))
+	op.output -= int64(len(result.Stdout))
+	op.stderr -= int64(len(result.Stderr))
 
-	op.stderr -= int64(len(r.Stderr))
-	if r.Err == nil {
+	if err == nil {
 		return result, nil
-	}
-
-	err := r.Err
-	if errors.Is(err, process.ErrOutputLimit) {
-		err = errors.Join(ErrOutputLimit, err)
-	}
-
-	if errors.Is(err, process.ErrShutdownIncomplete) {
-		err = errors.Join(ErrShutdownIncomplete, err)
 	}
 
 	if klass := classifyStderr(result.Stderr); klass != nil {
@@ -72,7 +60,7 @@ func (s *Server) executeProcess(ctx context.Context, op *operation, args []strin
 	}
 
 	effect := NotSent
-	if r.Started {
+	if started {
 		effect = Unknown
 	}
 

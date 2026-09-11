@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"golang.org/x/sync/semaphore"
-
-	process "github.com/zigai/gotmux/internal/exec"
 )
 
 const (
@@ -31,30 +29,24 @@ var (
 	connectionGeneration    atomic.Uint64
 )
 
-// ControlOptions configures resource limits and behaviors for an interactive control mode connection.
+// ControlOptions configures limits for an interactive control mode connection.
 type ControlOptions struct {
-	// PaneOutput enables asynchronous terminal output events (%output and %extended-output)
-	// from panes. Disabled by default to prevent saturating the control wire with terminal stream noise.
+	// PaneOutput enables terminal output events (%output). Defaults to false.
 	PaneOutput bool
 
-	// QueueDepth is the maximum number of requests that may be queued waiting for dispatch
-	// before admission fails with [ErrResourceLimit]. Defaults to 64.
+	// QueueDepth is the maximum pending request queue depth. Defaults to 64.
 	QueueDepth int
 
-	// QueuedBytes bounds the total memory held by pending request payloads in the queue.
-	// Defaults to 8 MiB.
+	// QueuedBytes bounds total pending request bytes. Defaults to 8 MiB.
 	QueuedBytes int64
 
-	// FrameBytes bounds the maximum size of a single control notification or response frame
-	// read from tmux before failing the connection with [ErrProtocol]. Defaults to 4 MiB.
+	// FrameBytes bounds the maximum individual control frame size. Defaults to 4 MiB.
 	FrameBytes int64
 
-	// EventBytes is the total byte budget shared across all active [EventStream] reservations.
-	// Defaults to 32 MiB.
+	// EventBytes is the shared event capacity quota across all streams. Defaults to 32 MiB.
 	EventBytes int64
 
-	// MaxStreams is the maximum number of concurrent [EventStream] instances permitted.
-	// Defaults to 8.
+	// MaxStreams is the maximum concurrent [EventStream] count. Defaults to 8.
 	MaxStreams int
 }
 
@@ -62,11 +54,10 @@ type ControlOptions struct {
 //
 // Concurrency model:
 // A Connection owns exactly one reader goroutine, one writer/dispatcher goroutine, and
-// an event distribution hub. Only one request is dispatched to tmux at a time; subsequent
-// requests wait in a bounded admission queue.
+// an event distribution hub. Requests are dispatched sequentially over the wire.
 //
 // Generation safety:
-// Handles created from this connection carry a unique, process-local [ServerIdentity.Generation]
+// Handles created from this connection carry a unique [ServerIdentity.Generation]
 // token so they cannot be accidentally reused if the connection terminates and restarts.
 type Connection struct {
 	server        *Server
@@ -93,7 +84,7 @@ type Connection struct {
 	stdin         *os.File
 	stdout        *os.File
 	stderr        *os.File
-	diagnostics   *process.Buffer
+	diagnostics   *buffer
 	stopOnce      sync.Once
 }
 
@@ -175,8 +166,7 @@ func (c *Connection) Close() error {
 
 	c.stop(nil, true)
 
-	timer := time.NewTimer(process.ShutdownBudget)
-	defer timer.Stop()
+	timer := time.NewTimer(shutdownBudget)
 
 	select {
 	case <-c.done:
@@ -390,7 +380,7 @@ func (s *Server) controlAttachArgs(session Session, o ControlOptions, nonce stri
 }
 
 func (s *Server) setupControlProcess(c *Connection, cctx context.Context, args []string, cancel context.CancelCauseFunc) error {
-	c.cmd = s.runner.Command(cctx, args)
+	c.cmd = s.runner.command(cctx, args)
 
 	inChild, inWrite, err := os.Pipe()
 	if err != nil {
@@ -427,10 +417,9 @@ func (s *Server) setupControlProcess(c *Connection, cctx context.Context, args [
 	c.cmd.Stdin = inChild
 	c.cmd.Stdout = outChild
 	c.cmd.Stderr = errChild
+	c.diagnostics = newBuffer(s.config.Limits.OutputBytes, func() { c.stop(ErrOutputLimit, false) })
 
-	c.diagnostics = process.NewBuffer(s.config.Limits.OutputBytes, func() { c.stop(ErrOutputLimit, false) })
 	if err = c.cmd.Start(); err != nil {
-		_ = inChild.Close()
 		_ = inWrite.Close()
 		_ = outRead.Close()
 		_ = outChild.Close()

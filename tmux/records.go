@@ -85,6 +85,8 @@ type WindowLinkInfo struct {
 	// WindowID is the target window ID linked at this slot.
 	WindowID WindowID
 
+	// WindowName is the human-readable name of the window linked at this slot.
+	WindowName string
 	// Index is the window index within the session (e.g. 0 for session:0).
 	Index int
 
@@ -123,6 +125,17 @@ type PaneInfo struct {
 	// WindowID is the ID of the window containing this pane.
 	WindowID WindowID
 
+	// SessionID is the parent session ID containing this pane, if reported.
+	SessionID Value[SessionID]
+
+	// SessionName is the parent session name containing this pane, if reported.
+	SessionName Value[string]
+
+	// WindowName is the parent window name containing this pane, if reported.
+	WindowName Value[string]
+
+	// WindowIndex is the parent window index containing this pane, if reported.
+	WindowIndex Value[int]
 	// Index is the 0-based pane index within its window (#{pane_index}).
 	Index int
 

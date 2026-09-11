@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -13,6 +13,14 @@ const (
 	ClientNoOutput   ClientFlag = "no-output"
 	ClientReadOnly   ClientFlag = "read-only"
 	ClientActivePane ClientFlag = "active-pane"
+
+	PopupBorderSingle  PopupBorder = "single"
+	PopupBorderDouble  PopupBorder = "double"
+	PopupBorderHeavy   PopupBorder = "heavy"
+	PopupBorderRounded PopupBorder = "rounded"
+	PopupBorderSimple  PopupBorder = "simple"
+	PopupBorderPadded  PopupBorder = "padded"
+	PopupBorderNone    PopupBorder = "none"
 )
 
 type (
@@ -40,7 +48,10 @@ type (
 		Flags []ClientFlag
 	}
 
-	// PopupOptions configures displaying an interactive modal popup overlay on a client.
+	// PopupBorder specifies the border style for a popup overlay (-b flag).
+	PopupBorder string
+
+	// PopupOptions configures displaying an interactive modal popup overlay on a client or pane.
 	PopupOptions struct {
 		// Program specifies the command to execute inside the popup.
 		Program Program
@@ -53,6 +64,27 @@ type (
 
 		// Size specifies the popup dimensions in character cells.
 		Size Size
+
+		// Width specifies the popup width (e.g. "80", "75%"). Wins over Size.Width if non-empty.
+		Width string
+
+		// Height specifies the popup height (e.g. "24", "80%"). Wins over Size.Height if non-empty.
+		Height string
+
+		// X specifies the popup horizontal position (e.g. "C", "R", "M", "W", "50%").
+		X string
+
+		// Y specifies the popup vertical position (e.g. "C", "M", "W", "50%").
+		Y string
+
+		// Border specifies the popup border style (-b flag).
+		Border PopupBorder
+
+		// Style specifies popup text/background style (-s flag).
+		Style string
+
+		// BorderStyle specifies popup border style (-S flag).
+		BorderStyle string
 
 		// Title is an optional title string shown in the popup border (-T flag).
 		Title string
@@ -77,6 +109,8 @@ type (
 		// Commands is the sequence of commands executed when this item is selected.
 		Commands CommandSequence
 
+		// Command is an optional raw command string executed when selected, used if Commands is empty.
+		Command string
 		// Separator indicates this item is a visual separator line rather than a selectable option.
 		Separator bool
 
@@ -93,8 +127,13 @@ type (
 
 		// StayOpen keeps the menu open after an item is selected. (Unsupported in stock tmux).
 		StayOpen bool
-	}
 
+		// X specifies the menu horizontal position (-x flag).
+		X string
+
+		// Y specifies the menu vertical position (-y flag).
+		Y string
+	}
 	// PromptTemplate specifies the template command executed by tmux when a prompt is submitted.
 	// In tmux, "%%" in the template is replaced by the user's entered text.
 	PromptTemplate string
@@ -185,7 +224,7 @@ func (c Client) Refresh(ctx context.Context, o RefreshOptions) error {
 // Message requests a status message on this exact client. Completion means tmux
 // accepted the display request, not that the user read or dismissed it.
 func (c Client) Message(ctx context.Context, text string) error {
-	if !codec.ValidString(text) {
+	if !wire.ValidString(text) {
 		return opError("Message", invalid("message"))
 	}
 
@@ -193,7 +232,7 @@ func (c Client) Message(ctx context.Context, text string) error {
 		return opError("Message", ErrTransportUnsupported)
 	}
 
-	return c.h.act(ctx, "display-message", "-c", c.h.id, "--", codec.LiteralFormat(text))
+	return c.h.act(ctx, "display-message", "-c", c.h.id, "--", wire.LiteralFormat(text))
 }
 
 // Popup waits for tmux's popup command queue to resume (normally dismissal).
@@ -218,6 +257,28 @@ func (c Client) Popup(ctx context.Context, o PopupOptions) error {
 	}
 
 	return c.h.act(ctx, "display-popup", args...)
+}
+
+// Popup displays an interactive modal popup overlay targeting this pane (-t flag).
+func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
+	if err := requireDeadline(ctx); err != nil {
+		return opError("Popup", err)
+	}
+
+	if err := p.h.check(); err != nil {
+		return opError("Popup", err)
+	}
+
+	if p.h.server.conn != nil {
+		return opError("Popup", ErrTransportUnsupported)
+	}
+
+	args, err := popupArgsWithTarget("-t", p.h.id, o)
+	if err != nil {
+		return opError("Popup", err)
+	}
+
+	return p.h.act(ctx, "display-popup", args...)
 }
 
 // Menu displays an interactive popup menu on this client and blocks until dismissal.
@@ -265,6 +326,51 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error
 	defer op.close()
 
 	_, err = c.h.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, c.h.guard(), nil)
+
+	return opError("Menu", err)
+}
+
+// Menu displays an interactive popup menu targeting this pane (-t flag).
+func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
+	if err := requireDeadline(ctx); err != nil {
+		return opError("Menu", err)
+	}
+
+	if err := p.h.check(); err != nil {
+		return opError("Menu", err)
+	}
+
+	if p.h.server.conn != nil {
+		return opError("Menu", ErrTransportUnsupported)
+	}
+
+	if o.StayOpen {
+		return opError("Menu", unsupported("persistent menu completion policy"))
+	}
+
+	args, err := menuArgsWithTarget("-t", p.h.id, o)
+	if err != nil {
+		return opError("Menu", err)
+	}
+
+	node := leaf(command("display-menu", args...))
+
+	for _, item := range items {
+		itemArgs, itemErr := menuItemArg(item)
+		if itemErr != nil {
+			return opError("Menu", itemErr)
+		}
+
+		node.args = append(node.args, itemArgs...)
+	}
+
+	opCtx, op, err := p.h.server.begin(ctx)
+	if err != nil {
+		return opError("Menu", err)
+	}
+	defer op.close()
+
+	_, err = p.h.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, p.h.guard(), nil)
 
 	return opError("Menu", err)
 }
@@ -330,7 +436,7 @@ func (c Client) DisplayPanes(ctx context.Context) error {
 // Note on cadence: this reflects tmux's internal update intervals and timer ticks;
 // it is a sampling observation mechanism, not a lossless audit log of every intermediate state.
 func (c *Connection) WatchFormat(ctx context.Context, name string, pane Pane, expr Format) error {
-	if c == nil || !validFormatName(name) || !codec.ValidString(string(expr)) {
+	if c == nil || !validFormatName(name) || !wire.ValidString(string(expr)) {
 		return opError("WatchFormat", invalid("subscription"))
 	}
 
@@ -382,6 +488,10 @@ func (c *Connection) SetPaneOutput(ctx context.Context, pane Pane, enabled bool)
 }
 
 func popupArgs(clientID string, o PopupOptions) ([]string, error) {
+	return popupArgsWithTarget("-c", clientID, o)
+}
+
+func popupArgsWithTarget(targetFlag, targetID string, o PopupOptions) ([]string, error) {
 	if !o.Size.valid() || (o.CloseOnExit && o.CloseOnSuccess) {
 		return nil, invalid("popup options")
 	}
@@ -391,7 +501,7 @@ func popupArgs(clientID string, o PopupOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-c", clientID}
+	args := []string{targetFlag, targetID}
 	if o.CloseOnExit {
 		args = append(args, "-E")
 	}
@@ -400,12 +510,9 @@ func popupArgs(clientID string, o PopupOptions) ([]string, error) {
 		args = append(args, "-E", "-E")
 	}
 
-	if o.Borderless {
-		args = append(args, "-B")
-	}
+	args = append(args, popupStyleArgs(o)...)
 
-	args = append(args, popupSizeArgs(o.Size)...)
-
+	args = append(args, popupGeometryArgs(o)...)
 	if o.Title != "" {
 		v, err := literal(o.Title)
 		if err != nil {
@@ -426,9 +533,21 @@ func popupArgs(clientID string, o PopupOptions) ([]string, error) {
 }
 
 func menuArgs(clientID string, o MenuOptions) ([]string, error) {
-	args := []string{"-c", clientID}
+	return menuArgsWithTarget("-c", clientID, o)
+}
+
+func menuArgsWithTarget(targetFlag, targetID string, o MenuOptions) ([]string, error) {
+	args := []string{targetFlag, targetID}
 	if !o.Mouse {
 		args = append(args, "-M")
+	}
+
+	if o.X != "" {
+		args = append(args, "-x", o.X)
+	}
+
+	if o.Y != "" {
+		args = append(args, "-y", o.Y)
 	}
 
 	if o.Title != "" {
@@ -450,11 +569,14 @@ func menuItemArg(item MenuItem) ([]wireArg, error) {
 		return []wireArg{{text: "", nested: nil}}, nil
 	}
 
-	if !item.Key.Valid() || !codec.ValidString(item.Label) || len(item.Commands.commands) == 0 {
+	hasCommands := len(item.Commands.commands) > 0
+	hasCmd := item.Command != "" && wire.ValidString(item.Command)
+
+	if item.Label == "" || !item.Key.Valid() || !wire.ValidString(item.Label) || (!hasCommands && !hasCmd) {
 		return nil, invalid("menu item")
 	}
 
-	label := codec.LiteralFormat(item.Label)
+	label := wire.LiteralFormat(item.Label)
 	if strings.HasPrefix(label, "-") && !item.Disabled {
 		return nil, invalid("menu label would be disabled")
 	}
@@ -463,25 +585,32 @@ func menuItemArg(item MenuItem) ([]wireArg, error) {
 		label = "-" + label
 	}
 
+	var cmdArg wireArg
+	if hasCommands {
+		cmdArg = wireArg{text: "", nested: item.Commands.nodes()}
+	} else {
+		cmdArg = wireArg{text: item.Command, nested: nil}
+	}
+
 	return []wireArg{
 		{text: label, nested: nil},
 		{text: string(item.Key), nested: nil},
-		{text: "", nested: item.Commands.nodes()},
+		cmdArg,
 	}, nil
 }
 
 func promptArgs(clientID string, template PromptTemplate, o PromptOptions) ([]string, error) {
-	if template == "" || !codec.ValidString(string(template)) || !codec.ValidString(o.Label) || !codec.ValidString(o.Initial) || (o.Numeric && o.SingleCharacter) {
+	if template == "" || !wire.ValidString(string(template)) || !wire.ValidString(o.Label) || !wire.ValidString(o.Initial) || (o.Numeric && o.SingleCharacter) {
 		return nil, invalid("prompt")
 	}
 
 	args := []string{"-t", clientID}
 	if o.Label != "" {
-		args = append(args, "-p", codec.LiteralFormat(o.Label))
+		args = append(args, "-p", wire.LiteralFormat(o.Label))
 	}
 
 	if o.Initial != "" {
-		args = append(args, "-I", codec.LiteralFormat(o.Initial))
+		args = append(args, "-I", wire.LiteralFormat(o.Initial))
 	}
 
 	if o.SingleCharacter {
@@ -497,14 +626,47 @@ func promptArgs(clientID string, template PromptTemplate, o PromptOptions) ([]st
 	return args, nil
 }
 
-func popupSizeArgs(s Size) []string {
+func popupGeometryArgs(o PopupOptions) []string {
 	var args []string
-	if s.Width > 0 {
-		args = append(args, "-w", strconv.Itoa(s.Width))
+	if o.Width != "" {
+		args = append(args, "-w", o.Width)
+	} else if o.Size.Width > 0 {
+		args = append(args, "-w", strconv.Itoa(o.Size.Width))
 	}
 
-	if s.Height > 0 {
-		args = append(args, "-h", strconv.Itoa(s.Height))
+	if o.Height != "" {
+		args = append(args, "-h", o.Height)
+	} else if o.Size.Height > 0 {
+		args = append(args, "-h", strconv.Itoa(o.Size.Height))
+	}
+
+	if o.X != "" {
+		args = append(args, "-x", o.X)
+	}
+
+	if o.Y != "" {
+		args = append(args, "-y", o.Y)
+	}
+
+	return args
+}
+
+func popupStyleArgs(o PopupOptions) []string {
+	var args []string
+	if o.Borderless {
+		args = append(args, "-B")
+	}
+
+	if o.Border != "" {
+		args = append(args, "-b", string(o.Border))
+	}
+
+	if o.Style != "" {
+		args = append(args, "-s", o.Style)
+	}
+
+	if o.BorderStyle != "" {
+		args = append(args, "-S", o.BorderStyle)
 	}
 
 	return args

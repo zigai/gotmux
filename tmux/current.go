@@ -53,12 +53,8 @@ type CurrentInfo struct {
 	Client Value[ClientInfo]
 }
 
-// ParseEnvironment parses the $TMUX and $TMUX_PANE environment variable strings into
-// structured [EnvironmentInfo].
-//
-// In tmux, $TMUX is formatted as "<socket-path>,<pid>,<session-index>". Because UNIX socket
-// paths may legitimately contain commas, ParseEnvironment splits only the two trailing
-// comma-separated fields, preserving commas in the socket path.
+// ParseEnvironment parses $TMUX ("socket,pid,session") and $TMUX_PANE.
+// Splits trailing comma fields from the end to preserve commas in socket paths.
 // Returns [ErrNotInsideTmux] if env.TMUX is empty. Does not perform I/O.
 func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
 	if env.TMUX == "" {
@@ -75,22 +71,35 @@ func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
 	}
 
 	pre := env.TMUX[:end]
-
 	start := strings.LastIndexByte(pre, ',')
-	if start < 0 {
-		return EnvironmentInfo{}, invalid("TMUX trailing PID")
+
+	var (
+		socket string
+		pid    int
+		sid    SessionID
+	)
+
+	if start >= 0 {
+		sock, p, s, is3Part, err := parseTmux3Part(env.TMUX, start, end)
+		if is3Part {
+			if err != nil {
+				return EnvironmentInfo{}, err
+			}
+
+			socket = sock
+			pid = p
+			sid = s
+		}
 	}
 
-	socket := pre[:start]
+	if socket == "" {
+		sock, p, err := parseTmux2Part(env.TMUX, start, end)
+		if err != nil {
+			return EnvironmentInfo{}, err
+		}
 
-	pid, err := strconv.Atoi(pre[start+1:])
-	if err != nil || pid <= 0 || !filepath.IsAbs(socket) {
-		return EnvironmentInfo{}, invalid("TMUX socket or PID")
-	}
-
-	sid := SessionID("$" + env.TMUX[end+1:])
-	if !sid.Valid() {
-		return EnvironmentInfo{}, invalid("TMUX session ID")
+		socket = sock
+		pid = p
 	}
 
 	paneID := UnavailableValue[PaneID]()
@@ -143,27 +152,98 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 		return CurrentInfo{}, opError("Current", ErrInvalidHandle)
 	}
 
-	pid, ok := hints.PaneID.Get()
-	if !ok {
-		return CurrentInfo{}, opError("Current", invalid("TMUX_PANE required for verified pane context"))
-	}
-
 	snap, err := s.Snapshot(ctx)
 	if err != nil {
 		return CurrentInfo{}, opError("Current", err)
 	}
 
+	pid, ok := hints.PaneID.Get()
+	if !ok {
+		info, err := resolveActiveContext(snap, hints)
+		if err != nil {
+			return CurrentInfo{}, opError("Current", err)
+		}
+
+		return info, nil
+	}
+
+	info, err := resolvePaneContext(snap, pid)
+	if err != nil {
+		return CurrentInfo{}, opError("Current", err)
+	}
+
+	return info, nil
+}
+
+func isNumeric(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+
+	for i := range len(s) {
+		if s[i] < '0' || s[i] > '9' {
+			return false
+		}
+	}
+
+	return true
+}
+
+func parseTmux3Part(raw string, start, end int) (string, int, SessionID, bool, error) {
+	if !isNumeric(raw[start+1 : end]) {
+		return "", 0, "", false, nil
+	}
+
+	p, _ := strconv.Atoi(raw[start+1 : end])
+	s := SessionID("$" + raw[end+1:])
+
+	sock := raw[:start]
+	if p <= 0 || !filepath.IsAbs(sock) {
+		return "", 0, "", true, invalid("TMUX socket or PID")
+	}
+
+	if !s.Valid() {
+		return "", 0, "", true, invalid("TMUX session ID")
+	}
+
+	return sock, p, s, true, nil
+}
+
+func parseTmux2Part(raw string, start, end int) (string, int, error) {
+	pStr := raw[end+1:]
+	p, err := strconv.Atoi(pStr)
+
+	sock := raw[:end]
+	if err != nil || p <= 0 || !filepath.IsAbs(sock) || strconv.Itoa(p) != pStr {
+		if start < 0 {
+			return "", 0, invalid("TMUX trailing PID")
+		}
+
+		return "", 0, invalid("TMUX socket or PID")
+	}
+
+	return sock, p, nil
+}
+
+func resolvePaneContext(snap Snapshot, pid PaneID) (CurrentInfo, error) {
 	p, ok := snap.Pane(pid)
 	if !ok {
-		return CurrentInfo{}, opError("Current", ErrNotFound)
+		return CurrentInfo{}, ErrNotFound
 	}
 
 	w, ok := snap.Window(p.WindowID)
 	if !ok {
-		return CurrentInfo{}, opError("Current", ErrInconsistent)
+		return CurrentInfo{}, ErrInconsistent
 	}
 
-	out := CurrentInfo{Identity: snap.Identity, Pane: p, Window: w, Session: UnavailableValue[SessionInfo](), Link: UnavailableValue[WindowLinkInfo](), Client: UnavailableValue[ClientInfo]()}
+	out := CurrentInfo{
+		Identity: snap.Identity,
+		Pane:     p,
+		Window:   w,
+		Session:  UnavailableValue[SessionInfo](),
+		Link:     UnavailableValue[WindowLinkInfo](),
+		Client:   UnavailableValue[ClientInfo](),
+	}
 
 	var links []WindowLinkInfo
 	for _, l := range snap.links {
@@ -174,13 +254,80 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 
 	if len(links) == 1 {
 		out.Link = PresentValue(links[0])
-		if session, ok := snap.Session(links[0].SessionID); ok {
-			out.Session = PresentValue(session)
-		} else {
-			return CurrentInfo{}, opError("Current", ErrInconsistent)
+
+		session, ok := snap.Session(links[0].SessionID)
+		if !ok {
+			return CurrentInfo{}, ErrInconsistent
+		}
+
+		out.Session = PresentValue(session)
+	}
+
+	return out, nil
+}
+
+func resolveActiveContext(snap Snapshot, hints EnvironmentInfo) (CurrentInfo, error) {
+	var (
+		targetSession SessionInfo
+		foundSession  bool
+	)
+
+	if hints.SessionID.Valid() {
+		targetSession, foundSession = snap.Session(hints.SessionID)
+	} else if len(snap.sessions) == 1 {
+		targetSession = snap.sessions[0]
+		foundSession = true
+	}
+
+	if !foundSession {
+		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
+	}
+
+	activeLink, ok := findActiveLink(snap.links, targetSession.ID)
+	if !ok {
+		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
+	}
+
+	w, ok := snap.Window(activeLink.WindowID)
+	if !ok {
+		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
+	}
+
+	activePane, ok := findActivePane(snap.panes, w.ID)
+	if !ok {
+		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
+	}
+
+	return CurrentInfo{
+		Identity: snap.Identity,
+		Pane:     activePane,
+		Window:   w,
+		Session:  PresentValue(targetSession),
+		Link:     PresentValue(activeLink),
+		Client:   UnavailableValue[ClientInfo](),
+	}, nil
+}
+
+func findActiveLink(links []WindowLinkInfo, sessionID SessionID) (WindowLinkInfo, bool) {
+	for _, l := range links {
+		if l.SessionID == sessionID && l.Active {
+			return l, true
 		}
 	}
-	// An old TMUX session hint never overrides the pane's live graph. Multiple
-	// links or clients are explicitly unavailable rather than arbitrarily chosen.
-	return out, nil
+
+	var zero WindowLinkInfo
+
+	return zero, false
+}
+
+func findActivePane(panes []PaneInfo, windowID WindowID) (PaneInfo, bool) {
+	for _, p := range panes {
+		if p.WindowID == windowID && p.Active {
+			return p, true
+		}
+	}
+
+	var zero PaneInfo
+
+	return zero, false
 }

@@ -6,15 +6,10 @@ import (
 )
 
 const (
-	// Consistent indicates no contradictions or dangling references were detected among
-	// the observed sessions, windows, links, and panes.
-	// Note: this is an observation over a short time window, NOT an atomic transaction;
-	// tmux does not support transactional multi-entity queries.
+	// Consistent indicates all observed cross-references resolved without contradiction (not an atomic transaction).
 	Consistent Consistency = iota
 
-	// Incomplete indicates that graph churn occurred during snapshot collection
-	// (for example, a pane was closed after its parent window was enumerated).
-	// Dangling references are detailed in [Snapshot.MissingReferences].
+	// Incomplete indicates concurrent graph churn occurred during collection, leaving dangling references.
 	Incomplete
 )
 
@@ -23,7 +18,7 @@ const maxMissingReferences = 128
 // Consistency indicates whether cross-references within a snapshot resolved cleanly.
 type Consistency uint8
 
-// MissingReference describes a dangling reference detected during snapshot graph validation.
+// MissingReference describes a dangling reference detected during snapshot validation.
 type MissingReference struct {
 	// Kind is the type of object holding the dangling reference (e.g. PaneKind).
 	Kind ObjectKind
@@ -31,21 +26,18 @@ type MissingReference struct {
 	// ID is the identifier of the object holding the dangling reference.
 	ID string
 
-	// ReferencedKind is the expected target object type that was not found (e.g. WindowKind).
+	// ReferencedKind is the expected target object type that was not found.
 	ReferencedKind ObjectKind
 
 	// ReferencedID is the identifier of the missing target object.
 	ReferencedID string
 
-	// Reason explains why the reference failed resolution (e.g. "pane references unknown window").
+	// Reason explains why resolution failed.
 	Reason string
 }
 
 // Snapshot represents a point-in-time observation of all entities on a tmux server.
-//
-// Collection uses a fixed number of batched queries across sessions, windows, links,
-// and panes—never a per-pane loop. All local accessor methods perform no I/O and return
-// owned defensive copies.
+// Accessors perform no I/O and return owned copies.
 //
 //nolint:recvcheck // assess is an internal constructor step mutating unexported fields, while public accessors use value receivers for immutability.
 type Snapshot struct {

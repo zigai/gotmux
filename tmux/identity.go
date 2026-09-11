@@ -20,26 +20,25 @@ const (
 //
 // PID and start time have tmux's reported precision (normally whole seconds).
 // Their reuse can collide if a daemon crashes and another starts within the same
-// second with the recycled PID; this is a guard against accidental cross-daemon
-// mutation, not a cryptographic or hostile-daemon security boundary.
+// second with the recycled PID; this guards against accidental cross-daemon mutation,
+// not hostile or cryptographic attackers.
 //
-// Generation is a process-local monotonic counter that is nonzero for control-bound
-// handles and never reused within this process.
+// Generation is a process-local counter that is nonzero for control-bound handles
+// and never reused within this process.
 type ServerIdentity struct {
-	// Endpoint records how the socket was originally selected by the caller.
+	// Endpoint records how the socket was originally selected.
 	Endpoint Endpoint
 
-	// ReportedSocket is the socket path reported by the answering daemon (#{socket_path}).
+	// ReportedSocket is the socket path reported by the daemon (#{socket_path}).
 	ReportedSocket string
 
-	// PID is the operating system process ID of the tmux server daemon.
+	// PID is the server process ID reported by tmux (#{pid}).
 	PID int
 
-	// Started is the start time of the tmux server daemon (#{start_time}).
+	// Started is the start timestamp reported by tmux (#{start_time}).
 	Started time.Time
 
-	// Generation is nonzero for control-bound handles, uniquely identifying the
-	// lifetime of the control connection that produced them.
+	// Generation is nonzero for control-bound handles, uniquely identifying its connection lifetime.
 	Generation uint64
 }
 
@@ -75,6 +74,14 @@ func (i ServerIdentity) sameDaemon(other ServerIdentity) bool {
 
 func (i ServerIdentity) valid() bool {
 	return i.PID > 0 && !i.Started.IsZero() && i.ReportedSocket != ""
+}
+
+func (e Endpoint) isZero() bool {
+	return e.SocketPath == "" && e.SocketName == "" && e.TempDir == "" && e.UID == 0
+}
+
+func (i ServerIdentity) isZero() bool {
+	return i.PID == 0 && i.Started.IsZero() && i.ReportedSocket == "" && i.Endpoint.isZero() && i.Generation == 0
 }
 
 // formatBytes encodes literal operands as expansions, not as format syntax.

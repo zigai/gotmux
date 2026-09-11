@@ -3,27 +3,22 @@ package tmux
 import (
 	"context"
 	"strconv"
+	"time"
 )
 
 var zeroHandle handle
 
 type (
-	// SessionID is a canonical tmux session identifier, prefixed with "$" (e.g. "$0", "$42").
-	// In tmux, session IDs are globally unique across a daemon lifetime and do not change
-	// when the session is renamed.
+	// SessionID is a canonical tmux session identifier prefixed with "$" (e.g. "$0").
 	SessionID string
 
-	// WindowID is a canonical tmux window identifier, prefixed with "@" (e.g. "@0", "@5").
-	// Window IDs are shared across all sessions that link the window; they remain stable
-	// across renames and index moves.
+	// WindowID is a canonical tmux window identifier prefixed with "@" (e.g. "@0").
 	WindowID string
 
-	// PaneID is a canonical tmux pane identifier, prefixed with "%" (e.g. "%0", "%12").
-	// Pane IDs are immutable and unique across the entire daemon lifetime.
+	// PaneID is a canonical tmux pane identifier prefixed with "%" (e.g. "%0").
 	PaneID string
 
-	// ClientName identifies an attached client terminal (typically a tty path like "/dev/pts/1").
-	// Client names cannot contain NUL bytes, carriage returns, or newlines.
+	// ClientName identifies an attached client terminal (e.g. "/dev/pts/1").
 	ClientName string
 
 	handle struct {
@@ -34,15 +29,14 @@ type (
 		client clientCheck
 	}
 
-	// Session is an opaque handle to a tmux session, bound to a specific daemon identity.
-	// Methods on Session guard against daemon restarts by asserting server identity on dispatch.
+	// Session is an opaque handle to a tmux session bound to a verified daemon identity.
 	Session struct{ h handle }
 
 	// Window is an opaque handle to a shared tmux window object.
-	// Note that killing a Window terminates it across all sessions where it is linked.
+	// Killing a Window terminates it across all sessions where it is linked.
 	Window struct{ h handle }
 
-	// Pane is an opaque handle to a single tmux pane inside a window.
+	// Pane is an opaque handle to a tmux pane inside a window.
 	Pane struct{ h handle }
 
 	// Client is an opaque handle to an attached client terminal.
@@ -107,7 +101,7 @@ func (n ClientName) Valid() bool {
 }
 
 func (h handle) valid() bool {
-	if h.server == nil || !h.origin.valid() {
+	if h.server == nil || (!h.origin.isZero() && !h.origin.valid()) {
 		return false
 	}
 
@@ -127,13 +121,39 @@ func (h handle) valid() bool {
 	}
 }
 
+func (s *Server) unprobedHandle(id string, kind ObjectKind) handle {
+	return handle{
+		server: s,
+		origin: ServerIdentity{
+			Endpoint:       Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0},
+			ReportedSocket: "",
+			PID:            0,
+			Started:        time.Time{},
+			Generation:     0,
+		},
+		id:   id,
+		kind: kind,
+		client: clientCheck{
+			name:    "",
+			pid:     0,
+			created: 0,
+		},
+	}
+}
+
 func (h handle) check() error {
 	if !h.valid() {
 		return ErrInvalidHandle
 	}
 
-	if h.server.endpoint != h.origin.Endpoint {
-		return ErrInvalidHandle
+	if h.origin.valid() {
+		if h.server.endpoint != h.origin.Endpoint {
+			return ErrInvalidHandle
+		}
+
+		if h.server.conn != nil && h.server.conn.generation != h.origin.Generation {
+			return ErrInvalidHandle
+		}
 	}
 
 	if h.server.lifetime != nil {
@@ -142,14 +162,14 @@ func (h handle) check() error {
 		}
 	}
 
-	if h.server.conn != nil && h.server.conn.generation != h.origin.Generation {
-		return ErrInvalidHandle
-	}
-
 	return nil
 }
 
 func (h handle) guard() *guard {
+	if !h.origin.valid() {
+		return nil
+	}
+
 	g := newGuard(h.origin)
 	if h.kind == ClientKind {
 		g.clients = []clientCheck{h.client}
@@ -272,7 +292,7 @@ func (l WindowLink) Session() Session {
 // UsingSubprocess preserves the observed slot and connection lifetime.
 func (l WindowLink) UsingSubprocess() (WindowLink, error) {
 	if err := l.check(); err != nil {
-		return WindowLink{}, err
+		return WindowLink{}, opError("UsingSubprocess", err)
 	}
 
 	h, err := l.h.usingSubprocess()

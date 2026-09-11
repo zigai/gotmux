@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 // EnvironmentScope represents a scoped tmux environment variable table (either global
@@ -88,35 +88,35 @@ func (scope EnvironmentScope) Get(ctx context.Context, name string, hidden bool)
 
 // Set assigns a value to an environment variable in this scope.
 func (scope EnvironmentScope) Set(ctx context.Context, name, value string) error {
-	return scope.change(ctx, name, value, "")
+	return scope.change(ctx, name, value, "", "Environment.Set")
 }
 
 // SetHidden assigns a value to a hidden environment variable (-h flag).
 // Hidden variables are stored in tmux but are not automatically exported to child processes.
 func (scope EnvironmentScope) SetHidden(ctx context.Context, name, value string) error {
-	return scope.change(ctx, name, value, "-h")
+	return scope.change(ctx, name, value, "-h", "Environment.SetHidden")
 }
 
 // Unset deletes the specified variable from tmux's environment table (-u flag).
 // Contrast with [EnvironmentScope.Remove]: Unset removes the variable from tmux, whereas
 // Remove explicitly instructs tmux to strip the variable from child process environments.
 func (scope EnvironmentScope) Unset(ctx context.Context, name string) error {
-	return scope.change(ctx, name, "", "-u")
+	return scope.change(ctx, name, "", "-u", "Environment.Unset")
 }
 
 // Remove marks the variable to be stripped from new program environments (-r flag).
 func (scope EnvironmentScope) Remove(ctx context.Context, name string) error {
-	return scope.change(ctx, name, "", "-r")
+	return scope.change(ctx, name, "", "-r", "Environment.Remove")
 }
 
-func (scope EnvironmentScope) change(ctx context.Context, name, value, flag string) error {
-	if !envName(name) || !codec.ValidString(value) {
-		return opError("Environment.Set", invalid("environment entry"))
+func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opName string) error {
+	if !envName(name) || !wire.ValidString(value) {
+		return opError(opName, invalid("environment entry"))
 	}
 
 	opCtx, op, g, err := scope.target.prepare(ctx)
 	if err != nil {
-		return opError("Environment.Set", err)
+		return opError(opName, err)
 	}
 	defer op.close()
 
@@ -133,7 +133,7 @@ func (scope EnvironmentScope) change(ctx context.Context, name, value, flag stri
 
 	_, err = scope.target.server.execute(opCtx, op, emptyPlan(command("set-environment", args...)), g, nil)
 
-	return opError("Environment.Set", err)
+	return opError(opName, err)
 }
 
 func (scope EnvironmentScope) base() []string {

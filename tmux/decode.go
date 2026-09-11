@@ -5,14 +5,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zigai/gotmux/internal/codec"
 	"github.com/zigai/gotmux/internal/schema"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 type recordDecoder struct {
 	kind string
 	raw  map[string]string
 	err  error
+}
+
+type paneContext struct {
+	sessionID   Value[SessionID]
+	sessionName Value[string]
+	windowName  Value[string]
+	windowIndex Value[int]
 }
 
 func (d *recordDecoder) fail(field string, err error) {
@@ -24,7 +31,7 @@ func (d *recordDecoder) fail(field string, err error) {
 func (d *recordDecoder) str(field string) string {
 	v, ok := d.raw[field]
 	if !ok {
-		d.fail(field, codec.ErrRecord)
+		d.fail(field, wire.ErrRecord)
 	}
 
 	return v
@@ -33,7 +40,7 @@ func (d *recordDecoder) str(field string) string {
 func (d *recordDecoder) integer(field string) int {
 	v, err := strconv.Atoi(d.str(field))
 	if err != nil {
-		d.fail(field, codec.ErrRecord)
+		d.fail(field, wire.ErrRecord)
 	}
 
 	return v
@@ -42,7 +49,7 @@ func (d *recordDecoder) integer(field string) int {
 func (d *recordDecoder) nonnegative(field string) int {
 	v := d.integer(field)
 	if v < 0 {
-		d.fail(field, codec.ErrRecord)
+		d.fail(field, wire.ErrRecord)
 	}
 
 	return v
@@ -51,7 +58,7 @@ func (d *recordDecoder) nonnegative(field string) int {
 func (d *recordDecoder) boolean(field string) bool {
 	v := d.str(field)
 	if v != "0" && v != "1" {
-		d.fail(field, codec.ErrRecord)
+		d.fail(field, wire.ErrRecord)
 	}
 
 	return v == "1"
@@ -60,14 +67,14 @@ func (d *recordDecoder) boolean(field string) bool {
 func (d *recordDecoder) timestamp(field string) time.Time {
 	n, err := strconv.ParseInt(d.str(field), 10, 64)
 	if err != nil || n < 0 {
-		d.fail(field, codec.ErrRecord)
+		d.fail(field, wire.ErrRecord)
 	}
 
 	return time.Unix(n, 0)
 }
 
 func parseRaw(data []byte, fields []string, kind string) ([]map[string]string, error) {
-	rows, err := codec.ParseRecords(data, len(fields))
+	rows, err := wire.ParseRecords(data, len(fields))
 	if err != nil {
 		return nil, decodeError(kind, "record", err)
 	}
@@ -94,7 +101,7 @@ func (s *Server) decodeIdentity(d *recordDecoder) ServerIdentity {
 	}
 
 	if !id.valid() {
-		d.fail("identity", codec.ErrRecord)
+		d.fail("identity", wire.ErrRecord)
 	}
 
 	return id
@@ -125,7 +132,7 @@ func (s *Server) decodeSession(m map[string]string, expected *ServerIdentity) (S
 
 	sid := SessionID(d.str("session_id"))
 	if !sid.Valid() {
-		d.fail("session_id", codec.ErrRecord)
+		d.fail("session_id", wire.ErrRecord)
 	}
 
 	group := UnavailableValue[string]()
@@ -159,12 +166,12 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 
 	wid := WindowID(d.str("window_id"))
 	if !wid.Valid() {
-		d.fail("window_id", codec.ErrRecord)
+		d.fail("window_id", wire.ErrRecord)
 	}
 
 	sid := SessionID(d.str("session_id"))
 	if !sid.Valid() {
-		d.fail("session_id", codec.ErrRecord)
+		d.fail("session_id", wire.ErrRecord)
 	}
 
 	wh := s.newHandle(string(wid), WindowKind, id)
@@ -184,13 +191,14 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 	windex := d.nonnegative("window_index")
 	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	l := WindowLinkInfo{
-		rawRecord: rawRecord{raw: m},
-		SessionID: sid,
-		WindowID:  wid,
-		Index:     windex,
-		Active:    d.boolean("window_active"),
-		Flags:     d.str("window_flags"),
-		link:      WindowLink{h: wh, session: sid, index: windex},
+		rawRecord:  rawRecord{raw: m},
+		SessionID:  sid,
+		WindowID:   wid,
+		WindowName: d.str("window_name"),
+		Index:      windex,
+		Active:     d.boolean("window_active"),
+		Flags:      d.str("window_flags"),
+		link:       WindowLink{h: wh, session: sid, index: windex},
 	}
 
 	if d.err != nil {
@@ -205,12 +213,12 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 
 	pid := PaneID(d.str("pane_id"))
 	if !pid.Valid() {
-		d.fail("pane_id", codec.ErrRecord)
+		d.fail("pane_id", wire.ErrRecord)
 	}
 
 	wid := WindowID(d.str("window_id"))
 	if !wid.Valid() {
-		d.fail("window_id", codec.ErrRecord)
+		d.fail("window_id", wire.ErrRecord)
 	}
 
 	dead := d.boolean("pane_dead")
@@ -227,25 +235,18 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		mode = PresentValue(d.str("pane_mode"))
 	}
 
-	selectionVal := UnavailableValue[SelectionInfo]()
-
-	selection := d.str("selection_present")
-	if inMode && selection != "" && d.boolean("selection_present") {
-		selectionVal = PresentValue(SelectionInfo{
-			StartX:         d.nonnegative("selection_start_x"),
-			StartY:         d.nonnegative("selection_start_y"),
-			EndX:           d.nonnegative("selection_end_x"),
-			EndY:           d.nonnegative("selection_end_y"),
-			Rectangle:      d.boolean("rectangle_toggle"),
-			ScrollPosition: d.nonnegative("scroll_position"),
-		})
-	}
+	selectionVal := decodePaneSelection(d, inMode)
+	pCtx := decodePaneContext(d, m)
 
 	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	v := PaneInfo{
 		rawRecord:      rawRecord{raw: m},
 		ID:             pid,
 		WindowID:       wid,
+		SessionID:      pCtx.sessionID,
+		SessionName:    pCtx.sessionName,
+		WindowName:     pCtx.windowName,
+		WindowIndex:    pCtx.windowIndex,
 		Index:          d.nonnegative("pane_index"),
 		Title:          d.str("pane_title"),
 		CurrentPath:    d.str("pane_current_path"),
@@ -275,12 +276,61 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 	return v, nil
 }
 
+func decodePaneSelection(d *recordDecoder, inMode bool) Value[SelectionInfo] {
+	selection := d.str("selection_present")
+	if inMode && selection != "" && d.boolean("selection_present") {
+		return PresentValue(SelectionInfo{
+			StartX:         d.nonnegative("selection_start_x"),
+			StartY:         d.nonnegative("selection_start_y"),
+			EndX:           d.nonnegative("selection_end_x"),
+			EndY:           d.nonnegative("selection_end_y"),
+			Rectangle:      d.boolean("rectangle_toggle"),
+			ScrollPosition: d.nonnegative("scroll_position"),
+		})
+	}
+
+	return UnavailableValue[SelectionInfo]()
+}
+
+func decodePaneContext(d *recordDecoder, m map[string]string) paneContext {
+	ctx := paneContext{
+		sessionID:   UnavailableValue[SessionID](),
+		sessionName: UnavailableValue[string](),
+		windowName:  UnavailableValue[string](),
+		windowIndex: UnavailableValue[int](),
+	}
+
+	if sid := d.str("session_id"); sid != "" {
+		if !SessionID(sid).Valid() {
+			d.fail("session_id", wire.ErrRecord)
+		}
+
+		ctx.sessionID = PresentValue(SessionID(sid))
+	}
+
+	if sname, ok := m["session_name"]; ok && sname != "" {
+		ctx.sessionName = PresentValue(sname)
+	}
+
+	if wname, ok := m["window_name"]; ok && wname != "" {
+		ctx.windowName = PresentValue(wname)
+	}
+
+	if windex, ok := m["window_index"]; ok && windex != "" {
+		if idx, err := strconv.Atoi(windex); err == nil && idx >= 0 {
+			ctx.windowIndex = PresentValue(idx)
+		}
+	}
+
+	return ctx
+}
+
 func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (ClientInfo, error) {
 	d, id := s.decoder(m, "client", expected)
 
 	cname := ClientName(d.str("client_name"))
 	if !cname.Valid() {
-		d.fail("client_name", codec.ErrRecord)
+		d.fail("client_name", wire.ErrRecord)
 	}
 
 	flags := []string{}
@@ -292,7 +342,7 @@ func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (Cl
 
 	if sid := d.str("session_id"); sid != "" {
 		if !SessionID(sid).Valid() {
-			d.fail("session_id", codec.ErrRecord)
+			d.fail("session_id", wire.ErrRecord)
 		}
 
 		sessionID = PresentValue(SessionID(sid))

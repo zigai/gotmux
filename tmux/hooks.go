@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -53,9 +53,6 @@ type (
 		Parsed bool
 	}
 
-	// CommandSequence represents an immutable, validated sequence of tmux commands.
-	CommandSequence struct{ commands []Command }
-
 	// CommandPayload contains the raw serialized command string of a hook or key binding,
 	// along with any typed commands parsed from it.
 	CommandPayload struct {
@@ -87,39 +84,6 @@ type (
 // Valid reports whether this key table name is a non-empty, valid tmux format identifier.
 func (t KeyTable) Valid() bool { return validFormatName(string(t)) }
 
-// Sequence validates and constructs an immutable [CommandSequence].
-// Invalid commands return an error; an empty sequence is valid.
-func Sequence(commands ...Command) (CommandSequence, error) {
-	out := make([]Command, len(commands))
-	for i, c := range commands {
-		if !c.Valid() {
-			return CommandSequence{}, invalid("command sequence")
-		}
-
-		out[i], _ = NewCommand(c.name, c.args...)
-	}
-
-	return CommandSequence{commands: out}, nil
-}
-
-func (s CommandSequence) Commands() []Command {
-	out := make([]Command, len(s.commands))
-	for i, c := range s.commands {
-		out[i], _ = NewCommand(c.name, c.args...)
-	}
-
-	return out
-}
-
-func (s CommandSequence) nodes() []wireNode {
-	out := make([]wireNode, 0, len(s.commands))
-	for _, c := range s.commands {
-		out = append(out, leaf(c))
-	}
-
-	return out
-}
-
 // Raw returns the exact serialized payload even when its syntax is
 // richer than the non-evaluating parser supports. No command is run by parsing.
 func (p CommandPayload) Raw() string                 { return p.raw }
@@ -128,7 +92,7 @@ func (p CommandPayload) Commands() ([]Command, bool) { return p.sequence.Command
 func parsePayload(raw string) CommandPayload {
 	out := CommandPayload{raw: raw, sequence: CommandSequence{commands: nil}, parsed: false}
 
-	parts, err := codec.SplitSequence(raw)
+	parts, err := wire.SplitSequence(raw)
 	if err != nil {
 		return out
 	}
@@ -136,7 +100,7 @@ func parsePayload(raw string) CommandPayload {
 	commands := []Command{}
 
 	for _, part := range parts {
-		words, err := codec.ParseWords(part)
+		words, err := wire.ParseWords(part)
 		if err != nil || len(words) == 0 {
 			return out
 		}
@@ -231,16 +195,18 @@ func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 			continue
 		}
 
-		i := strings.LastIndexByte(key, '[')
-		if i < 1 {
-			return nil, afterError("Hooks", ErrProtocol)
-		}
+		name := key
+		index := 0
 
-		name := key[:i]
+		if i := strings.LastIndexByte(key, '['); i >= 0 {
+			name = key[:i]
 
-		index, err := arrayIndex(key, name)
-		if err != nil {
-			return nil, afterError("Hooks", err)
+			idx, err := arrayIndex(key, name)
+			if err != nil {
+				return nil, afterError("Hooks", err)
+			}
+
+			index = idx
 		}
 
 		out = append(out, HookInfo{Name: name, Index: index, Scope: h.target.scope, Payload: parsePayload(value)})
@@ -253,7 +219,7 @@ func (b BindingInfo) Raw() string { return b.raw }
 
 // Bind registers a key binding in the specified key table, executing commands when pressed.
 func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands CommandSequence, o BindOptions) error {
-	if !table.Valid() || !key.Valid() || len(commands.commands) == 0 || !codec.ValidString(o.Note) {
+	if !table.Valid() || !key.Valid() || len(commands.commands) == 0 || !wire.ValidString(o.Note) {
 		return opError("Bind", invalid("binding"))
 	}
 
@@ -342,12 +308,12 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 		Payload: CommandPayload{raw: raw, sequence: CommandSequence{commands: nil}, parsed: false},
 	}
 
-	parts, err := codec.SplitSequence(raw)
+	parts, err := wire.SplitSequence(raw)
 	if err != nil || len(parts) == 0 {
 		return b
 	}
 
-	words, err := codec.ParseWords(parts[0])
+	words, err := wire.ParseWords(parts[0])
 	if err != nil || len(words) < 5 || words[0] != "bind-key" {
 		return b
 	}
@@ -414,7 +380,7 @@ func parseBindingParts(parts []string, first Command) ([]Command, bool) {
 	commands := []Command{first}
 
 	for _, part := range parts {
-		w, err := codec.ParseWords(part)
+		w, err := wire.ParseWords(part)
 		if err != nil || len(w) == 0 {
 			return nil, false
 		}

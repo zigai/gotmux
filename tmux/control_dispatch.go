@@ -8,8 +8,6 @@ import (
 	"io"
 	"sync/atomic"
 	"time"
-
-	process "github.com/zigai/gotmux/internal/exec"
 )
 
 const readerBufferSize = 32 << 10
@@ -95,7 +93,7 @@ func (c *Connection) collectRequest(done <-chan struct{}, nonce string, outLimit
 		case <-done:
 			failure = errors.Join(failure, context.Canceled)
 			done = nil
-			timer = time.NewTimer(process.ShutdownBudget)
+			timer = time.NewTimer(shutdownBudget)
 			drain = timer.C
 		case <-drain:
 			c.stop(errors.Join(ErrProtocol, ErrShutdownIncomplete), false)
@@ -239,9 +237,9 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 		return true
 	}
 
-	deadline := time.Now().Add(process.ShutdownBudget)
+	deadline := time.Now().Add(shutdownBudget)
 	if !r.deadline.IsZero() {
-		deadline = r.deadline.Add(process.ShutdownBudget)
+		deadline = r.deadline.Add(shutdownBudget)
 	}
 
 	_ = c.stdin.SetWriteDeadline(deadline)
@@ -332,23 +330,38 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 	case v := <-r.result:
 		return v.result, v.err
 	case <-ctx.Done():
-		effect := Unknown
-		if r.state.CompareAndSwap(requestQueued, requestCanceled) {
-			effect = NotSent
+		if v, ok := checkDelivered(r); ok {
+			return v.result, v.err
 		}
 
 		result := failedResult()
 
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, ctx.Err()), Err: ctx.Err()}
+		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: abortOutcome(r), Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, ctx.Err()), Err: ctx.Err()}
 	case <-c.stopCh:
-		effect := Unknown
-		if r.state.CompareAndSwap(requestQueued, requestCanceled) {
-			effect = NotSent
+		if v, ok := checkDelivered(r); ok {
+			return v.result, v.err
 		}
 
 		result := failedResult()
 
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: c.closedError()}
+		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: abortOutcome(r), Steps: nil, Created: nil}, Timeout: NoTimeout, Err: c.closedError()}
+	}
+}
+
+func abortOutcome(r *controlRequest) Effect {
+	if r.state.CompareAndSwap(requestQueued, requestCanceled) {
+		return NotSent
+	}
+
+	return Unknown
+}
+
+func checkDelivered(r *controlRequest) (controlReply, bool) {
+	select {
+	case v := <-r.result:
+		return v, true
+	default:
+		return controlReply{result: Result{Stdout: nil, Stderr: nil, ExitCode: 0}, err: nil}, false
 	}
 }
 

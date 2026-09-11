@@ -6,23 +6,19 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/zigai/gotmux/internal/codec"
 	"github.com/zigai/gotmux/internal/schema"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
-// Format is an explicit tmux format expression string (such as "#{pane_id}" or "#{?window_active,1,0}").
-// It is evaluated by tmux's internal format expansion engine, not by a shell.
+// Format is an explicit tmux format expression string (such as "#{pane_id}").
 type Format string
 
-// QueryOptions configures server-side filtering and extra field extraction for listing queries.
+// QueryOptions configures server-side filtering and extra field extraction for queries.
 type QueryOptions struct {
-	// Filter is a tmux format condition passed via the -f flag.
-	// Only objects for which this expression evaluates to non-zero/non-empty will be returned.
-	// If empty, no filter is applied and all matching objects are returned.
+	// Filter is a tmux format condition passed via -f. If empty, all matches are returned.
 	Filter Format
 
-	// ExtraFields specifies additional format variable names (e.g. "session_alerts", "window_layout")
-	// to fetch in the same query. Captured values are accessible via [rawRecord.Raw] on returned info structs.
+	// ExtraFields specifies additional format variable names captured into [rawRecord.Raw].
 	ExtraFields []string
 }
 
@@ -40,7 +36,7 @@ func queryFields(base []string, extra []string) ([]string, error) {
 		}
 
 		if seen[f] {
-			return nil, invalid("duplicate format field")
+			continue
 		}
 
 		seen[f] = true
@@ -95,7 +91,7 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 	}
 
 	fields := schema.Identity
-	p := recordsPlan(command("display-message", "-p", codec.RecordFormat(fields)))
+	p := recordsPlan(command("display-message", "-p", wire.RecordFormat(fields)))
 
 	r, err := s.execute(ctx, op, p, nil, nil)
 	if err != nil {
@@ -108,7 +104,7 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 	}
 
 	if len(rows) != 1 {
-		return wrapErr(afterError("Probe", decodeError("server", "record count", codec.ErrRecord)))
+		return wrapErr(afterError("Probe", decodeError("server", "record count", wire.ErrRecord)))
 	}
 
 	d := &recordDecoder{kind: "server", raw: rows[0], err: nil}
@@ -168,14 +164,14 @@ func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, ex
 	}
 
 	if opts.Filter != "" {
-		if !codec.ValidString(string(opts.Filter)) {
+		if !wire.ValidString(string(opts.Filter)) {
 			return nil, invalid("filter")
 		}
 
 		args = append(args, "-f", string(opts.Filter))
 	}
 
-	args = append(args, "-F", codec.RecordFormat(fields))
+	args = append(args, "-F", wire.RecordFormat(fields))
 
 	r, err := s.execute(ctx, op, recordsPlan(command(name, args...)), newGuard(expected), nil)
 	if err != nil {
@@ -422,11 +418,14 @@ func (s *Server) lookup(ctx context.Context, kind ObjectKind, id string) (map[st
 		return nil, err
 	}
 
-	return s.inspect(opCtx, op, kind, id, newGuard(info.Identity))
+	return s.inspect(opCtx, op, kind, id, newGuard(info.Identity), QueryOptions{Filter: "", ExtraFields: nil})
 }
 
-func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, target string, g *guard) (map[string]string, error) {
-	fields := fieldsFor(kind)
+func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, target string, g *guard, opts QueryOptions) (map[string]string, error) {
+	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
+	if err != nil {
+		return nil, err
+	}
 
 	args := []string{"-p"}
 	if kind == ClientKind {
@@ -435,7 +434,7 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 		args = append(args, "-t", target)
 	}
 
-	args = append(args, codec.RecordFormat(fields))
+	args = append(args, wire.RecordFormat(fields))
 
 	r, err := s.execute(ctx, op, recordsPlan(command("display-message", args...)), g, nil)
 	if err != nil {
@@ -448,12 +447,12 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 	}
 
 	if len(rows) != 1 {
-		return nil, afterError("Info", decodeError(string(kind), "record count", codec.ErrRecord))
+		return nil, afterError("Info", decodeError(string(kind), "record count", wire.ErrRecord))
 	}
 
 	// display-message succeeds with empty object fields when its target vanished.
 	if (kind == SessionKind || kind == WindowKind || kind == PaneKind) && rows[0][string(kind)+"_id"] == "" {
-		return nil, afterError("Info", ErrNotFound)
+		return nil, opError("Info", ErrNotFound)
 	}
 
 	return rows[0], nil
@@ -480,9 +479,7 @@ func (s *Server) Session(ctx context.Context, id SessionID) (Session, error) {
 	return v.Handle(), nil
 }
 
-// Window looks up a window by its canonical ID (e.g. "@1"), verifies that it exists
-// on the daemon, and returns a [Window] handle retaining daemon origin provenance.
-// Returns [ErrNotFound] if no window with that ID exists.
+// Window looks up a window by ID and returns a verified [Window] handle with daemon provenance.
 func (s *Server) Window(ctx context.Context, id WindowID) (Window, error) {
 	m, err := s.lookup(ctx, WindowKind, string(id))
 	if err != nil {
@@ -501,9 +498,7 @@ func (s *Server) Window(ctx context.Context, id WindowID) (Window, error) {
 	return v.Handle(), nil
 }
 
-// Pane looks up a pane by its canonical ID (e.g. "%0"), verifies that it exists
-// on the daemon, and returns a [Pane] handle retaining daemon origin provenance.
-// Returns [ErrNotFound] if no pane with that ID exists.
+// Pane looks up a pane by ID and returns a verified [Pane] handle with daemon provenance.
 func (s *Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 	m, err := s.lookup(ctx, PaneKind, string(id))
 	if err != nil {
@@ -522,6 +517,46 @@ func (s *Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 	return v.Handle(), nil
 }
 
+// PaneHandle constructs a [Pane] handle for a known pane ID without performing a server round-trip.
+// Syntax is validated (e.g. "%0"), while daemon provenance is deferred until an operation executes.
+func (s *Server) PaneHandle(id PaneID) (Pane, error) {
+	if s == nil || s.runner == nil {
+		return Pane{}, opError("PaneHandle", ErrInvalidHandle)
+	}
+
+	if !id.Valid() {
+		return Pane{}, opError("PaneHandle", invalid("pane ID"))
+	}
+
+	return Pane{h: s.unprobedHandle(string(id), PaneKind)}, nil
+}
+
+// SessionHandle constructs a [Session] handle for a known session ID without performing a server round-trip.
+func (s *Server) SessionHandle(id SessionID) (Session, error) {
+	if s == nil || s.runner == nil {
+		return Session{}, opError("SessionHandle", ErrInvalidHandle)
+	}
+
+	if !id.Valid() {
+		return Session{}, opError("SessionHandle", invalid("session ID"))
+	}
+
+	return Session{h: s.unprobedHandle(string(id), SessionKind)}, nil
+}
+
+// WindowHandle constructs a [Window] handle for a known window ID without performing a server round-trip.
+func (s *Server) WindowHandle(id WindowID) (Window, error) {
+	if s == nil || s.runner == nil {
+		return Window{}, opError("WindowHandle", ErrInvalidHandle)
+	}
+
+	if !id.Valid() {
+		return Window{}, opError("WindowHandle", invalid("window ID"))
+	}
+
+	return Window{h: s.unprobedHandle(string(id), WindowKind)}, nil
+}
+
 // FindSession locates a session by its exact human-readable name.
 //
 // tmux's native command targets perform prefix matching (e.g. target "dev" will match
@@ -530,7 +565,7 @@ func (s *Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 // Returns [ErrNotFound] if no match is found, or [ErrAmbiguousTarget] if multiple sessions
 // share the exact same name.
 func (s *Server) FindSession(ctx context.Context, exactName string) (Session, error) {
-	if exactName == "" || !codec.ValidString(exactName) {
+	if exactName == "" || !wire.ValidString(exactName) {
 		return Session{}, opError("FindSession", invalid("name"))
 	}
 
@@ -580,7 +615,7 @@ func (s *Server) Client(ctx context.Context, name ClientName) (Client, error) {
 	return Client{}, opError("Client", ErrNotFound)
 }
 
-func (h handle) inspect(ctx context.Context) (map[string]string, error) {
+func (h handle) inspectWith(ctx context.Context, opts QueryOptions) (map[string]string, error) {
 	if err := h.check(); err != nil {
 		return nil, err
 	}
@@ -591,13 +626,18 @@ func (h handle) inspect(ctx context.Context) (map[string]string, error) {
 	}
 	defer op.close()
 
-	return h.server.inspect(opCtx, op, h.kind, h.id, h.guard())
+	return h.server.inspect(opCtx, op, h.kind, h.id, h.guard(), opts)
 }
 
 // Info queries the answering daemon for the current point-in-time metadata of this session.
 // It validates daemon identity via guards to ensure the server has not restarted.
 func (s Session) Info(ctx context.Context) (SessionInfo, error) {
-	m, err := s.h.inspect(ctx)
+	return s.InfoWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// InfoWith queries the answering daemon for the metadata of this session with custom query options.
+func (s Session) InfoWith(ctx context.Context, opts QueryOptions) (SessionInfo, error) {
+	m, err := s.h.inspectWith(ctx, opts)
 	if err != nil {
 		return SessionInfo{}, opError("Session.Info", err)
 	}
@@ -616,7 +656,12 @@ func (s Session) Info(ctx context.Context) (SessionInfo, error) {
 
 // Info queries the answering daemon for the current point-in-time metadata of this window.
 func (w Window) Info(ctx context.Context) (WindowInfo, error) {
-	m, err := w.h.inspect(ctx)
+	return w.InfoWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// InfoWith queries the answering daemon for the metadata of this window with custom query options.
+func (w Window) InfoWith(ctx context.Context, opts QueryOptions) (WindowInfo, error) {
+	m, err := w.h.inspectWith(ctx, opts)
 	if err != nil {
 		return WindowInfo{}, opError("Window.Info", err)
 	}
@@ -635,7 +680,12 @@ func (w Window) Info(ctx context.Context) (WindowInfo, error) {
 
 // Info queries the answering daemon for the current point-in-time metadata of this pane.
 func (p Pane) Info(ctx context.Context) (PaneInfo, error) {
-	m, err := p.h.inspect(ctx)
+	return p.InfoWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// InfoWith queries the answering daemon for the metadata of this pane with custom query options.
+func (p Pane) InfoWith(ctx context.Context, opts QueryOptions) (PaneInfo, error) {
+	m, err := p.h.inspectWith(ctx, opts)
 	if err != nil {
 		return PaneInfo{}, opError("Pane.Info", err)
 	}
@@ -654,7 +704,12 @@ func (p Pane) Info(ctx context.Context) (PaneInfo, error) {
 
 // Info queries the answering daemon for the current point-in-time metadata of this client.
 func (c Client) Info(ctx context.Context) (ClientInfo, error) {
-	m, err := c.h.inspect(ctx)
+	return c.InfoWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// InfoWith queries the answering daemon for the metadata of this client with custom query options.
+func (c Client) InfoWith(ctx context.Context, opts QueryOptions) (ClientInfo, error) {
+	m, err := c.h.inspectWith(ctx, opts)
 	if err != nil {
 		return ClientInfo{}, opError("Client.Info", err)
 	}
@@ -674,6 +729,11 @@ func (c Client) Info(ctx context.Context) (ClientInfo, error) {
 // Info queries the answering daemon for the metadata of this specific window link slot.
 // Asserts link guards to verify the window at this session index has not changed or been unlinked.
 func (l WindowLink) Info(ctx context.Context) (WindowLinkInfo, error) {
+	return l.InfoWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// InfoWith queries the answering daemon for the metadata of this window link slot with custom query options.
+func (l WindowLink) InfoWith(ctx context.Context, opts QueryOptions) (WindowLinkInfo, error) {
 	if err := l.check(); err != nil {
 		return WindowLinkInfo{}, opError("WindowLink.Info", err)
 	}
@@ -684,7 +744,7 @@ func (l WindowLink) Info(ctx context.Context) (WindowLinkInfo, error) {
 	}
 	defer op.close()
 
-	m, err := l.h.server.inspect(opCtx, op, WindowKind, l.target(), l.guard())
+	m, err := l.h.server.inspect(opCtx, op, WindowKind, l.target(), l.guard(), opts)
 	if err != nil {
 		return WindowLinkInfo{}, opError("WindowLink.Info", err)
 	}
@@ -734,6 +794,26 @@ func (s Session) Windows(ctx context.Context) ([]WindowLink, error) {
 	}
 
 	return out, nil
+}
+
+// WindowInfos queries all window metadata and link slots for this session in a single round-trip.
+func (s Session) WindowInfos(ctx context.Context) ([]WindowInfo, []WindowLinkInfo, error) {
+	if err := s.h.check(); err != nil {
+		return nil, nil, opError("Session.WindowInfos", err)
+	}
+
+	opCtx, op, err := s.h.server.begin(ctx)
+	if err != nil {
+		return nil, nil, opError("Session.WindowInfos", err)
+	}
+	defer op.close()
+
+	windows, links, err := s.h.server.windows(opCtx, op, s.h.origin, s.h.id)
+	if err != nil {
+		return nil, nil, opError("Session.WindowInfos", err)
+	}
+
+	return windows, links, nil
 }
 
 // Links queries all session slots across the entire daemon where this window is currently linked.
@@ -837,7 +917,7 @@ func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
 		return nil, opError("Format", err)
 	}
 
-	if !codec.ValidString(string(expr)) {
+	if !wire.ValidString(string(expr)) {
 		return nil, opError("Format", invalid("format"))
 	}
 
@@ -852,14 +932,14 @@ func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
 		targetFlag = "-c"
 	}
 
-	r, err := h.server.execute(opCtx, op, recordsPlan(command("display-message", "-p", targetFlag, h.id, codec.ExpressionFormat(string(expr)))), h.guard(), nil)
+	r, err := h.server.execute(opCtx, op, recordsPlan(command("display-message", "-p", targetFlag, h.id, wire.ExpressionFormat(string(expr)))), h.guard(), nil)
 	if err != nil {
 		return r.Stdout, opError("Format", err)
 	}
 
-	records, err := codec.ParseRecords(r.Stdout, 1)
+	records, err := wire.ParseRecords(r.Stdout, 1)
 	if err != nil || len(records) != 1 {
-		return nil, afterError("Format", errors.Join(err, codec.ErrRecord))
+		return nil, afterError("Format", errors.Join(err, wire.ErrRecord))
 	}
 
 	return []byte(records[0][0]), nil

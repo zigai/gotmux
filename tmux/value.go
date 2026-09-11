@@ -55,21 +55,15 @@ type Value[T any] struct {
 	state ValueState
 }
 
-// OptionValue captures the state of a tmux configuration option within its inheritance hierarchy.
-//
-// Server options are independent. Session options inherit global session defaults;
-// window options inherit global window defaults, and pane options inherit window values.
+// OptionValue captures an option value within tmux's inheritance hierarchy.
 type OptionValue[T any] struct {
-	// Local is the value explicitly configured at this specific target scope,
-	// or Unavailable if the option is inherited from a parent scope.
+	// Local is the value set at this specific target, or Unavailable if inherited.
 	Local Value[T]
 
-	// Effective is the active value in effect at this target, taking inheritance into account.
+	// Effective is the active value in effect at this target.
 	Effective Value[T]
 
-	// Origin is the exact [Scope] where the effective value was defined, if known.
-	// Parent origins may be Unavailable when separate queries cannot definitively prove
-	// which ancestor scope defined the value.
+	// Origin is the exact [Scope] where the effective value was defined, if provable.
 	Origin Value[Scope]
 }
 

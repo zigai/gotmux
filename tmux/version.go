@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -21,11 +21,7 @@ const (
 var versionPattern = regexp.MustCompile(`^(\d+)\.(\d+)([a-z]?)(.*)$`)
 
 // Version retains the exact version string reported by tmux alongside parsed numeric components.
-//
-// Recognized is true only for standard stable releases (e.g. "3.6", "3.6a").
-// Development builds ("next-3.4") or vendor-patched builds ("3.6-arch") have Recognized=false:
-// we intentionally do not assume development or vendor builds are newer than stable releases,
-// so feature gates requiring stable release semantics will reject them unless explicitly bypassed.
+// Recognized is true only for canonical stable releases (e.g. "3.6", "3.6a"); git/vendor builds return false.
 type (
 	Version struct {
 		// Raw is the original unparsed version string (e.g. "tmux 3.6a").
@@ -37,33 +33,31 @@ type (
 		// Minor is the minor version integer (e.g. 6).
 		Minor int
 
-		// Patch is the single-letter release suffix if present (e.g. "a", "b").
+		// Patch is the single-letter release suffix if present (e.g. "a").
 		Patch string
 
-		// Suffix is any remaining unrecognized suffix (e.g. "-rc1", "-git").
+		// Suffix is any remaining vendor or development suffix (e.g. "-rc1").
 		Suffix string
 
-		// Recognized is true only if the version matched a canonical stable release pattern.
+		// Recognized indicates whether the version matched a canonical stable release pattern.
 		Recognized bool
 	}
 
-	// Capabilities provides a point-in-time snapshot of the features and commands
-	// supported by an answering tmux daemon. It is an immutable copy, not a live cache.
+	// Capabilities provides an immutable point-in-time snapshot of supported features.
 	Capabilities struct {
-		// Identity is the daemon instance where these capabilities were observed.
+		// Identity is the verified daemon instance where capabilities were observed.
 		Identity ServerIdentity
 
 		// Version is the daemon's reported tmux version.
 		Version Version
 
-		// Transport is the active transport for the server that performed the probe.
+		// Transport is the active execution transport.
 		Transport Transport
 
 		// Support describes library operations available through this transport.
-		// It does not assert that the daemon implements a particular command.
 		Support TransportSupport
 
-		// Commands is a sorted list of all command names recognized by the daemon.
+		// Commands is a sorted list of command names recognized by the daemon.
 		Commands []string
 	}
 )
@@ -173,12 +167,12 @@ func (s *Server) Capabilities(ctx context.Context) (Capabilities, error) {
 		Commands:  nil,
 	}
 
-	r, err := s.execute(opCtx, op, recordsPlan(command("list-commands", "-F", codec.RecordFormat([]string{"command_list_name"}))), newGuard(info.Identity), nil)
+	r, err := s.execute(opCtx, op, recordsPlan(command("list-commands", "-F", wire.RecordFormat([]string{"command_list_name"}))), newGuard(info.Identity), nil)
 	if err != nil {
 		return Capabilities{}, opError("Capabilities", err)
 	}
 
-	rows, err := codec.ParseRecords(r.Stdout, 1)
+	rows, err := wire.ParseRecords(r.Stdout, 1)
 	if err != nil {
 		return Capabilities{}, afterError("Capabilities", decodeError("commands", "command_list_name", err))
 	}

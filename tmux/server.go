@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	process "github.com/zigai/gotmux/internal/exec"
 )
 
 // TransportSupport describes library execution paths, independent of daemon
@@ -21,20 +19,16 @@ type TransportSupport struct {
 	TerminalAttach bool
 }
 
-// Endpoint records exactly how a tmux server socket was selected.
-// We retain the exact selection parameters rather than resolving them to a canonical
-// filesystem path so distinct selections are never accidentally equated through symlinks,
-// mount namespaces, or heuristic server discovery.
+// Endpoint records the exact socket selection parameters.
+// Preserves raw values rather than resolving canonical paths to avoid equating distinct daemons.
 type Endpoint struct {
-	// SocketPath is the explicit absolute path to the UNIX domain socket (-S flag).
-	// Empty if a named socket was selected instead.
+	// SocketPath is the explicit path to the UNIX domain socket (-S flag).
 	SocketPath string
 
-	// SocketName is the short name of the socket (-L flag), e.g. "default".
-	// Empty if an explicit SocketPath was provided.
+	// SocketName is the short socket name (-L flag), e.g. "default".
 	SocketName string
 
-	// TempDir is the base directory under which named sockets reside (TMUX_TMPDIR or /tmp).
+	// TempDir is the base directory containing named sockets (TMUX_TMPDIR or /tmp).
 	TempDir string
 
 	// UID is the user ID owning the tmux socket directory (tmux-<uid>).
@@ -42,16 +36,11 @@ type Endpoint struct {
 }
 
 // Server represents an explicitly configured tmux server target.
-// Operations on a Server execute via bounded subprocess invocations by default.
-// When bound to a control connection via [OpenControl], the server can dispatch
-// commands over the control wire or through generation-pinned auxiliary subprocesses.
-//
-// A Server instance is concurrency-safe. Subprocess operations are throttled
-// by an internal semaphore bounded by [Limits.Concurrent].
+// Subprocess operations are concurrency-safe and throttled by [Limits.Concurrent].
 type Server struct {
 	config   Config
 	endpoint Endpoint
-	runner   *process.Runner
+	runner   *runner
 	conn     *Connection
 	bound    *ServerIdentity
 	lifetime *Connection
@@ -68,12 +57,7 @@ func (e Endpoint) String() string {
 }
 
 // New validates and freezes configuration into an immutable [Server] handle.
-// It resolves the tmux binary in PATH, canonicalizes the working directory,
-// and determines the exact socket [Endpoint].
-//
-// New is pure configuration setup: it never spawns a process, touches the filesystem
-// to create sockets, or contacts a running daemon. The daemon is only contacted when
-// an operation method (such as [Server.Probe] or [Server.NewSession]) is called.
+// It never spawns a process, creates files, or contacts a daemon.
 func New(cfg Config) (*Server, error) {
 	limits, err := normalizeLimits(cfg.Limits)
 	if err != nil {
@@ -130,7 +114,7 @@ func New(cfg Config) (*Server, error) {
 	return &Server{
 		config:   cfg,
 		endpoint: endpoint,
-		runner:   process.New(binary, env, dir, limits.Concurrent),
+		runner:   newRunner(binary, env, dir, limits.Concurrent),
 		conn:     nil,
 		bound:    nil,
 		lifetime: nil,

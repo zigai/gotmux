@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 
-	process "github.com/zigai/gotmux/internal/exec"
+	"github.com/zigai/gotmux/internal/wire"
 
 	"golang.org/x/term"
 )
@@ -56,12 +56,23 @@ func validateTerminals(t TerminalStreams) error {
 //
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
 func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams TerminalStreams, o AttachOptions) (*exec.Cmd, error) {
+	if !session.Valid() {
+		return nil, opError("PrepareAttach", invalid("context/session"))
+	}
+
+	return s.PrepareAttachTarget(ctx, string(session), streams, o)
+}
+
+// PrepareAttachTarget returns an unstarted [exec.Cmd] for interactive terminal attachment to any target
+// (such as a human-readable session name "dev", session ID "$0", or window target).
+// It validates streams; the caller manages Start, Wait, signals, cancellation, and exit codes.
+func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams TerminalStreams, o AttachOptions) (*exec.Cmd, error) {
 	if s == nil || s.runner == nil {
 		return nil, opError("PrepareAttach", ErrInvalidHandle)
 	}
 
-	if ctx == nil || !session.Valid() {
-		return nil, opError("PrepareAttach", invalid("context/session"))
+	if ctx == nil || target == "" || !wire.ValidString(target) {
+		return nil, opError("PrepareAttach", invalid("context/target"))
 	}
 
 	if s.conn != nil || s.bound != nil {
@@ -72,7 +83,7 @@ func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams T
 		return nil, opError("PrepareAttach", err)
 	}
 
-	args := append(s.baseArgs(false), "attach-session", "-t", string(session))
+	args := append(s.baseArgs(false), "attach-session", "-t", target)
 	if o.ReadOnly {
 		args = append(args, "-r")
 	}
@@ -81,12 +92,21 @@ func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams T
 		args = append(args, "-E")
 	}
 
-	cmd := s.runner.Command(ctx, args)
+	cmd := s.runner.command(ctx, args)
 	cmd.Stdin = streams.In
 	cmd.Stdout = streams.Out
 	cmd.Stderr = streams.Err
 
 	return cmd, nil
+}
+
+// PrepareAttach returns an unstarted [exec.Cmd] for interactive terminal attachment to this session.
+func (s Session) PrepareAttach(ctx context.Context, streams TerminalStreams, o AttachOptions) (*exec.Cmd, error) {
+	if err := s.h.check(); err != nil {
+		return nil, opError("Session.PrepareAttach", err)
+	}
+
+	return s.h.server.PrepareAttachTarget(ctx, s.h.id, streams, o)
 }
 
 // Attach attaches the caller's terminal until detach or context cancellation.
@@ -177,14 +197,12 @@ func attachmentContext(ctx context.Context, lifetime *Connection) (context.Conte
 
 func (s Session) runAttachment(ctx context.Context, terminal *os.File, argv []string) error {
 	child, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
-
-	cmd := s.h.server.runner.Command(child, argv)
+	cmd := s.h.server.runner.command(child, argv)
 	// The tmux server renders directly to the terminal supplied on stdin.
 	// Stdout/stderr carry command diagnostics and the identity-rejection marker.
 	overflow := func() { cancel(ErrOutputLimit) }
-	stdout := process.NewBuffer(s.h.server.config.Limits.OutputBytes, overflow)
-	stderr := process.NewBuffer(s.h.server.config.Limits.OutputBytes, overflow)
+	stdout := newBuffer(s.h.server.config.Limits.OutputBytes, overflow)
+	stderr := newBuffer(s.h.server.config.Limits.OutputBytes, overflow)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = terminal, stdout, stderr
 	err := cmd.Run()
 	result := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: -1}

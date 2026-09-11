@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -255,7 +255,12 @@ func isValidEventName(name string) bool {
 
 func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event, error) {
 	id, tail, ok := strings.Cut(rest, " ")
-	if !ok || !PaneID(id).Valid() {
+	if !ok {
+		id = rest
+		tail = ""
+	}
+
+	if !PaneID(id).Valid() {
 		return nil, ErrProtocol
 	}
 
@@ -281,7 +286,7 @@ func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event
 		tail = data
 	}
 
-	data, err := codec.Octal([]byte(tail), maxBytes)
+	data, err := wire.Octal([]byte(tail), maxBytes)
 	if err != nil {
 		return nil, ErrProtocol
 	}

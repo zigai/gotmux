@@ -1,5 +1,5 @@
-// Package codec owns tmux's distinct argv, command-text, and output dialects.
-package codec
+// Package wire owns tmux's distinct argv, command-text, and output dialects.
+package wire
 
 import (
 	"errors"
@@ -30,7 +30,9 @@ func Argv(s string) string {
 
 	return s
 }
+
 func ValidString(s string) bool { return !strings.ContainsRune(s, 0) }
+
 func ValidCommand(s string) bool {
 	if s == "" || !isLetter(s[0]) {
 		return false

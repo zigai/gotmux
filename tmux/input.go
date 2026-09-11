@@ -1,13 +1,14 @@
 package tmux
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -79,7 +80,7 @@ type (
 
 	// CaptureOptions configures capturing terminal output and scrollback history from a pane.
 	CaptureOptions struct {
-		// Start specifies the starting line offset (negative values index into scrollback history).
+		// Start specifies the starting line offset (negative values index into history).
 		Start *int
 
 		// End specifies the ending line offset.
@@ -100,7 +101,7 @@ type (
 		// Screen selects which terminal screen buffer to capture.
 		Screen CaptureScreen
 
-		// MaxBytes optionally tightens the maximum bytes captured (cannot exceed [Limits.OutputBytes]).
+		// MaxBytes optionally tightens the maximum bytes captured below [Limits.OutputBytes].
 		MaxBytes int64
 	}
 
@@ -114,6 +115,15 @@ type (
 
 		// Exit exits/cancels copy mode if currently active (-q flag).
 		Exit bool
+	}
+
+	// CaptureResult holds the captured terminal screen content and pane title.
+	CaptureResult struct {
+		// Output is the raw captured terminal bytes.
+		Output []byte
+
+		// Title is the pane title string at capture time (#{pane_title}).
+		Title string
 	}
 )
 
@@ -141,7 +151,7 @@ func (p Pane) SendText(ctx context.Context, text string) error {
 		return opError("SendText", err)
 	}
 
-	if !codec.ValidString(text) {
+	if !wire.ValidString(text) {
 		return opError("SendText", invalid("text contains NUL; use a binary buffer"))
 	}
 
@@ -190,7 +200,7 @@ func (p Pane) Submit(ctx context.Context, text string) error {
 		return opError("Submit", err)
 	}
 
-	if !codec.ValidString(text) {
+	if !wire.ValidString(text) {
 		return opError("Submit", invalid("text contains NUL"))
 	}
 
@@ -250,6 +260,73 @@ func (p Pane) Capture(ctx context.Context, o CaptureOptions) ([]byte, error) {
 	return r.Stdout, opError("Capture", err)
 }
 
+// CaptureWithTitle captures the pane's visible text or scrollback and returns its title in a single round-trip.
+func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureResult, error) {
+	if err := p.h.check(); err != nil {
+		return CaptureResult{}, opError("CaptureWithTitle", err)
+	}
+
+	capArgs, err := captureArgs(p.h.id, o)
+	if err != nil {
+		return CaptureResult{}, opError("CaptureWithTitle", err)
+	}
+
+	if o.MaxBytes > p.h.server.config.Limits.OutputBytes {
+		return CaptureResult{}, opError("CaptureWithTitle", invalid("MaxBytes may only tighten the configured limit"))
+	}
+
+	const marker = "___GOTMUX_CAPTURE_TITLE___"
+
+	titleCmd := command("display-message", "-p", "-t", p.h.id, marker+"\n#{pane_title}\n"+marker)
+	capCmd := command("capture-pane", capArgs...)
+
+	opCtx, op, err := p.h.server.begin(ctx)
+	if err != nil {
+		return CaptureResult{}, opError("CaptureWithTitle", err)
+	}
+	defer op.close()
+
+	pl := plan{
+		nodes:      []wireNode{leaf(titleCmd), leaf(capCmd)},
+		mode:       replyRaw,
+		allowStart: false,
+	}
+
+	r, err := p.h.server.execute(opCtx, op, pl, p.h.guard(), nil)
+	if err != nil {
+		return CaptureResult{}, opError("CaptureWithTitle", err)
+	}
+
+	raw := r.Stdout
+	startMarker := []byte(marker + "\n")
+	endMarker := []byte("\n" + marker + "\n")
+
+	_, after, ok := bytes.Cut(raw, startMarker)
+	if !ok {
+		return CaptureResult{Output: raw, Title: ""}, nil
+	}
+
+	afterStart := after
+
+	before0, after0, ok0 := bytes.Cut(afterStart, endMarker)
+	if !ok0 {
+		return CaptureResult{Output: raw, Title: ""}, nil
+	}
+
+	title := string(before0)
+	output := after0
+
+	if o.MaxBytes > 0 && int64(len(output)) > o.MaxBytes {
+		output = output[:o.MaxBytes]
+		err = afterError("CaptureWithTitle", ErrOutputLimit)
+	}
+
+	return CaptureResult{
+		Output: output,
+		Title:  title,
+	}, opError("CaptureWithTitle", err)
+}
+
 // CopyMode enters or exits copy mode on this pane according to opts.
 func (p Pane) CopyMode(ctx context.Context, o CopyModeOptions) error {
 	args := []string{"-t", p.h.id}
@@ -271,12 +348,12 @@ func (p Pane) CopyMode(ctx context.Context, o CopyModeOptions) error {
 // CopyAction executes a copy-mode sub-command (via send-keys -X) on this pane.
 // The pane should already be in copy mode.
 func (p Pane) CopyAction(ctx context.Context, action CopyAction, args ...string) error {
-	if !codec.ValidCommand(string(action)) {
+	if !wire.ValidCommand(string(action)) {
 		return opError("CopyAction", invalid("copy-mode action"))
 	}
 
 	for _, arg := range args {
-		if !codec.ValidString(arg) {
+		if !wire.ValidString(arg) {
 			return opError("CopyAction", invalid("copy-mode argument"))
 		}
 	}
@@ -288,17 +365,25 @@ func (p Pane) CopyAction(ctx context.Context, action CopyAction, args ...string)
 
 func trimModifiers(s string) string {
 	for {
-		if strings.HasPrefix(s, "C-") || strings.HasPrefix(s, "M-") || strings.HasPrefix(s, "S-") {
-			s = s[2:]
-		} else {
-			return s
+		if len(s) >= 2 && s[1] == '-' {
+			switch s[0] {
+			case 'C', 'c', 'M', 'm', 'S', 's':
+				s = s[2:]
+				continue
+			}
 		}
+
+		return s
 	}
 }
 
 func isNamedKey(s string) bool {
-	switch s {
-	case "Enter", "Escape", "Tab", "BTab", "BSpace", "Space", "Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown", "PPage", "NPage", "Insert", "IC", "Delete", "DC", "KPEnter", "KPMul", "KPPlus", "KPMinus", "KPDiv", "KPDel":
+	switch strings.ToLower(s) {
+	case "enter", "escape", "tab", "btab", "bspace", "space", "up", "down", "left", "right",
+		"home", "end", "pageup", "pagedown", "ppage", "npage", "pgup", "pgdn",
+		"insert", "ic", "delete", "dc",
+		"kpenter", "kpmul", "kpplus", "kpminus", "kpdiv", "kpdel",
+		"kp0", "kp1", "kp2", "kp3", "kp4", "kp5", "kp6", "kp7", "kp8", "kp9":
 		return true
 	default:
 		return false
@@ -306,13 +391,13 @@ func isNamedKey(s string) bool {
 }
 
 func isFunctionKey(s string) bool {
-	if !strings.HasPrefix(s, "F") {
+	if len(s) < 2 || (s[0] != 'F' && s[0] != 'f') {
 		return false
 	}
 
 	n, e := strconv.Atoi(s[1:])
 
-	return e == nil && n >= 1 && n <= 63 && s == "F"+strconv.Itoa(n)
+	return e == nil && n >= 1 && n <= 63
 }
 
 func captureArgs(id string, o CaptureOptions) ([]string, error) {
@@ -335,10 +420,8 @@ func captureRangeArgs(o CaptureOptions) ([]string, error) {
 	var args []string
 
 	if o.EntireHistory {
-		return []string{"-S", "-"}, nil
-	}
-
-	if o.Start != nil {
+		args = append(args, "-S", "-")
+	} else if o.Start != nil {
 		if *o.Start < math.MinInt32 || *o.Start > math.MaxInt32 {
 			return nil, invalid("capture start")
 		}

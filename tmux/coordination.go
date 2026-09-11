@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 type (
@@ -94,7 +94,7 @@ func (s *Server) Unlock(ctx context.Context, channel string) error {
 // When o.Background is true, it returns immediately after scheduling; foreground execution
 // blocks until completion and captures standard output and standard error.
 func (s *Server) RunShell(ctx context.Context, script string, o RunShellOptions) (Result, error) {
-	if !codec.ValidString(script) || o.Delay < 0 {
+	if !wire.ValidString(script) || o.Delay < 0 {
 		return failedResult(), opError("RunShell", invalid("script/delay"))
 	}
 
@@ -132,7 +132,7 @@ func (s *Server) RunShell(ctx context.Context, script string, o RunShellOptions)
 
 // SourceFile loads and executes tmux configuration commands from the specified path (source-file).
 func (s *Server) SourceFile(ctx context.Context, path string, o SourceOptions) (Result, error) {
-	if !codec.ValidString(path) || path == "" || path == "-" {
+	if !wire.ValidString(path) || path == "" || path == "-" {
 		return failedResult(), opError("SourceFile", invalid("config path"))
 	}
 
@@ -169,7 +169,7 @@ func (s *Server) SourceFile(ctx context.Context, path string, o SourceOptions) (
 // IfFormat uses tmux's synchronous format condition, not shell truthiness. The
 // nested command sequence can deliberately run shell-capable commands.
 func (s *Server) IfFormat(ctx context.Context, condition Format, yes, no CommandSequence) (Result, error) {
-	if !codec.ValidString(string(condition)) || condition == "" || len(yes.commands) == 0 {
+	if !wire.ValidString(string(condition)) || condition == "" || len(yes.commands) == 0 {
 		return failedResult(), opError("IfFormat", invalid("condition/commands"))
 	}
 

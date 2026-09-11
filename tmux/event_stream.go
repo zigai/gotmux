@@ -13,39 +13,29 @@ const (
 	defaultMaxEventCount = 256
 )
 
-// OverflowPolicy controls how an [EventStream] handles buffer overflow when events
-// arrive faster than the consumer drains them.
+// OverflowPolicy controls how an [EventStream] handles buffer overflow.
 const (
-	// FailOnOverflow terminates the stream with [ErrEventsLost] when queue limits are breached.
-	// Queued events are purged and memory reservations are immediately released.
+	// FailOnOverflow releases reservations and terminates the stream with [ErrEventsLost].
 	FailOnOverflow OverflowPolicy = iota
 )
 
-// OverflowPolicy defines the action taken when an event stream's buffer capacity is exceeded.
+// OverflowPolicy defines the action taken when an event stream buffer overflows.
 type OverflowPolicy uint8
 
-// EventOptions configures queue capacity and overflow behavior for an [EventStream].
+// EventOptions configures capacity and overflow policy for an [EventStream].
 type EventOptions struct {
-	// MaxBytes is the maximum memory in bytes reserved for this stream's queue.
-	// This amount is reserved upfront from the connection's [ControlOptions.EventBytes] budget.
+	// MaxBytes is the memory quota in bytes reserved upfront for this stream's queue.
 	MaxBytes int64
 
-	// MaxCount bounds the maximum number of queued events.
+	// MaxCount bounds the maximum number of buffered events.
 	MaxCount int
 
-	// Overflow determines the behavior when MaxBytes or MaxCount is exceeded.
+	// Overflow determines behavior when capacity limits are exceeded.
 	Overflow OverflowPolicy
 }
 
-// EventStream delivers an asynchronous stream of tmux control notifications.
-//
-// Concurrency constraint:
-// An EventStream supports only ONE concurrent reader in [EventStream.Next]. Multiple goroutines
-// attempting concurrent Next calls receive [ErrConcurrentRead].
-//
-// Cancellation safety:
-// Canceling a context passed to Next does NOT discard queued events or terminate the stream.
-// Queued events remain buffered for the next Next call.
+// EventStream delivers an asynchronous stream of tmux notifications to a single reader.
+// Canceling an individual [EventStream.Next] call leaves queued events intact for subsequent reads.
 type EventStream struct {
 	conn        *Connection
 	mu          sync.Mutex

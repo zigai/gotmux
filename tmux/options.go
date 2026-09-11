@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 type optionTarget struct {
@@ -156,7 +156,7 @@ func (t optionTarget) readScalar(ctx context.Context, op *operation, g *guard, n
 		return Value[string]{}, invalid("array option; use Array")
 	}
 
-	words, err := codec.ParseWords(string(r.Stdout[:len(r.Stdout)-1]))
+	words, err := wire.ParseWords(string(r.Stdout[:len(r.Stdout)-1]))
 	if err != nil {
 		return Value[string]{}, afterError("Options", decodeError("option", name, err))
 	}
@@ -204,7 +204,7 @@ func (t optionTarget) read(ctx context.Context, name string) (OptionValue[string
 }
 
 func (t optionTarget) set(ctx context.Context, name, value string, unset bool) error {
-	if !validOptionName(name) || !codec.ValidString(value) {
+	if !validOptionName(name) || !wire.ValidString(value) {
 		return opError("SetOption", invalid("option name/value"))
 	}
 
@@ -349,7 +349,7 @@ func (t optionTarget) array(ctx context.Context, name string) ([]ArrayEntry, err
 			return nil, afterError("Array", err)
 		}
 
-		words, err := codec.ParseWords(value)
+		words, err := wire.ParseWords(value)
 		if err != nil || len(words) != 1 {
 			return nil, afterError("Array", ErrProtocol)
 		}
@@ -413,7 +413,7 @@ func (t optionTarget) updateArray(ctx context.Context, name string, updates []Ar
 
 func validateArrayUpdates(updates []ArrayUpdate) error {
 	for _, u := range updates {
-		if u.Index < 0 || u.Index > 1<<30 || !codec.ValidString(u.Value) {
+		if u.Index < 0 || u.Index > 1<<30 || !wire.ValidString(u.Value) {
 			return invalid("array entry")
 		}
 	}

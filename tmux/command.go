@@ -6,7 +6,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -17,61 +17,139 @@ const (
 
 type replyMode uint8
 
-// Command represents a single immutable tmux command and its literal arguments.
-//
-// Unlike shell scripts, arguments in a Command are passed literally at the tmux parser layer:
-// they are escaped to prevent accidental command splitting or format expansion.
-// Operand semantics (for example, the shell command passed to "run-shell") are interpreted
-// by tmux according to that specific command's specification.
-type Command struct {
-	name string
-	args []string
+// Command represents an immutable tmux command with literal string arguments.
+// Arguments are safely escaped and not evaluated by a shell.
+type (
+	Command struct {
+		name string
+		args []string
+	}
+
+	// CommandSequence represents an immutable, validated sequence of tmux commands.
+	CommandSequence struct{ commands []Command }
+
+	// Result captures bounded output and termination status from a command execution.
+	Result struct {
+		// Stdout contains standard output bytes, capped by [Limits.OutputBytes].
+		Stdout []byte
+
+		// Stderr contains standard error bytes, capped by [Limits.OutputBytes].
+		Stderr []byte
+
+		// ExitCode is the process exit code, or -1 for control mode and un-signaled errors.
+		ExitCode int
+	}
+
+	wireArg struct {
+		text   string
+		nested []wireNode
+	}
+
+	wireNode struct {
+		name string
+		args []wireArg
+	}
+
+	plan struct {
+		nodes      []wireNode
+		mode       replyMode
+		allowStart bool
+	}
+)
+
+// Sequence validates and constructs an immutable [CommandSequence].
+// Invalid commands return an error; an empty sequence is valid.
+func Sequence(commands ...Command) (CommandSequence, error) {
+	out := make([]Command, len(commands))
+	for i, c := range commands {
+		if !c.Valid() {
+			return CommandSequence{}, invalid("command sequence")
+		}
+
+		out[i], _ = NewCommand(c.name, c.args...)
+	}
+
+	return CommandSequence{commands: out}, nil
 }
 
-// Result captures the bounded output and termination status of a command execution.
-type Result struct {
-	// Stdout contains bytes captured from standard output, capped by [Limits.OutputBytes].
-	Stdout []byte
+func (s CommandSequence) Commands() []Command {
+	out := make([]Command, len(s.commands))
+	for i, c := range s.commands {
+		out[i], _ = NewCommand(c.name, c.args...)
+	}
 
-	// Stderr contains bytes captured from standard error, capped by [Limits.OutputBytes].
-	Stderr []byte
-
-	// ExitCode is the process exit code returned by tmux.
-	// It is -1 for commands executed over a control connection or when a subprocess
-	// is terminated by a signal without a normal exit code.
-	ExitCode int
+	return out
 }
 
-type wireArg struct {
-	text   string
-	nested []wireNode
-}
-type wireNode struct {
-	name string
-	args []wireArg
-}
+func (s CommandSequence) nodes() []wireNode {
+	out := make([]wireNode, 0, len(s.commands))
+	for _, c := range s.commands {
+		out = append(out, leaf(c))
+	}
 
-type plan struct {
-	nodes      []wireNode
-	mode       replyMode
-	allowStart bool
+	return out
 }
 
 // NewCommand validates and constructs an immutable [Command].
-// It verifies that the command name is non-empty and valid, and that none of the
-// argument strings contain embedded NUL bytes (which cannot be represented in tmux argv).
+// Rejects empty names and arguments containing NUL bytes.
 func NewCommand(name string, args ...string) (Command, error) {
-	if !codec.ValidCommand(name) {
+	if !wire.ValidCommand(name) {
 		return Command{}, invalid("command name")
 	}
 
 	for _, a := range args {
-		if !codec.ValidString(a) {
+		if !wire.ValidString(a) {
 			return Command{}, invalid("NUL argument")
 		}
 	}
 
 	return Command{name: name, args: append([]string{}, args...)}, nil
+}
+
+// ParseSequence parses a semicolon-delimited compound tmux command string into a [CommandSequence].
+func ParseSequence(text string) (CommandSequence, error) {
+	parts, err := wire.SplitSequence(text)
+	if err != nil {
+		return CommandSequence{}, opError("ParseSequence", err)
+	}
+
+	var cmds []Command
+
+	for _, part := range parts {
+		words, err := wire.ParseWords(part)
+		if err != nil {
+			return CommandSequence{}, opError("ParseSequence", err)
+		}
+
+		if len(words) == 0 {
+			continue
+		}
+
+		cmd, err := NewCommand(words[0], words[1:]...)
+		if err != nil {
+			return CommandSequence{}, opError("ParseSequence", err)
+		}
+
+		cmds = append(cmds, cmd)
+	}
+
+	return Sequence(cmds...)
+}
+
+// ParseCommandLine extracts global flags (-S, -L, -f) from a tmux command-line argv,
+// returning a [Config] and the remaining [Command].
+func ParseCommandLine(args []string) (Config, Command, error) {
+	cfg, i := parseGlobalFlags(args)
+	if i >= len(args) {
+		return cfg, Command{}, invalid("no command found in argv")
+	}
+
+	cmd, err := NewCommand(args[i], args[i+1:]...)
+	if err != nil {
+		return cfg, Command{}, err
+	}
+
+	return cfg, cmd, nil
 }
 
 // Name returns the primary name of the tmux command (e.g. "new-session", "split-window").
@@ -83,12 +161,12 @@ func (c Command) Args() []string { return append([]string{}, c.args...) }
 // Valid reports whether the command name is a valid tmux identifier and all arguments
 // are free of NUL bytes.
 func (c Command) Valid() bool {
-	if !codec.ValidCommand(c.name) {
+	if !wire.ValidCommand(c.name) {
 		return false
 	}
 
 	for _, a := range c.args {
-		if !codec.ValidString(a) {
+		if !wire.ValidString(a) {
 			return false
 		}
 	}
@@ -106,8 +184,12 @@ func leaf(c Command) wireNode {
 	return wireNode{name: c.name, args: a}
 }
 
+func commandStartsServer(name string) bool {
+	return name == "new-session" || name == "start-server"
+}
+
 func plainPlan(c Command) plan {
-	return plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: false}
+	return plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: commandStartsServer(c.name)}
 }
 
 func recordsPlan(c Command) plan {
@@ -126,8 +208,8 @@ func emptyPlan(c Command) plan {
 
 func writeArg(w io.Writer, a wireArg) error {
 	if a.nested == nil {
-		if err := codec.Quoted(w, a.text); err != nil {
-			return err //nolint:wrapcheck // codec.Quoted writes directly to w
+		if err := wire.Quoted(w, a.text); err != nil {
+			return err //nolint:wrapcheck // wire.Quoted writes directly to w
 		}
 
 		return nil
@@ -137,7 +219,7 @@ func writeArg(w io.Writer, a wireArg) error {
 		return err //nolint:wrapcheck // writeArg writes directly to io.Writer
 	}
 
-	if err := writeNodes(codec.QuoteWriter{W: w}, a.nested); err != nil {
+	if err := writeNodes(wire.QuoteWriter{W: w}, a.nested); err != nil {
 		return err
 	}
 
@@ -149,7 +231,7 @@ func writeArg(w io.Writer, a wireArg) error {
 }
 
 func writeNode(w io.Writer, n wireNode) error {
-	if !codec.ValidCommand(n.name) {
+	if !wire.ValidCommand(n.name) {
 		return invalid("command name")
 	}
 
@@ -187,7 +269,7 @@ func writeNodes(w io.Writer, nodes []wireNode) error {
 }
 
 func (p plan) size(maxBytes int64) (int64, error) {
-	c := codec.Counter{Limit: maxBytes, N: 0, Err: nil}
+	c := wire.Counter{Limit: maxBytes, N: 0, Err: nil}
 	if err := writeNodes(&c, p.nodes); err != nil {
 		return 0, ErrInputLimit
 	}
@@ -232,7 +314,7 @@ func (p plan) argv() ([]string, error) {
 				s = b.String()
 			}
 
-			out = append(out, codec.Argv(s))
+			out = append(out, wire.Argv(s))
 		}
 	}
 
@@ -245,7 +327,7 @@ func (p plan) argv() ([]string, error) {
 // or window link guards, and targets are resolved by tmux according to its standard rules.
 //
 // Raw commands require subprocess execution. On a control-bound server, use
-// [Server.UsingSubprocess]; Run otherwise returns [ErrTransportUnsupported] before dispatch.
+// [Connection.AuxiliaryServer]; Run otherwise returns [ErrTransportUnsupported] before dispatch.
 func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
@@ -285,6 +367,10 @@ func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Res
 			return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: invalid("command")}
 		}
 
+		if commandStartsServer(c.name) {
+			p.allowStart = true
+		}
+
 		p.nodes = append(p.nodes, leaf(c))
 	}
 
@@ -297,4 +383,67 @@ func cloneResult(r Result) Result {
 	r.Stderr = bytes.Clone(r.Stderr)
 
 	return r
+}
+
+func parseFlagValue(args []string, i int, flag string) (string, int, bool) {
+	arg := args[i]
+	if arg == flag && i+1 < len(args) {
+		return args[i+1], i + 1, true
+	}
+
+	if strings.HasPrefix(arg, flag) && len(arg) > len(flag) {
+		return arg[len(flag):], i, true
+	}
+
+	return "", i, false
+}
+
+func tryParseConfigFlag(args []string, i int, cfg *Config) (int, bool) {
+	if val, next, ok := parseFlagValue(args, i, "-S"); ok {
+		cfg.SocketPath = val
+		return next, true
+	}
+
+	if val, next, ok := parseFlagValue(args, i, "-L"); ok {
+		cfg.SocketName = val
+		return next, true
+	}
+
+	if val, next, ok := parseFlagValue(args, i, "-f"); ok {
+		cfg.ConfigFile = val
+		return next, true
+	}
+
+	return i, false
+}
+
+func isIgnoredGlobalFlag(arg string) bool {
+	switch arg {
+	case "-u", "-v", "-N", "-C":
+		return true
+	default:
+		return strings.HasPrefix(arg, "-")
+	}
+}
+
+func parseGlobalFlags(args []string) (Config, int) {
+	var (
+		cfg Config
+		i   int
+	)
+
+	for i = 0; i < len(args); i++ {
+		if next, ok := tryParseConfigFlag(args, i, &cfg); ok {
+			i = next
+			continue
+		}
+
+		if isIgnoredGlobalFlag(args[i]) {
+			continue
+		}
+
+		break
+	}
+
+	return cfg, i
 }

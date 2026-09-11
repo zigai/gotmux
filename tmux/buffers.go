@@ -4,15 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/zigai/gotmux/internal/codec"
 	"github.com/zigai/gotmux/internal/schema"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
-// BufferRef identifies a tmux paste buffer, either by explicit name or through
-// tmux's automatic most-recent buffer stack.
-//
-// Unlike [Session] or [Window] handles, a BufferRef is an endpoint-relative reference:
-// buffer names are mutable and may be overwritten or recycled by other tmux clients.
+// BufferRef identifies a tmux paste buffer by explicit name or automatic recent stack.
+// Unlike [Session] handles, names are endpoint-relative and mutable.
 type (
 	BufferRef struct {
 		name      string
@@ -40,26 +37,23 @@ type (
 
 	// PasteOptions configures how a buffer's content is pasted into a target pane.
 	PasteOptions struct {
-		// DeleteAfter deletes the buffer from tmux's buffer stack immediately after pasting (-d flag).
+		// DeleteAfter deletes the buffer immediately after pasting (-d flag).
 		DeleteAfter bool
 
-		// Bracketed wraps the pasted text in terminal bracketed paste escape sequences (-p flag),
-		// alerting the receiving application that the input is pasted text rather than typed keys.
+		// Bracketed wraps pasted text in bracketed paste escape sequences (-p flag).
 		Bracketed bool
 
-		// Separator specifies an optional replacement delimiter between lines (-s flag).
-		// Conflicts with RawNewlines.
+		// Separator specifies an optional delimiter between lines (-s flag). Conflicts with RawNewlines.
 		Separator *string
 
-		// RawNewlines prevents tmux from replacing LF with CR when pasting (-r flag).
-		// Conflicts with Separator.
+		// RawNewlines prevents replacing LF with CR when pasting (-r flag). Conflicts with Separator.
 		RawNewlines bool
 	}
 )
 
 // NamedBuffer creates a [BufferRef] targeting an explicitly named paste buffer.
 func NamedBuffer(name string) (BufferRef, error) {
-	if name == "" || !codec.ValidString(name) {
+	if name == "" || !wire.ValidString(name) {
 		return BufferRef{name: "", automatic: false, valid: false}, invalid("buffer name")
 	}
 
@@ -113,7 +107,7 @@ func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 
 	fields := schema.WithIdentity([]string{"buffer_name", "buffer_size", "buffer_created"})
 
-	r, err := s.execute(opCtx, op, recordsPlan(command("list-buffers", "-F", codec.RecordFormat(fields))), newGuard(info.Identity), nil)
+	r, err := s.execute(opCtx, op, recordsPlan(command("list-buffers", "-F", wire.RecordFormat(fields))), newGuard(info.Identity), nil)
 	if err != nil {
 		return nil, opError("Buffers", err)
 	}
@@ -192,8 +186,13 @@ func (s *Server) bufferOperation(ctx context.Context, name string, b BufferRef, 
 
 // WriteBuffer loads binary data into the target paste buffer via stdin.
 //
-// Empty data returns [ErrUnsupported] because tmux treats empty stdin as a no-op.
-// Binary writes over control mode require [Connection.AuxiliaryServer].
+// Why zero-length is rejected:
+// Stock tmux treats empty stdin as a no-op rather than clearing or replacing the buffer.
+// Returning success would leave stale content silently, so we reject zero-length data with [ErrUnsupported].
+//
+// Over control mode:
+// Binary stdin cannot be framed safely inside control mode command text.
+// Callers must use [Connection.AuxiliaryServer] explicitly for binary buffer writes.
 func (s *Server) WriteBuffer(ctx context.Context, b BufferRef, data []byte) error {
 	if len(data) == 0 {
 		return opError("WriteBuffer", unsupported("zero-length buffer replacement is not representable in stock tmux"))
@@ -218,11 +217,11 @@ func (s *Server) DeleteBuffer(ctx context.Context, b BufferRef) error {
 
 // LoadBufferFile loads the contents of a filesystem file into the target buffer.
 func (s *Server) LoadBufferFile(ctx context.Context, b BufferRef, path string) error {
-	if path == "" || path == "-" || !codec.ValidString(path) {
+	if path == "" || path == "-" || !wire.ValidString(path) {
 		return opError("LoadBufferFile", invalid("path"))
 	}
 
-	_, err := s.bufferOperation(ctx, "load-buffer", b, []string{"--", codec.LiteralFormat(path)}, nil, false)
+	_, err := s.bufferOperation(ctx, "load-buffer", b, []string{"--", wire.LiteralFormat(path)}, nil, false)
 
 	return err
 }
@@ -230,7 +229,7 @@ func (s *Server) LoadBufferFile(ctx context.Context, b BufferRef, path string) e
 // SaveBufferFile writes the contents of the target buffer to a filesystem file,
 // optionally appending if appendFile is true.
 func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, appendFile bool) error {
-	if path == "" || path == "-" || !codec.ValidString(path) {
+	if path == "" || path == "-" || !wire.ValidString(path) {
 		return opError("SaveBufferFile", invalid("path"))
 	}
 
@@ -239,7 +238,7 @@ func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, a
 		args = append(args, "-a")
 	}
 
-	args = append(args, "--", codec.LiteralFormat(path))
+	args = append(args, "--", wire.LiteralFormat(path))
 	_, err := s.bufferOperation(ctx, "save-buffer", b, args, nil, false)
 
 	return err
@@ -270,7 +269,7 @@ func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, o PasteOptions) erro
 	}
 
 	if o.Separator != nil {
-		if !codec.ValidString(*o.Separator) {
+		if !wire.ValidString(*o.Separator) {
 			return opError("PasteBuffer", invalid("separator"))
 		}
 

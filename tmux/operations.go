@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -27,27 +27,24 @@ type (
 		Force bool
 	}
 
-	// RespawnOptions configures re-executing a program inside an existing window or pane.
+	// RespawnOptions configures re-executing a command in an existing window or pane.
 	RespawnOptions struct {
-		// Program specifies the new command to run.
-		// Note: unlike creation methods where a zero Program means the user's default shell,
-		// Respawn with a zero Program requests tmux's previously stored respawn command.
+		// Program specifies the new command. Zero value re-runs the stored respawn command.
 		Program Program
 
-		// Dir specifies the working directory for the respawned process.
+		// Dir specifies the working directory for the process.
 		Dir string
 
-		// Env specifies environment variable overrides for the respawned process.
+		// Env specifies environment variable overrides.
 		Env map[string]string
 
-		// KillRunning forces killing the currently running process if the pane/window is not dead (-k flag).
+		// KillRunning kills the process if still running (-k flag).
 		KillRunning bool
 	}
 
 	// LinkOptions configures linking an existing window into another session.
 	LinkOptions struct {
 		// Index selects an exact slot; nil chooses the first free slot at or above base-index.
-		// A concurrent claim of an automatically chosen slot fails without replacing it.
 		Index *int
 
 		// Select controls whether the linked window becomes active in the target session.
@@ -59,13 +56,13 @@ type (
 
 	// JoinOptions configures joining a source pane into another window beside a target pane.
 	JoinOptions struct {
-		// Direction specifies whether to split vertically (top/bottom) or horizontally (side-by-side).
+		// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
 		Direction Direction
 
-		// Size specifies the initial size for the joined pane.
+		// Size specifies the size for the joined pane.
 		Size SplitSize
 
-		// Before places the pane before (above/left of) the target pane (-b flag).
+		// Before places the pane before (above or left of) the target pane (-b flag).
 		Before bool
 
 		// Select controls whether the joined pane gains focus immediately.
@@ -86,7 +83,7 @@ type (
 
 	// PipeOptions configures piping pane terminal output to a shell command.
 	PipeOptions struct {
-		// OnlyIfNotPiped prevents reopening if a pipe command is already active (-o flag).
+		// OnlyIfNotPiped avoids starting if a pipe is already open (-o flag).
 		OnlyIfNotPiped bool
 
 		// Input pipes input sent to the pane into the command (-I flag).
@@ -128,7 +125,7 @@ func (s Session) Rename(ctx context.Context, name string) error {
 		return opError("RenameSession", err)
 	}
 
-	return s.h.act(ctx, "rename-session", "-t", s.h.id, "--", codec.LiteralFormat(name))
+	return s.h.act(ctx, "rename-session", "-t", s.h.id, "--", wire.LiteralFormat(name))
 }
 
 // Rename changes the title/name of this window.
@@ -205,7 +202,7 @@ func (w Window) LastPane(ctx context.Context) error { return w.h.act(ctx, "last-
 
 // SelectLayout applies a named layout arrangement to the panes in this window.
 func (w Window) SelectLayout(ctx context.Context, layout Layout) error {
-	if layout == "" || !codec.ValidString(string(layout)) {
+	if layout == "" || !wire.ValidString(string(layout)) {
 		return opError("SelectLayout", invalid("layout"))
 	}
 
@@ -365,7 +362,7 @@ func mutateLink(ctx context.Context, h handle, g *guard, name string, args []str
 		}
 	}
 
-	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, codec.RecordFormat(fieldsFor(WindowKind))))}
+	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, wire.RecordFormat(fieldsFor(WindowKind))))}
 
 	r, err := h.server.execute(opCtx, op, plan{nodes: nodes, mode: replyRecords, allowStart: false}, g, nil)
 	if err != nil {
@@ -539,14 +536,7 @@ func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink,
 	}
 	defer op.close()
 
-	args := []string{"-s", p.h.id, "-t", target, "-P", "-F", codec.RecordFormat(fieldsFor(WindowKind))}
-	if !o.Select {
-		args = append(args, "-d")
-	}
-
-	if o.Name != "" {
-		args = append(args, "-n", name)
-	}
+	args := breakArgs(p.h.id, target, name, o)
 
 	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("break-pane", args...)), p.h.guard(), nil)
 	if err != nil {
@@ -567,15 +557,30 @@ func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink,
 		return WindowLink{}, afterError("BreakPane", err, recoverCreated(r.Stdout, WindowKind)...)
 	}
 
+	if err = opCtx.Err(); err != nil {
+		return link.Handle(), afterError("BreakPane", err, createdFromHandle(link.link.h))
+	}
+
 	return link.Handle(), nil
 }
 
+func breakArgs(paneID, target, name string, o BreakOptions) []string {
+	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(WindowKind))}
+	if !o.Select {
+		args = append(args, "-d")
+	}
+
+	if o.Name != "" {
+		args = append(args, "-n", name)
+	}
+
+	return args
+}
+
 // Pipe deliberately starts a background shell command on the server and pipes pane I/O into it.
-//
-// Note on lifecycle: cancellation of the Go context does NOT terminate the server-side pipe command!
 // To stop piping, callers must explicitly invoke [Pane.StopPipe].
 func (p Pane) Pipe(ctx context.Context, script string, o PipeOptions) error {
-	if !codec.ValidString(script) || script == "" {
+	if !wire.ValidString(script) || script == "" {
 		return opError("Pipe", invalid("pipe script"))
 	}
 
@@ -633,19 +638,19 @@ func (p Pane) SelectAdjacent(ctx context.Context, direction PaneDirection) error
 // The native link/move command claims this slot without -k. If another client
 // claims it first, tmux rejects the mutation rather than overwriting that client.
 func freeWindowIndex(ctx context.Context, op *operation, server *Server, id ServerIdentity, target string) (int, error) {
-	r, err := server.execute(ctx, op, recordsPlan(command("display-message", "-p", "-t", target, codec.RecordFormat([]string{"base-index"}))), newGuard(id), nil)
+	r, err := server.execute(ctx, op, recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat([]string{"base-index"}))), newGuard(id), nil)
 	if err != nil {
 		return 0, err
 	}
 
-	rows, err := codec.ParseRecords(r.Stdout, 1)
+	rows, err := wire.ParseRecords(r.Stdout, 1)
 	if err != nil || len(rows) != 1 {
-		return 0, afterError("LinkWindow", ErrProtocol)
+		return 0, ErrProtocol
 	}
 
 	index, err := strconv.Atoi(rows[0][0])
 	if err != nil || index < 0 {
-		return 0, afterError("LinkWindow", ErrProtocol)
+		return 0, ErrProtocol
 	}
 
 	_, links, err := server.windows(ctx, op, id, target)

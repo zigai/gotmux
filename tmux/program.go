@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const (
@@ -41,73 +41,22 @@ const (
 )
 
 const (
-	// Vertical splits the pane vertically (-v flag), placing the new pane below the current one.
-	Vertical Direction = iota
-
-	// Horizontal splits the pane horizontally (-h flag), placing the new pane beside the current one.
-	Horizontal
-)
-
-const (
-	// EvenHorizontal arranges panes in equal-width vertical columns side by side.
-	EvenHorizontal Layout = "even-horizontal"
-
-	// EvenVertical arranges panes in equal-height horizontal rows stacked on top of each other.
-	EvenVertical Layout = "even-vertical"
-
-	// MainHorizontal arranges a large primary pane on top with remaining panes tiled below.
-	MainHorizontal Layout = "main-horizontal"
-
-	// MainVertical arranges a large primary pane on the left with remaining panes tiled on the right.
-	MainVertical Layout = "main-vertical"
-
-	// Tiled arranges panes evenly in a 2D rectangular grid.
-	Tiled Layout = "tiled"
-)
-
-const (
 	programDefault uint8 = iota
 	programExec
 	programShell
 )
 
 type (
-	// Program specifies how an initial process should be launched inside a new session,
-	// window, or pane.
-	//
-	// The zero value of Program represents tmux's default shell behavior (running the user's
-	// configured default-shell without extra arguments).
+	// Program specifies how an initial process is launched in a session, window, or pane.
+	// The zero value runs tmux's configured default-shell.
 	Program struct {
 		kind uint8
 		name string
 		args []string
 	}
 
-	// Size specifies terminal dimensions measured in character cells (columns and rows).
-	// A zero value indicates that tmux should choose the dimensions automatically.
-	Size struct {
-		Width  int
-		Height int
-	}
-
 	// StartPolicy controls whether an operation is permitted to spawn a new tmux server daemon.
 	StartPolicy uint8
-
-	// Direction indicates whether a split occurs vertically (top/bottom) or horizontally (left/right).
-	Direction uint8
-
-	// SplitSize specifies the size for a pane split or join.
-	// Exactly one of Cells or Percent should be set; if both are zero, tmux splits the pane evenly (50%).
-	SplitSize struct {
-		// Cells specifies an exact size in character columns or rows.
-		Cells int
-
-		// Percent specifies the size as a percentage (1 to 100) of the parent pane or window.
-		Percent int
-	}
-
-	// Layout identifies a named tmux window pane layout geometry.
-	Layout string
 )
 
 // Exec creates a [Program] that executes a binary with literal command-line arguments.
@@ -120,7 +69,7 @@ func Exec(name string, args ...string) Program {
 func Shell(script string) Program { return Program{kind: programShell, name: script, args: nil} }
 
 func (p Program) argv() ([]string, error) {
-	if !codec.ValidString(p.name) {
+	if !wire.ValidString(p.name) {
 		return nil, invalid("program NUL")
 	}
 
@@ -133,7 +82,7 @@ func (p Program) argv() ([]string, error) {
 		}
 
 		for _, a := range p.args {
-			if !codec.ValidString(a) {
+			if !wire.ValidString(a) {
 				return nil, invalid("program argument NUL")
 			}
 		}
@@ -157,34 +106,12 @@ func (p Program) argv() ([]string, error) {
 	}
 }
 
-// Size is measured in terminal cells. Both zero means use tmux's default.
-
-func (s Size) valid() bool {
-	return s.Width >= 0 && s.Height >= 0 && s.Width <= 1<<20 && s.Height <= 1<<20
-}
-
-func (s SplitSize) args() ([]string, error) {
-	if s.Cells < 0 || s.Cells > 1<<20 || s.Percent < 0 || s.Percent > 100 || s.Cells != 0 && s.Percent != 0 {
-		return nil, invalid("split size")
-	}
-
-	if s.Cells != 0 {
-		return []string{"-l", strconv.Itoa(s.Cells)}, nil
-	}
-
-	if s.Percent != 0 {
-		return []string{"-l", strconv.Itoa(s.Percent) + "%"}, nil
-	}
-
-	return nil, nil
-}
-
 func literal(s string) (string, error) {
-	if !codec.ValidString(s) {
+	if !wire.ValidString(s) {
 		return "", invalid("NUL literal")
 	}
 
-	return codec.LiteralFormat(s), nil
+	return wire.LiteralFormat(s), nil
 }
 
 func sessionName(name string, optional bool) error {
@@ -252,7 +179,7 @@ func programArgs(dir string, env map[string]string, program Program) ([]string, 
 func sortedEnvKeys(env map[string]string) ([]string, error) {
 	keys := make([]string, 0, len(env))
 	for k, v := range env {
-		if !envName(k) || !codec.ValidString(v) {
+		if !envName(k) || !wire.ValidString(v) {
 			return nil, invalid("program environment")
 		}
 

@@ -19,66 +19,49 @@ const (
 )
 
 // Config specifies how [New] locates a tmux daemon and configures subprocess execution.
-// All fields are validated and frozen at [New] time; mutating this struct after initialization
-// has no effect on an existing [Server].
+// Frozen at [New] time; subsequent mutations have no effect.
 type Config struct {
-	// Binary is the tmux executable path or name. If empty, [New] looks up "tmux" in PATH.
+	// Binary is the tmux executable path or name. If empty, defaults to "tmux" in PATH.
 	Binary string
 
-	// SocketPath specifies an absolute path to the tmux server socket (-S flag).
-	// This takes precedence over SocketName and any ambient TMUX environment variable.
-	// Must be an absolute path and cannot contain NUL bytes.
+	// SocketPath is an absolute path to the server socket (-S flag).
+	// Wins over SocketName and ambient $TMUX. Cannot contain NUL bytes.
 	SocketPath string
 
-	// SocketName specifies a named socket (-L flag) located under TMUX_TMPDIR.
-	// It cannot be used together with SocketPath. Sockets named "." or ".." or
-	// containing slashes or NUL bytes are rejected.
+	// SocketName is a named socket (-L flag) under TMUX_TMPDIR. Cannot contain slashes or NUL bytes.
 	SocketName string
 
-	// ConfigFile specifies an alternate configuration file passed to tmux via -f.
-	// If relative, it is resolved against Dir at [New] time. Passing "/dev/null"
-	// prevents tmux from reading the user's ~/.tmux.conf.
+	// ConfigFile is an alternate configuration file (-f flag).
+	// Resolved against Dir. Pass "/dev/null" to skip ~/.tmux.conf.
 	ConfigFile string
 
-	// Env is the frozen environment slice passed to all spawned tmux subprocesses.
-	// If nil, [New] snapshots the host environment via [os.Environ]. If non-nil
-	// (even an empty slice), we use exactly this environment without inheriting
-	// ambient host variables.
+	// Env is the process environment for tmux subprocesses.
+	// If nil, snapshots [os.Environ]. If non-nil (even empty), ambient host variables are not inherited.
 	Env []string
 
-	// Dir is the working directory for subprocess execution. If empty, [New] resolves
-	// and validates the current working directory via [os.Getwd]. Must be an existing
-	// directory on disk.
+	// Dir is the working directory for subprocess execution. If empty, resolves to [os.Getwd].
 	Dir string
 
-	// Limits bounds resource consumption for command timeouts, buffer allocations,
-	// and concurrent process execution. Zero values default to [DefaultLimits].
+	// Limits bounds timeouts, buffer sizes, and concurrent subprocesses. Zero values use [DefaultLimits].
 	Limits Limits
 }
 
-// Limits bounds execution time, concurrent processes, and memory buffers across
-// all operations on a [Server]. Any zero-valued field will be populated with its
-// corresponding value from [DefaultLimits].
+// Limits bounds execution time, concurrent processes, and buffers across operations on a [Server].
 type Limits struct {
-	// CommandTimeout is the maximum duration allowed for a single command or probe
-	// before the operation is canceled and subprocesses are terminated.
+	// CommandTimeout is the maximum duration for a single command before cancellation.
 	CommandTimeout time.Duration
 
-	// OutputBytes is the maximum number of stdout/stderr bytes read from tmux before
-	// terminating the subprocess with [ErrOutputLimit].
+	// OutputBytes caps stdout/stderr bytes read from tmux before returning [ErrOutputLimit].
 	OutputBytes int64
 
-	// InputBytes bounds the payload sent to tmux via stdin or command arguments.
-	// Exceeding this limit returns [ErrInputLimit] before dispatch.
+	// InputBytes bounds stdin and argument bytes sent to tmux before returning [ErrInputLimit].
 	InputBytes int64
 
-	// Concurrent is the maximum number of concurrent tmux subprocesses permitted to run
-	// simultaneously.
+	// Concurrent caps the number of tmux subprocesses executing simultaneously.
 	Concurrent int
 }
 
-// DefaultLimits returns the standard operational bounds: 5s command timeout,
-// 4 MiB output buffer, 1 MiB input buffer, and 8 concurrent subprocesses.
+// DefaultLimits returns the standard operational bounds: 5s timeout, 4 MiB output, 1 MiB input, 8 workers.
 func DefaultLimits() Limits {
 	return Limits{CommandTimeout: DefaultCommandTimeout, OutputBytes: defaultOutputBytes, InputBytes: defaultInputBytes, Concurrent: defaultConcurrent}
 }

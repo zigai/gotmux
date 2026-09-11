@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 type frameID struct {
@@ -119,7 +119,7 @@ func isAllowedMarker(line []byte) bool {
 }
 
 func readRecordWireChunk(r *bufio.Reader, left int64) ([]byte, error) {
-	wire, err := codec.ReadRecordWire(r, left)
+	wire, err := wire.ReadRecordWire(r, left)
 	if err != nil {
 		return nil, errors.Join(ErrProtocol, err)
 	}
@@ -159,13 +159,11 @@ func processFrameLine(line []byte, id frameID, maxBytes int64, f *controlFrame, 
 
 	if len(line) > 0 && line[0] == '%' {
 		event, err := decodeEvent(line, maxBytes)
-		if err != nil {
-			return false, err
+		if err == nil {
+			publish(event)
+
+			return false, nil
 		}
-
-		publish(event)
-
-		return false, nil
 	}
 
 	if !isAllowedMarker(line) {
@@ -188,29 +186,26 @@ func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(E
 	ordinary := false
 
 	for {
-		prefix, peekErr := r.Peek(len(codec.RecordPrefix))
+		prefix, peekErr := r.Peek(len(wire.RecordPrefix))
 		if peekErr != nil {
 			return nil, peekErr //nolint:wrapcheck // bufio.Reader error is propagated directly
 		}
 
-		if string(prefix) == codec.RecordPrefix {
-			wire, wireErr := readRecordWireChunk(r, maxBytes-used)
+		if string(prefix) == wire.RecordPrefix {
+			n, wireErr := appendRecordChunk(r, maxBytes, used, f)
 			if wireErr != nil {
 				return nil, wireErr
 			}
 
-			used += int64(len(wire))
-			f.data = append(f.data, wire...)
+			used += n
 
 			continue
 		}
 
-		line, lineErr := boundedLine(r, maxBytes-used)
+		line, lineErr := boundedLine(r, maxBytes)
 		if lineErr != nil {
 			return nil, lineErr
 		}
-
-		used += int64(len(line))
 
 		done, lineProcessErr := processFrameLine(line, id, maxBytes, f, &ordinary, publish)
 		if lineProcessErr != nil {
@@ -220,5 +215,35 @@ func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(E
 		if done {
 			return f, nil
 		}
+
+		nextUsed, trackErr := trackFrameBytes(line, used, maxBytes)
+		if trackErr != nil {
+			return nil, trackErr
+		}
+
+		used = nextUsed
 	}
+}
+
+func trackFrameBytes(line []byte, used, maxBytes int64) (int64, error) {
+	if len(line) == 0 || line[0] != '%' {
+		if used+int64(len(line)) > maxBytes {
+			return 0, ErrOutputLimit
+		}
+
+		return used + int64(len(line)), nil
+	}
+
+	return used, nil
+}
+
+func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (int64, error) {
+	wire, wireErr := readRecordWireChunk(r, maxBytes-used)
+	if wireErr != nil {
+		return 0, wireErr
+	}
+
+	f.data = append(f.data, wire...)
+
+	return int64(len(wire)), nil
 }

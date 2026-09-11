@@ -5,25 +5,21 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/zigai/gotmux/internal/codec"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 // NewSessionOptions configures the creation of a new tmux session.
 type NewSessionOptions struct {
-	// Name is the human-readable name for the session.
-	// In tmux, session names cannot contain colons or periods.
-	// If empty, tmux assigns an automatic sequential name ("0", "1", ...).
+	// Name is the session name (cannot contain colons or periods). Empty defaults to automatic naming.
 	Name string
 
 	// Dir specifies the initial working directory for the session's first window.
 	Dir string
 
-	// Window specifies the name for the session's initial window.
-	// tmux forbids specifying an initial window name when joining an existing Group.
+	// Window specifies the name for the initial window. Disallowed when joining a Group.
 	Window string
 
-	// Program specifies the command executed in the initial window.
-	// The zero value of Program executes the user's configured default-shell.
+	// Program specifies the initial command. Zero value runs the default shell.
 	Program Program
 
 	// Env specifies environment variables passed to the launched program.
@@ -31,66 +27,61 @@ type NewSessionOptions struct {
 	// using Env with the zero Program{} returns [ErrUnsupported] to prevent ambient PATH corruption.
 	Env map[string]string
 
-	// Size specifies the initial window dimensions in character cells.
+	// Size specifies initial window dimensions in character cells.
 	Size Size
 
-	// Start controls whether to allow starting a new background tmux daemon if one is not running.
+	// Start controls whether to start a new daemon if one is not running.
 	Start StartPolicy
 
-	// Group joins an explicitly named session group. Grouped sessions share the same set of windows.
-	// tmux forbids specifying an initial window name or program when joining a group.
+	// Group joins an existing session group. Disallows initial window name or program.
 	Group string
 }
 
 // NewWindowOptions configures the creation of a new window inside an existing session.
 type NewWindowOptions struct {
-	// Name is the name assigned to the new window (#{window_name}).
+	// Name is the window name (#{window_name}).
 	Name string
 
-	// Dir is the working directory for the window's initial pane.
+	// Dir is the working directory for the initial pane.
 	Dir string
 
-	// Program specifies the initial process to run. Zero value runs the default shell.
+	// Program specifies the initial command. Zero value runs the default shell.
 	Program Program
 
-	// Env specifies environment overrides for the program. Requires explicit [Exec] or [Shell].
+	// Env specifies environment overrides. Requires explicit [Exec] or [Shell].
 	Env map[string]string
 
-	// Index optionally specifies the exact slot index for the window in this session.
-	// If nil, tmux assigns the next available index.
+	// Index optionally specifies the slot index in the session.
 	Index *int
 
-	// Select controls whether the newly created window immediately becomes the active window
-	// in the session. Defaults to false (preserving focus on the current window).
+	// Select controls whether the new window gains focus immediately (default false).
 	Select bool
 }
 
-// SplitOptions configures splitting an existing pane to create a new pane.
+// SplitOptions configures splitting an existing pane into two panes.
 type SplitOptions struct {
-	// Direction indicates whether to split vertically (top/bottom) or horizontally (side-by-side).
+	// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
 	Direction Direction
 
-	// Size specifies an exact cell count or percentage for the new pane.
-	// If zero, tmux splits the available space evenly.
+	// Size specifies cell count or percentage. Zero splits available space evenly.
 	Size SplitSize
 
 	// Dir is the working directory for the new pane.
 	Dir string
 
-	// Program specifies the process to run in the new pane. Zero value runs the default shell.
+	// Program specifies the initial process. Zero value runs the default shell.
 	Program Program
 
-	// Env specifies environment overrides for the program. Requires explicit [Exec] or [Shell].
+	// Env specifies environment overrides. Requires explicit [Exec] or [Shell].
 	Env map[string]string
 
-	// Select controls whether the newly created pane immediately gains focus.
+	// Select controls whether the new pane gains focus immediately.
 	Select bool
 
-	// Before splits the pane to place the new pane before (above or to the left of) the target pane.
+	// Before places the new pane before (above or left of) the target pane (-b flag).
 	Before bool
 
-	// FullSize splits across the full width or height of the entire window (-f flag),
-	// rather than subdividing only the target pane.
+	// FullSize splits across the full window span (-f flag) rather than just the target pane.
 	FullSize bool
 }
 type startGuard struct {
@@ -179,7 +170,7 @@ func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLi
 	rows, err := parseRaw(r.Stdout, fieldsFor(WindowKind), "window")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
-			err = decodeError("window", "record count", codec.ErrRecord)
+			err = decodeError("window", "record count", wire.ErrRecord)
 		}
 
 		return WindowLink{}, afterError("NewWindow", err, recoverCreated(r.Stdout, WindowKind)...)
@@ -226,7 +217,7 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 	rows, err := parseRaw(r.Stdout, fieldsFor(PaneKind), "pane")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
-			err = decodeError("pane", "record count", codec.ErrRecord)
+			err = decodeError("pane", "record count", wire.ErrRecord)
 		}
 
 		return Pane{}, afterError("Split", err, recoverCreated(r.Stdout, PaneKind)...)
@@ -257,9 +248,9 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-d", "-P", "-F", codec.RecordFormat(fieldsFor(SessionKind))}
+	args := []string{"-d", "-P", "-F", wire.RecordFormat(fieldsFor(SessionKind))}
 	if opts.Name != "" {
-		args = append(args, "-s", codec.LiteralFormat(opts.Name))
+		args = append(args, "-s", wire.LiteralFormat(opts.Name))
 	}
 
 	if opts.Window != "" {
@@ -315,7 +306,7 @@ func (s *Server) parseCreatedSession(stdout []byte, g *guard) (Session, error) {
 	rows, err := parseRaw(stdout, fieldsFor(SessionKind), "session")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
-			err = decodeError("session", "record count", codec.ErrRecord)
+			err = decodeError("session", "record count", wire.ErrRecord)
 		}
 
 		return Session{}, afterError("NewSession", err, recoverCreated(stdout, SessionKind)...)
@@ -371,7 +362,7 @@ func newWindowArgs(sessionID string, opts NewWindowOptions) ([]string, error) {
 		target += strconv.Itoa(*opts.Index)
 	}
 
-	args := []string{"-P", "-F", codec.RecordFormat(fieldsFor(WindowKind)), "-t", target}
+	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(WindowKind)), "-t", target}
 	if !opts.Select {
 		args = append(args, "-d")
 	}
@@ -405,7 +396,7 @@ func splitArgs(paneID string, opts SplitOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-P", "-F", codec.RecordFormat(fieldsFor(PaneKind)), "-t", paneID}
+	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(PaneKind)), "-t", paneID}
 	if opts.Direction == Horizontal {
 		args = append(args, "-h")
 	} else {
@@ -440,7 +431,7 @@ func createdFromHandle(h handle) CreatedObject {
 }
 
 func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
-	rows, err := codec.ParseRecords(data, len(fieldsFor(kind)))
+	rows, err := wire.ParseRecords(data, len(fieldsFor(kind)))
 	if err != nil || len(rows) != 1 || len(rows[0]) == 0 {
 		return nil
 	}
