@@ -283,11 +283,11 @@ func (s *Server) Message(ctx context.Context, text string) error {
 }
 
 // Popup waits for tmux's popup command queue to resume (normally dismissal).
-// A deadline is required. Cancellation ends the local waiter, not necessarily
-// the server-side popup. No exit status or user choice is inferred.
+// Cancellation ends the local waiter, not necessarily the server-side popup.
+// No exit status or user choice is inferred.
 func (c Client) Popup(ctx context.Context, o PopupOptions) error {
-	if err := requireDeadline(ctx); err != nil {
-		return opError("Popup", err)
+	if ctx == nil {
+		return opError("Popup", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {
@@ -307,9 +307,11 @@ func (c Client) Popup(ctx context.Context, o PopupOptions) error {
 }
 
 // Popup displays an interactive modal popup overlay targeting this pane (-t flag).
+// Cancellation ends the local waiter, not necessarily the server-side popup.
+// No exit status or user choice is inferred.
 func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
-	if err := requireDeadline(ctx); err != nil {
-		return opError("Popup", err)
+	if ctx == nil {
+		return opError("Popup", invalid("nil context"))
 	}
 
 	if err := p.h.check(); err != nil {
@@ -330,12 +332,11 @@ func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
 
 // Menu displays an interactive popup menu on this client and blocks until dismissal.
 //
-// A caller deadline is required. Cancellation ends the local waiter but does not guarantee
-// immediate dismissal of the menu on the client.
+// Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
 // Fails with [ErrTransportUnsupported] over control mode.
 func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
-	if err := requireDeadline(ctx); err != nil {
-		return opError("Menu", err)
+	if ctx == nil {
+		return opError("Menu", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {
@@ -378,9 +379,12 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error
 }
 
 // Menu displays an interactive popup menu targeting this pane (-t flag).
+//
+// Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
+// Fails with [ErrTransportUnsupported] over control mode.
 func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
-	if err := requireDeadline(ctx); err != nil {
-		return opError("Menu", err)
+	if ctx == nil {
+		return opError("Menu", invalid("nil context"))
 	}
 
 	if err := p.h.check(); err != nil {
@@ -424,10 +428,10 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
 
 // Prompt displays an interactive command prompt in this client's status line.
 //
-// A caller deadline is required. Fails with [ErrTransportUnsupported] over control mode.
+// Fails with [ErrTransportUnsupported] over control mode.
 func (c Client) Prompt(ctx context.Context, template PromptTemplate, o PromptOptions) error {
-	if err := requireDeadline(ctx); err != nil {
-		return opError("Prompt", err)
+	if ctx == nil {
+		return opError("Prompt", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {

@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -173,5 +174,36 @@ func TestMenuArgsNoCloseOnOverlap(t *testing.T) {
 
 	if !slices.Contains(args, "-O") {
 		t.Fatalf("expected -O flag in menuArgsWithTarget, got %v", args)
+	}
+}
+
+func TestUIOperationsRejectNilContext(t *testing.T) {
+	var (
+		c          Client
+		p          Pane
+		popupOpts  PopupOptions
+		menuOpts   MenuOptions
+		promptOpts PromptOptions
+		nilCtx     context.Context
+	)
+
+	if err := c.Popup(nilCtx, popupOpts); err == nil {
+		t.Fatal("expected error on nil context")
+	}
+
+	if err := p.Popup(nilCtx, popupOpts); err == nil {
+		t.Fatal("expected error on nil context")
+	}
+
+	if err := c.Menu(nilCtx, nil, menuOpts); err == nil {
+		t.Fatal("expected error on nil context")
+	}
+
+	if err := p.Menu(nilCtx, nil, menuOpts); err == nil {
+		t.Fatal("expected error on nil context")
+	}
+
+	if err := c.Prompt(nilCtx, "", promptOpts); err == nil {
+		t.Fatal("expected error on nil context")
 	}
 }

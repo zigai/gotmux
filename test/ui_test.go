@@ -220,3 +220,24 @@ func TestIntegrationMessage(t *testing.T) {
 
 	awaitObservation(t, ctx, "server message rendered", func() bool { return output.contains("SERVER_MSG_OK") })
 }
+
+func TestIntegrationClientPopupWithoutDeadline(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	client, _, _ := uiClient(t, ctx, server, session)
+	dir := t.TempDir()
+
+	var options tmux.PopupOptions
+
+	options.Dir = dir
+	options.Program = tmux.Exec("/bin/sh", "-c", `printf 'ok' > result`)
+	options.CloseOnExit = true
+
+	// context.Background() has no deadline; it must succeed without error.
+	if err := client.Popup(context.Background(), options); err != nil {
+		t.Fatalf("client.Popup without deadline failed: %v", err)
+	}
+
+	path := filepath.Join(dir, "result")
+	awaitFile(t, ctx, path)
+	assertFileBytes(t, path, []byte("ok"))
+}
