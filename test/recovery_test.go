@@ -71,13 +71,39 @@ func TestDaemonReplacement(t *testing.T) {
 		t.Fatalf("failed to start Server B: %v, output: %s", err, out)
 	}
 
-	serverB, err := tmux.New(tmux.Config{SocketPath: infoA.Identity.ReportedSocket})
+	serverB, err := tmux.New(tmux.Config{
+		Binary:     binary,
+		SocketPath: infoA.Identity.ReportedSocket,
+	})
 	if err != nil {
 		t.Fatalf("tmux.New for Server B failed: %v", err)
 	}
 
-	// Wait for Server B to respond to probe.
 	var infoB tmux.ServerInfo
+	// Register t.Cleanup to kill Server B even if probe fails.
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if infoB.Identity.PID > 0 {
+			_ = serverB.KillIfIdentity(cleanupCtx, infoB.Identity)
+			if pB, err := os.FindProcess(infoB.Identity.PID); err == nil {
+				_ = pB.Kill()
+				deadline := time.Now().Add(2 * time.Second)
+				for time.Now().Before(deadline) {
+					if _, probeErr := serverB.Probe(cleanupCtx); errors.Is(probeErr, tmux.ErrNoServer) {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+			}
+		} else {
+			killCmd := exec.Command(binary, "-S", infoA.Identity.ReportedSocket, "kill-server")
+			_ = killCmd.Run()
+		}
+	})
+
+	// Wait for Server B to respond to probe.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		infoB, err = serverB.Probe(ctx)
@@ -89,24 +115,6 @@ func TestDaemonReplacement(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
-	// Register t.Cleanup to kill Server B.
-	t.Cleanup(func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		_ = serverB.KillIfIdentity(cleanupCtx, infoB.Identity)
-		if pB, err := os.FindProcess(infoB.Identity.PID); err == nil {
-			_ = pB.Kill()
-			deadline := time.Now().Add(2 * time.Second)
-			for time.Now().Before(deadline) {
-				if _, probeErr := serverB.Probe(cleanupCtx); errors.Is(probeErr, tmux.ErrNoServer) {
-					break
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-		}
-	})
 
 	// 5. Attempt mutation using handle from Server A:
 	// _, err = sessionA.NewWindow(ctx, tmux.NewWindowOptions{Name: "should-fail"})
