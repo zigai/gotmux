@@ -285,17 +285,38 @@ func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, e
 		return nil, opError("Bindings", err)
 	}
 
-	out := []BindingInfo{}
+	out := parseBindingsLines(r.Stdout, table, "")
+	if len(out) == 0 {
+		out = s.fallbackBindings(opCtx, op, info, table)
+	}
 
-	for line := range bytes.SplitSeq(bytes.TrimSuffix(r.Stdout, []byte{'\n'}), []byte{'\n'}) {
+	return out, nil
+}
+
+func parseBindingsLines(stdout []byte, defaultTable, filterTable KeyTable) []BindingInfo {
+	var out []BindingInfo
+
+	for line := range bytes.SplitSeq(bytes.TrimSuffix(stdout, []byte{'\n'}), []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
 		}
 
-		out = append(out, parseBinding(string(line), table))
+		b := parseBinding(string(line), defaultTable)
+		if filterTable == "" || b.Table == filterTable {
+			out = append(out, b)
+		}
 	}
 
-	return out, nil
+	return out
+}
+
+func (s *Server) fallbackBindings(ctx context.Context, op *operation, info ServerInfo, table KeyTable) []BindingInfo {
+	rAll, err := s.execute(ctx, op, plainPlan(command("list-keys")), newGuard(info.Identity), nil)
+	if err != nil {
+		return nil
+	}
+
+	return parseBindingsLines(rAll.Stdout, "", table)
 }
 
 func parseBinding(raw string, table KeyTable) BindingInfo {
