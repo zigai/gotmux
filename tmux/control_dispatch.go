@@ -156,11 +156,11 @@ func (c *Connection) handleCollectFrame(f controlFrame, nonce string, result *Re
 func (c *Connection) releaseRequest(r *controlRequest) { c.bytes.Release(r.bytes); c.count.Release(1) }
 
 func (c *Connection) deliver(r *controlRequest, result Result, err error, effect Effect) {
-	r.state.Store(requestDelivered)
-
 	if err != nil {
 		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: err}
 	}
+
+	r.state.Store(requestDelivered)
 
 	r.result <- controlReply{result: result, err: err}
 
@@ -361,6 +361,11 @@ func checkDelivered(r *controlRequest) (controlReply, bool) {
 	case v := <-r.result:
 		return v, true
 	default:
+		if r.state.Load() == requestDelivered {
+			v := <-r.result
+			return v, true
+		}
+
 		return controlReply{result: Result{Stdout: nil, Stderr: nil, ExitCode: 0}, err: nil}, false
 	}
 }
