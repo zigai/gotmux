@@ -5,17 +5,15 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/zigai/gotmux)](https://github.com/zigai/gotmux/blob/master/go.mod)
 [![License: MIT](https://img.shields.io/github/license/zigai/gotmux)](https://github.com/zigai/gotmux/blob/master/LICENSE)
 
-`gotmux` is a Go library for controlling, automating, and inspecting
-[tmux](https://github.com/tmux/tmux) servers through daemon-bound handles,
-bounded subprocesses, and real-time control-mode streams.
+`gotmux` lets you automate, control, and inspect [tmux](https://github.com/tmux/tmux) from Go.
 
 ## Features
 
-- **Type-safe options**: Strongly typed accessors for server, session, window, and pane configurations, plus custom `@user-options`.
-- **Context detection**: Automatically resolves `$TMUX` and `$TMUX_PANE` into verified session and pane handles.
-- **Dual transports**: Run concurrency-safe bounded subprocesses or open persistent control connections (`-C`) for real-time event streaming (`%output`, layouts, hooks).
-- **Daemon-bound handles**: `Session`, `Window`, and `Pane` handles verify daemon lifetimes to prevent accidental operations on recycled IDs after restarts.
-- **Testing fixtures**: Built-in `tmuxtest` package provides isolated, temporary tmux daemons with automatic cleanup for integration testing.
+- **Typed options:** Get and set tmux and `@user` options with native Go types.
+- **Current session detection:** Auto-discovers active sessions and panes from the environment.
+- **Live streaming:** Stream terminal output and window events in real time using tmux control mode (`-C`).
+- **Safe handles:** Protects against sending commands to the wrong session or pane if tmux restarts.
+- **Testing support:** Built-in `tmuxtest` helper launches temporary, isolated tmux instances for tests.
 
 ## Installation
 
