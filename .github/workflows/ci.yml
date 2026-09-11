@@ -46,7 +46,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libevent-dev libncurses-dev
       - name: macOS build dependencies
         if: runner.os == 'macOS'
-        run: brew install libevent ncurses pkg-config
+        run: brew install libevent ncurses pkg-config utf8proc
       - name: Build exact tmux release
         shell: bash
         env:
@@ -56,13 +56,16 @@ jobs:
           curl --fail --location --retry 3 "https://github.com/tmux/tmux/releases/download/${TMUX_RELEASE}/tmux-${TMUX_RELEASE}.tar.gz" -o "$RUNNER_TEMP/tmux.tar.gz"
           tar -xzf "$RUNNER_TEMP/tmux.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/tmux-${TMUX_RELEASE}"
+          EXTRA_FLAGS=""
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig"
+            export PKG_CONFIG_PATH="$(brew --prefix libevent)/lib/pkgconfig:$(brew --prefix ncurses)/lib/pkgconfig:$(brew --prefix utf8proc)/lib/pkgconfig"
+            EXTRA_FLAGS="--enable-utf8proc --disable-jemalloc"
           fi
-          ./configure --prefix="$RUNNER_TEMP/tmux-install"
+          ./configure --prefix="$RUNNER_TEMP/tmux-install" $EXTRA_FLAGS
           make -j2
           make install
           echo "TMUX_TEST_BINARY=$RUNNER_TEMP/tmux-install/bin/tmux" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/tmux-install/bin" >> "$GITHUB_PATH"
           test "$("$RUNNER_TEMP/tmux-install/bin/tmux" -V)" = "tmux ${TMUX_RELEASE}"
       - run: go mod tidy -diff
       - name: Real server contracts and race checks (missing tmux cannot skip)
