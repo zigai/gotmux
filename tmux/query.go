@@ -5,10 +5,13 @@ import (
 	"errors"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/zigai/gotmux/internal/schema"
 	"github.com/zigai/gotmux/internal/wire"
 )
+
+const retryBackoff = 5 * time.Millisecond
 
 // Format is an explicit tmux format expression string (such as "#{pane_id}").
 type Format string
@@ -148,6 +151,27 @@ func listCommandAndArgs(kind ObjectKind, target string) (string, []string, error
 	}
 }
 
+func (s *Server) parseOrRetry(ctx context.Context, op *operation, p plan, g *guard, r Result, fields []string, kind string) ([]map[string]string, error) {
+	rows, err := parseRaw(r.Stdout, fields, kind)
+	if err == nil || !errors.Is(err, wire.ErrRecord) {
+		return rows, err
+	}
+
+	time.Sleep(retryBackoff)
+
+	r2, err2 := s.execute(ctx, op, p, g, nil)
+	if err2 != nil {
+		return nil, err
+	}
+
+	rows2, err3 := parseRaw(r2.Stdout, fields, kind)
+	if err3 != nil {
+		return nil, err
+	}
+
+	return rows2, nil
+}
+
 func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, expected ServerIdentity, opts QueryOptions, target string) ([]map[string]string, error) {
 	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
 	if err != nil {
@@ -172,13 +196,15 @@ func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, ex
 	}
 
 	args = append(args, "-F", wire.RecordFormat(fields))
+	p := recordsPlan(command(name, args...))
+	g := newGuard(expected)
 
-	r, err := s.execute(ctx, op, recordsPlan(command(name, args...)), newGuard(expected), nil)
+	r, err := s.execute(ctx, op, p, g, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := parseRaw(r.Stdout, fields, string(kind))
+	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
 	if err != nil {
 		return nil, afterError(name, err)
 	}
@@ -436,12 +462,14 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 
 	args = append(args, wire.RecordFormat(fields))
 
-	r, err := s.execute(ctx, op, recordsPlan(command("display-message", args...)), g, nil)
+	p := recordsPlan(command("display-message", args...))
+
+	r, err := s.execute(ctx, op, p, g, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := parseRaw(r.Stdout, fields, string(kind))
+	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
 	if err != nil {
 		return nil, afterError("Info", err)
 	}

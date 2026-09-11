@@ -295,7 +295,12 @@ func TestIntegrationNoServerAndExistingOnly(t *testing.T) {
 	if binary == "" {
 		binary = "tmux"
 	}
-	path := filepath.Join(t.TempDir(), "absent")
+	dir, err := os.MkdirTemp("/tmp", "tg-abs-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "absent")
 	s, e := tmux.New(tmux.Config{Binary: binary, SocketPath: path, ConfigFile: "/dev/null"})
 	if e != nil {
 		t.Fatal(e)

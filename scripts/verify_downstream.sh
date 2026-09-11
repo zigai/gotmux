@@ -46,12 +46,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 
 	t "$module/tmux"
 )
 
 func main() {
-	server, err := t.New(t.Config{SocketName: "consumer-check"})
+	binary := os.Getenv("TMUX_TEST_BINARY")
+	if binary == "" {
+		binary, _ = exec.LookPath("tmux")
+	}
+	if binary == "" {
+		binary, _ = os.Executable()
+	}
+
+	server, err := t.New(t.Config{Binary: binary, SocketName: "consumer-check"})
 	if err != nil {
 		panic(err)
 	}
