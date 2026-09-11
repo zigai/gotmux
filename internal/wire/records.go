@@ -40,10 +40,22 @@ func RecordFormat(fields []string) string {
 	return b.String()
 }
 
+// ExpressionsFormat formats multiple expressions into a single length-prefixed netstring record.
+func ExpressionsFormat(exprs []string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s%d:", RecordPrefix, len(exprs))
+
+	for _, expr := range exprs {
+		fmt.Fprintf(&b, "#{n:#{l:}%s}:%s,", expr, expr)
+	}
+
+	return b.String()
+}
+
 func ExpressionFormat(expr string) string {
 	// Both expansions occur in one tmux format tree. Intended for deterministic
 	// format expressions; job-producing formats are not a synchronization API.
-	return RecordPrefix + "1:#{n:#{l:}" + expr + "}:" + expr + ","
+	return ExpressionsFormat([]string{expr})
 }
 
 func EncodeRecord(values []string) []byte {

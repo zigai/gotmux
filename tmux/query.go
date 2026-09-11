@@ -922,12 +922,22 @@ func (w Window) ActivePane(ctx context.Context) (Pane, error) {
 
 // Format evaluates an explicit tmux format expression in the target pane's context
 // and returns the expanded output bytes without trimming.
-// Format evaluates an expression in this pane's context.
 func (p Pane) Format(ctx context.Context, expr Format) ([]byte, error) { return p.h.format(ctx, expr) }
+
+// FormatMulti evaluates multiple explicit tmux format expressions in the target pane's context
+// and returns the expanded output bytes in input order without trimming.
+func (p Pane) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
+	return p.h.formatMulti(ctx, exprs)
+}
 
 // Format evaluates an expression in this session's context.
 func (s Session) Format(ctx context.Context, expr Format) ([]byte, error) {
 	return s.h.format(ctx, expr)
+}
+
+// FormatMulti evaluates multiple expressions in this session's context.
+func (s Session) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
+	return s.h.formatMulti(ctx, exprs)
 }
 
 // Format evaluates an expression in this window's context.
@@ -935,18 +945,46 @@ func (w Window) Format(ctx context.Context, expr Format) ([]byte, error) {
 	return w.h.format(ctx, expr)
 }
 
+// FormatMulti evaluates multiple expressions in this window's context.
+func (w Window) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
+	return w.h.formatMulti(ctx, exprs)
+}
+
 // Format evaluates an expression in this client's context.
 func (c Client) Format(ctx context.Context, expr Format) ([]byte, error) {
 	return c.h.format(ctx, expr)
 }
 
+// FormatMulti evaluates multiple expressions in this client's context.
+func (c Client) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
+	return c.h.formatMulti(ctx, exprs)
+}
+
 func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
+	results, err := h.formatMulti(ctx, []Format{expr})
+	if err != nil {
+		return nil, err
+	}
+
+	return results[0], nil
+}
+
+func (h handle) formatMulti(ctx context.Context, exprs []Format) ([][]byte, error) {
+	if len(exprs) == 0 {
+		return [][]byte{}, nil
+	}
+
 	if err := h.check(); err != nil {
 		return nil, opError("Format", err)
 	}
 
-	if !wire.ValidString(string(expr)) {
-		return nil, opError("Format", invalid("format"))
+	rawExprs := make([]string, len(exprs))
+	for i, expr := range exprs {
+		if !wire.ValidString(string(expr)) {
+			return nil, opError("Format", invalid("format"))
+		}
+
+		rawExprs[i] = string(expr)
 	}
 
 	opCtx, op, err := h.server.begin(ctx)
@@ -960,15 +998,20 @@ func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
 		targetFlag = "-c"
 	}
 
-	r, err := h.server.execute(opCtx, op, recordsPlan(command("display-message", "-p", targetFlag, h.id, wire.ExpressionFormat(string(expr)))), h.guard(), nil)
+	r, err := h.server.execute(opCtx, op, recordsPlan(command("display-message", "-p", targetFlag, h.id, wire.ExpressionsFormat(rawExprs))), h.guard(), nil)
 	if err != nil {
-		return r.Stdout, opError("Format", err)
+		return nil, opError("Format", err)
 	}
 
-	records, err := wire.ParseRecords(r.Stdout, 1)
+	records, err := wire.ParseRecords(r.Stdout, len(exprs))
 	if err != nil || len(records) != 1 {
 		return nil, afterError("Format", errors.Join(err, wire.ErrRecord))
 	}
 
-	return []byte(records[0][0]), nil
+	out := make([][]byte, len(records[0]))
+	for i, s := range records[0] {
+		out[i] = []byte(s)
+	}
+
+	return out, nil
 }

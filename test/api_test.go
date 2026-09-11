@@ -110,6 +110,16 @@ func TestIntegrationAPIQueries(t *testing.T) {
 		t.Fatalf("window format: %q, %v", got, err)
 	}
 
+	sMulti, err := session.FormatMulti(ctx, "#{session_id}", "#{session_name}")
+	if err != nil || len(sMulti) != 2 || string(sMulti[0]) != string(session.ID()) || string(sMulti[1]) != "fixture" {
+		t.Fatalf("session format multi: %q, %v", sMulti, err)
+	}
+
+	wMulti, err := window.FormatMulti(ctx, "#{window_id}", "#{window_name}")
+	if err != nil || len(wMulti) != 2 || string(wMulti[0]) != string(window.ID()) {
+		t.Fatalf("window format multi: %q, %v", wMulti, err)
+	}
+
 	panes, err := window.PanesWith(ctx, tmux.QueryOptions{Filter: "0", ExtraFields: nil})
 	if err != nil || len(panes) != 0 {
 		t.Fatalf("pane filter: %+v, %v", panes, err)
@@ -253,6 +263,11 @@ func TestIntegrationAPIControlSupport(t *testing.T) {
 	client := clients[0].Handle()
 	if got, err := client.Format(ctx, "#{client_name}"); err != nil || string(got) != string(client.Name()) {
 		t.Fatalf("client format: %q, %v", got, err)
+	}
+
+	cMulti, err := client.FormatMulti(ctx, "#{client_name}", "#{client_control_mode}")
+	if err != nil || len(cMulti) != 2 || string(cMulti[0]) != string(client.Name()) || string(cMulti[1]) != "1" {
+		t.Fatalf("client format multi: %q, %v", cMulti, err)
 	}
 }
 

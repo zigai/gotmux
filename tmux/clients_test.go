@@ -105,3 +105,34 @@ func TestPopupArgsOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestFormatMultiEmpty(t *testing.T) {
+	var (
+		p Pane
+		w Window
+		s Session
+		c Client
+	)
+
+	for _, name := range []string{"pane", "window", "session", "client"} {
+		var (
+			out [][]byte
+			err error
+		)
+
+		switch name {
+		case "pane":
+			out, err = p.FormatMulti(t.Context())
+		case "window":
+			out, err = w.FormatMulti(t.Context())
+		case "session":
+			out, err = s.FormatMulti(t.Context())
+		case "client":
+			out, err = c.FormatMulti(t.Context())
+		}
+
+		if err != nil || len(out) != 0 {
+			t.Fatalf("%s: expected empty result and nil error, got %v, %v", name, out, err)
+		}
+	}
+}

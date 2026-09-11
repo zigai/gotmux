@@ -187,3 +187,22 @@ func FuzzOctal(f *testing.F) {
 		}
 	})
 }
+
+func TestExpressionsFormat(t *testing.T) {
+	t.Parallel()
+
+	if got := ExpressionsFormat(nil); got != "TGO1:0:" {
+		t.Fatalf("ExpressionsFormat(nil) = %q, want %q", got, "TGO1:0:")
+	}
+
+	if got := ExpressionsFormat([]string{"#{pane_id}"}); got != ExpressionFormat("#{pane_id}") {
+		t.Fatalf("ExpressionsFormat(single) = %q, want %q", got, ExpressionFormat("#{pane_id}"))
+	}
+
+	multi := ExpressionsFormat([]string{"#{session_name}", "#{window_name}"})
+	want := "TGO1:2:#{n:#{l:}#{session_name}}:#{session_name},#{n:#{l:}#{window_name}}:#{window_name},"
+
+	if multi != want {
+		t.Fatalf("ExpressionsFormat(multi) = %q, want %q", multi, want)
+	}
+}
