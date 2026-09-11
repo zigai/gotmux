@@ -235,6 +235,50 @@ func (c Client) Message(ctx context.Context, text string) error {
 	return c.h.act(ctx, "display-message", "-c", c.h.id, "--", wire.LiteralFormat(text))
 }
 
+// Message requests a status message on the client currently viewing this pane (display-message -t).
+// Completion means tmux accepted the display request, not that the user read or dismissed it.
+func (p Pane) Message(ctx context.Context, text string) error {
+	if !wire.ValidString(text) {
+		return opError("Message", invalid("message"))
+	}
+
+	if p.h.server != nil && p.h.server.conn != nil {
+		return opError("Message", ErrTransportUnsupported)
+	}
+
+	if err := p.h.check(); err != nil {
+		return opError("Message", err)
+	}
+
+	return p.h.act(ctx, "display-message", "-t", p.h.id, "--", wire.LiteralFormat(text))
+}
+
+// Message requests a status message on the active client attached to this server (display-message).
+// Completion means tmux accepted the display request, not that the user read or dismissed it.
+func (s *Server) Message(ctx context.Context, text string) error {
+	if s == nil {
+		return opError("Message", ErrInvalidHandle)
+	}
+
+	if !wire.ValidString(text) {
+		return opError("Message", invalid("message"))
+	}
+
+	if s.conn != nil {
+		return opError("Message", ErrTransportUnsupported)
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return opError("Message", err)
+	}
+	defer op.close()
+
+	_, err = s.execute(opCtx, op, emptyPlan(command("display-message", "--", wire.LiteralFormat(text))), nil, nil)
+
+	return opError("Message", err)
+}
+
 // Popup waits for tmux's popup command queue to resume (normally dismissal).
 // A deadline is required. Cancellation ends the local waiter, not necessarily
 // the server-side popup. No exit status or user choice is inferred.

@@ -136,3 +136,23 @@ func TestFormatMultiEmpty(t *testing.T) {
 		}
 	}
 }
+
+func TestMessageValidation(t *testing.T) {
+	var (
+		c Client
+		p Pane
+		s *Server
+	)
+
+	if err := c.Message(t.Context(), "\x00invalid"); err == nil {
+		t.Fatal("expected error on NUL byte in message")
+	}
+
+	if err := p.Message(t.Context(), "\x00invalid"); err == nil {
+		t.Fatal("expected error on NUL byte in message")
+	}
+
+	if err := s.Message(t.Context(), "text"); !errors.Is(err, ErrInvalidHandle) {
+		t.Fatalf("expected ErrInvalidHandle on nil server, got %v", err)
+	}
+}

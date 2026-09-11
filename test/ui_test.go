@@ -190,3 +190,33 @@ func TestIntegrationClientBinding(t *testing.T) {
 
 	awaitUserOption(t, ctx, session, "@key-effect", "pressed")
 }
+
+func TestIntegrationMessage(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	client, _, output := uiClient(t, ctx, server, session)
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatalf("panes: %v", err)
+	}
+
+	pane := panes[0].Handle()
+
+	if err := client.Message(ctx, "CLIENT_MSG_OK"); err != nil {
+		t.Fatalf("client.Message: %v", err)
+	}
+
+	awaitObservation(t, ctx, "client message rendered", func() bool { return output.contains("CLIENT_MSG_OK") })
+
+	if err := pane.Message(ctx, "PANE_MSG_OK"); err != nil {
+		t.Fatalf("pane.Message: %v", err)
+	}
+
+	awaitObservation(t, ctx, "pane message rendered", func() bool { return output.contains("PANE_MSG_OK") })
+
+	if err := server.Message(ctx, "SERVER_MSG_OK"); err != nil {
+		t.Fatalf("server.Message: %v", err)
+	}
+
+	awaitObservation(t, ctx, "server message rendered", func() bool { return output.contains("SERVER_MSG_OK") })
+}
