@@ -137,6 +137,32 @@ func TestControlEmptyOutputNotification(t *testing.T) {
 	}
 }
 
+func TestControlLayoutChangeNotifications(t *testing.T) {
+	const layout = "a87f,100x30,0,0,2"
+
+	for _, flags := range []string{"", "*Z"} {
+		e, err := decodeEvent([]byte("%layout-change @1 "+layout+" "+layout+" "+flags+"\n"), 4096)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		changed, ok := e.(LayoutChangedEvent)
+		if !ok || changed.WindowID != "@1" || changed.Layout != layout || changed.VisibleLayout != layout || changed.Flags != flags {
+			t.Fatalf("layout notification lost fields: %+v", e)
+		}
+	}
+
+	for _, line := range []string{
+		"%layout-change @1 " + layout + " " + layout + "\n",
+		"%layout-change @1  " + layout + " *\n",
+		"%layout-change @1 " + layout + "  *\n",
+	} {
+		if _, err := decodeEvent([]byte(line), 4096); !errors.Is(err, ErrProtocol) {
+			t.Fatalf("incomplete layout %q: %v", line, err)
+		}
+	}
+}
+
 func TestControlCommandErrorStartingWithPercent(t *testing.T) {
 	wire := "%begin 1 4 1\n%: not a real event\n%error 1 4 1\n"
 

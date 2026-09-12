@@ -295,8 +295,8 @@ func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event
 }
 
 func decodeLayoutEvent(base eventBase, rest string) (Event, error) {
-	fields := strings.Fields(rest)
-	if len(fields) != 4 || !WindowID(fields[0]).Valid() {
+	fields := strings.Split(rest, " ")
+	if len(fields) != 4 || !WindowID(fields[0]).Valid() || fields[1] == "" || fields[2] == "" {
 		return nil, ErrProtocol
 	}
 
