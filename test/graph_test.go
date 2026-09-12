@@ -81,11 +81,19 @@ func TestIntegrationGraphUnlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var options tmux.LinkOptions
-
-	shared, err := original.Window().Link(ctx, other, options)
+	window, err := server.WindowHandle(original.Window().ID())
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	var options tmux.LinkOptions
+
+	shared, err := window.Link(ctx, other, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !shared.Identity().Equal(other.Identity()) || !shared.Window().Equal(original.Window()) {
+		t.Fatalf("returned link lost window provenance: %+v", shared)
 	}
 
 	want := graphState(t, ctx, server)
@@ -178,40 +186,162 @@ func TestIntegrationGraphJoinBreak(t *testing.T) {
 }
 
 func TestIntegrationGraphPaneSwap(t *testing.T) {
-	server, session, ctx := apiFixture(t)
-	_, first := graphWindow(t, ctx, session)
-	_, second := graphWindow(t, ctx, session)
-	want := graphState(t, ctx, server)
-	a, b := string(first.ID()), string(second.ID())
-	want[a], want[b] = want[b], want[a]
+	for _, tc := range []struct {
+		name           string
+		unprobedSource bool
+		unprobedTarget bool
+	}{
+		{name: "verified"},
+		{name: "unprobed-source", unprobedSource: true},
+		{name: "unprobed-target", unprobedTarget: true},
+		{name: "unprobed-both", unprobedSource: true, unprobedTarget: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, session, ctx := apiFixture(t)
+			_, first := graphWindow(t, ctx, session)
+			_, second := graphWindow(t, ctx, session)
+			want := graphState(t, ctx, server)
+			a, b := string(first.ID()), string(second.ID())
+			want[a], want[b] = want[b], want[a]
 
-	if err := first.Swap(ctx, second, false); err != nil {
-		t.Fatal(err)
+			var err error
+			if tc.unprobedSource {
+				first, err = server.PaneHandle(first.ID())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.unprobedTarget {
+				second, err = server.PaneHandle(second.ID())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			if err := first.Swap(ctx, second, false); err != nil {
+				t.Fatal(err)
+			}
+
+			assertGraph(t, ctx, server, want)
+		})
 	}
-
-	assertGraph(t, ctx, server, want)
 }
 
 func TestIntegrationGraphCrossServer(t *testing.T) {
-	server, session, ctx := apiFixture(t)
-	_, source := graphWindow(t, ctx, session)
-	other := tmuxtest.NewServer(t)
-	target := firstPane(t, other, ctx)
-	before := graphState(t, ctx, server)
-	otherBefore := graphState(t, ctx, other)
-
-	var options tmux.JoinOptions
-
-	for _, action := range []func() error{
-		func() error { return source.Swap(ctx, target, false) },
-		func() error { return source.Join(ctx, target, options) },
+	for _, tc := range []struct {
+		name           string
+		unprobedSource bool
+		unprobedTarget bool
+	}{
+		{name: "verified"},
+		{name: "unprobed-source", unprobedSource: true},
+		{name: "unprobed-target", unprobedTarget: true},
+		{name: "unprobed-both", unprobedSource: true, unprobedTarget: true},
 	} {
-		if err := action(); !errors.Is(err, tmux.ErrInvalidHandle) {
-			t.Fatalf("cross-server mutation: %v", err)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			server, session, ctx := apiFixture(t)
+			_, source := graphWindow(t, ctx, session)
+			other := tmuxtest.NewServer(t)
+			target := firstPane(t, other, ctx)
+			before := graphState(t, ctx, server)
+			otherBefore := graphState(t, ctx, other)
+			// The foreign ID must name a pane in a different source window,
+			// so an incorrectly routed mutation changes the graph.
+			if collision, ok := before[string(target.ID())]; !ok || collision == before[string(source.ID())] {
+				t.Fatal("fixture lacks a cross-window pane ID collision")
+			}
 
-		assertGraph(t, ctx, server, before)
-		assertGraph(t, ctx, other, otherBefore)
+			var err error
+			if tc.unprobedSource {
+				source, err = server.PaneHandle(source.ID())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.unprobedTarget {
+				target, err = other.PaneHandle(target.ID())
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var options tmux.JoinOptions
+			for _, action := range []struct {
+				name string
+				run  func() error
+			}{
+				{name: "swap", run: func() error { return source.Swap(ctx, target, false) }},
+				{name: "join", run: func() error { return source.Join(ctx, target, options) }},
+			} {
+				t.Run(action.name, func(t *testing.T) {
+					err := action.run()
+					if !errors.Is(err, tmux.ErrInvalidHandle) {
+						t.Errorf("cross-server mutation: %v", err)
+					}
+					if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
+						t.Errorf("cross-server mutation was not rejected before send: %v", err)
+					}
+
+					assertGraph(t, ctx, server, before)
+					assertGraph(t, ctx, other, otherBefore)
+				})
+			}
+		})
+	}
+}
+
+func TestIntegrationGraphHandleLifetimes(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		want error
+	}{
+		{name: "control-and-auxiliary", want: nil},
+		{name: "different-connections", want: tmux.ErrInvalidHandle},
+		{name: "unbound-target", want: tmux.ErrInvalidHandle},
+		{name: "closed-connection", want: tmux.ErrClosed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			server, session, ctx := apiFixture(t)
+			_, first := graphWindow(t, ctx, session)
+			_, second := graphWindow(t, ctx, session)
+			connection := apiControl(t, server, session, ctx)
+			targetServer := connection.AuxiliaryServer()
+			switch test.name {
+			case "different-connections":
+				targetServer = apiControl(t, server, session, ctx).Server()
+			case "unbound-target":
+				targetServer = server
+			case "closed-connection":
+				if err := connection.Close(); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			source, err := connection.Server().PaneHandle(first.ID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			target, err := targetServer.PaneHandle(second.ID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := graphState(t, ctx, server)
+			if test.want == nil {
+				a, b := string(first.ID()), string(second.ID())
+				want[a], want[b] = want[b], want[a]
+			}
+
+			err = source.Swap(ctx, target, false)
+			if !errors.Is(err, test.want) {
+				t.Errorf("swap error: %v, want %v", err, test.want)
+			}
+			if test.want != nil {
+				if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
+					t.Errorf("incompatible lifetime was not rejected before send: %v", err)
+				}
+			}
+			assertGraph(t, ctx, server, want)
+		})
 	}
 }
 

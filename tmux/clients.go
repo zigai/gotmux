@@ -169,9 +169,11 @@ func (f ClientFlag) valid() bool {
 
 // Switch switches this client terminal to display session s.
 func (c Client) Switch(ctx context.Context, s Session, o SwitchOptions) error {
-	if err := sameHandles(c.h, s.h); err != nil {
+	opCtx, op, err := beginHandles(ctx, &c.h, &s.h)
+	if err != nil {
 		return opError("SwitchClient", err)
 	}
+	defer op.close()
 
 	args := []string{"-c", c.h.id, "-t", s.h.id}
 	if o.ReadOnly {
@@ -182,7 +184,9 @@ func (c Client) Switch(ctx context.Context, s Session, o SwitchOptions) error {
 		args = append(args, "-E")
 	}
 
-	return c.h.act(ctx, "switch-client", args...)
+	_, err = c.h.server.execute(opCtx, op, emptyPlan(command("switch-client", args...)), c.h.guard(), nil)
+
+	return opError("switch-client", err)
 }
 
 // Detach detaches this client terminal from the tmux server (detach-client).

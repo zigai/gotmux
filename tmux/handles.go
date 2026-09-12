@@ -334,20 +334,58 @@ func (l WindowLink) act(ctx context.Context, name string, args ...string) error 
 	return opError(name, err)
 }
 
-func sameHandles(a, b handle) error {
+// beginHandles binds only the operation's handle copies, retaining any verified
+// participant's identity so an unprobed source cannot bypass its daemon guard.
+func beginHandles(ctx context.Context, a, b *handle) (context.Context, *operation, error) {
 	if err := a.check(); err != nil {
-		return err
+		return nil, nil, err
 	}
 
 	if err := b.check(); err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	if !a.origin.Equal(b.origin) {
-		return ErrInvalidHandle
+	if a.server.endpoint != b.server.endpoint || a.server.lifetime != b.server.lifetime {
+		return nil, nil, ErrInvalidHandle
 	}
 
-	return nil
+	if a.origin.valid() && b.origin.valid() && !a.origin.Equal(b.origin) {
+		return nil, nil, ErrInvalidHandle
+	}
+
+	opCtx, op, err := a.server.begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	identity, err := sharedHandleIdentity(opCtx, op, a, b)
+	if err != nil {
+		op.close()
+		return nil, nil, err
+	}
+
+	a.origin = identity
+	b.origin = identity
+
+	return opCtx, op, nil
+}
+
+func sharedHandleIdentity(ctx context.Context, op *operation, a, b *handle) (ServerIdentity, error) {
+	if a.origin.valid() {
+		return a.origin, nil
+	}
+
+	if b.origin.valid() {
+		return b.origin, nil
+	}
+
+	if a.server.bound != nil {
+		return *a.server.bound, nil
+	}
+
+	info, err := a.server.probe(ctx, op)
+
+	return info.Identity, err
 }
 
 func (h handle) usingSubprocess() (handle, error) {

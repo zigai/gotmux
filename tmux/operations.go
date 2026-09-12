@@ -314,10 +314,6 @@ func linkTarget(s Session, index *int) (string, error) {
 // Link creates a new link to this window in session s at the specified slot index.
 // A nil Index chooses a free slot. Returns a handle for the confirmed destination slot.
 func (w Window) Link(ctx context.Context, s Session, o LinkOptions) (WindowLink, error) {
-	if err := sameHandles(w.h, s.h); err != nil {
-		return WindowLink{}, opError("LinkWindow", err)
-	}
-
 	target, err := linkTarget(s, o.Index)
 	if err != nil {
 		return WindowLink{}, opError("LinkWindow", err)
@@ -336,18 +332,18 @@ func (w Window) Link(ctx context.Context, s Session, o LinkOptions) (WindowLink,
 		args = append(args, "-k")
 	}
 
-	return mutateLink(ctx, w.h, w.h.guard(), "link-window", args, target)
-}
-
-func mutateLink(ctx context.Context, h handle, g *guard, name string, args []string, target string) (WindowLink, error) {
-	opCtx, op, err := h.server.begin(ctx)
+	opCtx, op, err := beginHandles(ctx, &w.h, &s.h)
 	if err != nil {
-		return WindowLink{}, opError(name, err)
+		return WindowLink{}, opError("LinkWindow", err)
 	}
 	defer op.close()
 
+	return mutateLink(opCtx, op, w.h, w.h.guard(), "link-window", args, target)
+}
+
+func mutateLink(ctx context.Context, op *operation, h handle, g *guard, name string, args []string, target string) (WindowLink, error) {
 	if strings.HasSuffix(target, ":") {
-		index, err := freeWindowIndex(opCtx, op, h.server, h.origin, target)
+		index, err := freeWindowIndex(ctx, op, h.server, h.origin, target)
 		if err != nil {
 			return WindowLink{}, opError(name, err)
 		}
@@ -364,7 +360,7 @@ func mutateLink(ctx context.Context, h handle, g *guard, name string, args []str
 
 	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, wire.RecordFormat(fieldsFor(WindowKind))))}
 
-	r, err := h.server.execute(opCtx, op, plan{nodes: nodes, mode: replyRecords, allowStart: false}, g, nil)
+	r, err := h.server.execute(ctx, op, plan{nodes: nodes, mode: replyRecords, allowStart: false}, g, nil)
 	if err != nil {
 		return WindowLink{}, opError(name, err)
 	}
@@ -401,10 +397,6 @@ func (l WindowLink) Move(ctx context.Context, s Session, o LinkOptions) (WindowL
 		return WindowLink{}, opError("MoveWindow", err)
 	}
 
-	if err := sameHandles(l.h, s.h); err != nil {
-		return WindowLink{}, opError("MoveWindow", err)
-	}
-
 	target, err := linkTarget(s, o.Index)
 	if err != nil {
 		return WindowLink{}, opError("MoveWindow", err)
@@ -423,7 +415,13 @@ func (l WindowLink) Move(ctx context.Context, s Session, o LinkOptions) (WindowL
 		args = append(args, "-k")
 	}
 
-	return mutateLink(ctx, l.h, l.guard(), "move-window", args, target)
+	opCtx, op, err := beginHandles(ctx, &l.h, &s.h)
+	if err != nil {
+		return WindowLink{}, opError("MoveWindow", err)
+	}
+	defer op.close()
+
+	return mutateLink(opCtx, op, l.h, l.guard(), "move-window", args, target)
 }
 
 // Swap exchanges the slot positions of this window link and another window link.
@@ -436,11 +434,7 @@ func (l WindowLink) Swap(ctx context.Context, other WindowLink, selectWindow boo
 		return opError("SwapWindow", err)
 	}
 
-	if err := sameHandles(l.h, other.h); err != nil {
-		return opError("SwapWindow", err)
-	}
-
-	opCtx, op, err := l.h.server.begin(ctx)
+	opCtx, op, err := beginHandles(ctx, &l.h, &other.h)
 	if err != nil {
 		return opError("SwapWindow", err)
 	}
@@ -461,10 +455,6 @@ func (l WindowLink) Swap(ctx context.Context, other WindowLink, selectWindow boo
 
 // Join moves this pane from its current window into target's window as a split.
 func (p Pane) Join(ctx context.Context, target Pane, o JoinOptions) error {
-	if err := sameHandles(p.h, target.h); err != nil {
-		return opError("JoinPane", err)
-	}
-
 	if o.Direction > Horizontal {
 		return opError("JoinPane", invalid("direction"))
 	}
@@ -491,7 +481,15 @@ func (p Pane) Join(ctx context.Context, target Pane, o JoinOptions) error {
 
 	args = append(args, size...)
 
-	return p.h.act(ctx, "join-pane", args...)
+	opCtx, op, err := beginHandles(ctx, &p.h, &target.h)
+	if err != nil {
+		return opError("JoinPane", err)
+	}
+	defer op.close()
+
+	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("join-pane", args...)), p.h.guard(), nil)
+
+	return opError("join-pane", err)
 }
 
 // Move is an alias for [Pane.Join], moving this pane beside target pane.
@@ -501,25 +499,25 @@ func (p Pane) Move(ctx context.Context, target Pane, o JoinOptions) error {
 
 // Swap exchanges the positions and dimensions of this pane and another pane.
 func (p Pane) Swap(ctx context.Context, other Pane, selectPane bool) error {
-	if err := sameHandles(p.h, other.h); err != nil {
+	opCtx, op, err := beginHandles(ctx, &p.h, &other.h)
+	if err != nil {
 		return opError("SwapPane", err)
 	}
+	defer op.close()
 
 	args := []string{"-s", p.h.id, "-t", other.h.id}
 	if !selectPane {
 		args = append(args, "-d")
 	}
 
-	return p.h.act(ctx, "swap-pane", args...)
+	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("swap-pane", args...)), p.h.guard(), nil)
+
+	return opError("swap-pane", err)
 }
 
 // Break removes this pane from its current window and creates a new window containing only
 // this pane in session s. Returns a [WindowLink] handle for the new window.
 func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink, error) {
-	if err := sameHandles(p.h, s.h); err != nil {
-		return WindowLink{}, opError("BreakPane", err)
-	}
-
 	target, err := linkTarget(s, o.Index)
 	if err != nil {
 		return WindowLink{}, opError("BreakPane", err)
@@ -530,7 +528,7 @@ func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink,
 		return WindowLink{}, opError("BreakPane", err)
 	}
 
-	opCtx, op, err := p.h.server.begin(ctx)
+	opCtx, op, err := beginHandles(ctx, &p.h, &s.h)
 	if err != nil {
 		return WindowLink{}, opError("BreakPane", err)
 	}
