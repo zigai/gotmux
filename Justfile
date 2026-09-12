@@ -83,7 +83,7 @@ coverage:
     set -e
     coverage_file=$(mktemp)
     trap 'rm -f "$coverage_file"' EXIT
-    TMUX_INTEGRATION_REQUIRED=1 go test -tags=integration -coverprofile="$coverage_file" ./...
+    TMUX_INTEGRATION_REQUIRED=1 go test -tags=integration -coverpkg=./... -coverprofile="$coverage_file" ./...
     go tool cover -func="$coverage_file"
 # Update Go module dependencies
 tidy:
