@@ -222,7 +222,7 @@ func scanRecord(r Reader, maxBytes int64, mode uint8) ([]byte, []string, error) 
 	for range count {
 		b, n, e := scanField(r, maxBytes-used)
 		if e != nil {
-			return nil, nil, e
+			return wire.Bytes(), nil, e
 		}
 
 		if mode&wantWire != 0 {
@@ -240,11 +240,11 @@ func scanRecord(r Reader, maxBytes int64, mode uint8) ([]byte, []string, error) 
 	}
 
 	if used >= maxBytes {
-		return nil, nil, ErrRecord
+		return wire.Bytes(), nil, ErrRecord
 	}
 
 	if err := readRecordTerminator(r); err != nil {
-		return nil, nil, err
+		return wire.Bytes(), nil, err
 	}
 
 	if mode&wantWire != 0 {

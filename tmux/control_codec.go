@@ -119,12 +119,21 @@ func isAllowedMarker(line []byte) bool {
 }
 
 func readRecordWireChunk(r *bufio.Reader, left int64) ([]byte, error) {
-	wire, err := wire.ReadRecordWire(r, left)
+	wireChunk, err := wire.ReadRecordWire(r, left)
 	if err != nil {
+		if errors.Is(err, wire.ErrRecord) {
+			rest, readErr := boundedLine(r, left)
+			if readErr != nil {
+				return nil, errors.Join(ErrProtocol, err, readErr)
+			}
+
+			return append(wireChunk, rest...), nil
+		}
+
 		return nil, errors.Join(ErrProtocol, err)
 	}
 
-	return wire, nil
+	return wireChunk, nil
 }
 
 func checkFrameEnd(line []byte, ending string, id frameID, ordinary bool) (bool, error) {
