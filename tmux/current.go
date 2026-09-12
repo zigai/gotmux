@@ -126,6 +126,7 @@ func Current(ctx context.Context) (CurrentInfo, error) {
 }
 
 // CurrentWithEnv discovers and verifies current tmux context using the provided [Environment] values.
+// Returns [ErrServerChanged] if the environment PID does not match the answering daemon.
 func CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
 	hints, err := ParseEnvironment(env)
 	if err != nil {
@@ -141,7 +142,8 @@ func CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
 }
 
 // CurrentWithEnv verifies the provided [Environment] against this specific server instance,
-// asserting that the socket path matches and resolving the active pane, window, and session.
+// asserting that the socket path and daemon PID match before resolving the pane, window, and session.
+// Returns [ErrInvalidHandle] for a socket mismatch and [ErrServerChanged] for a PID mismatch.
 func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
 	hints, err := ParseEnvironment(env)
 	if err != nil {
@@ -155,6 +157,10 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 	snap, err := s.Snapshot(ctx)
 	if err != nil {
 		return CurrentInfo{}, opError("Current", err)
+	}
+
+	if hints.PID != snap.Identity.PID {
+		return CurrentInfo{}, opError("Current", ErrServerChanged)
 	}
 
 	pid, ok := hints.PaneID.Get()
