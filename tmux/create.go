@@ -24,7 +24,9 @@ type NewSessionOptions struct {
 	// Program specifies the initial command. Zero value runs the default shell.
 	Program Program
 
-	// Env specifies environment variables passed to the launched program.
+	// Env specifies environment variable overrides for the launched initial process.
+	// Overrides are applied directly to the process environment via an execution wrapper,
+	// not native session environment variables (new-session -e).
 	// Overriding environment variables requires an explicit [Exec] or [Shell] Program;
 	// using Env with the zero Program{} returns [ErrUnsupported] to prevent ambient PATH corruption.
 	Env map[string]string
@@ -50,7 +52,8 @@ type NewWindowOptions struct {
 	// Program specifies the initial command. Zero value runs the default shell.
 	Program Program
 
-	// Env specifies environment overrides. Requires explicit [Exec] or [Shell].
+	// Env specifies environment variable overrides for the launched process via an execution wrapper.
+	// Requires explicit [Exec] or [Shell].
 	Env map[string]string
 
 	// Index optionally specifies the slot index in the session.
@@ -74,7 +77,8 @@ type SplitOptions struct {
 	// Program specifies the initial process. Zero value runs the default shell.
 	Program Program
 
-	// Env specifies environment overrides. Requires explicit [Exec] or [Shell].
+	// Env specifies environment variable overrides for the launched process via an execution wrapper.
+	// Requires explicit [Exec] or [Shell].
 	Env map[string]string
 
 	// Select controls whether the new pane gains focus immediately.

@@ -35,7 +35,7 @@ type (
 		// Dir specifies the working directory for the process.
 		Dir string
 
-		// Env specifies environment variable overrides.
+		// Env specifies environment variable overrides for the respawned process via an execution wrapper.
 		Env map[string]string
 
 		// KillRunning kills the process if still running (-k flag).
@@ -81,15 +81,18 @@ type (
 		Select bool
 	}
 
-	// PipeOptions configures piping pane terminal output to a shell command.
+	// PipeOptions configures piping pane terminal I/O to/from a shell command.
 	PipeOptions struct {
 		// OnlyIfNotPiped avoids starting if a pipe is already open (-o flag).
 		OnlyIfNotPiped bool
 
-		// Input pipes input sent to the pane into the command (-I flag).
+		// Input connects the shell command's stdout to the pane (-I flag).
+		// Anything the command prints is written to the pane as if it were typed.
 		Input bool
 
-		// Output pipes output produced by the pane into the command (-O flag).
+		// Output connects the pane's output to the shell command's stdin (-O flag).
+		// Any output produced in the pane is piped into the shell command.
+		// When neither Input nor Output is specified, native tmux defaults to Output.
 		Output bool
 	}
 )
