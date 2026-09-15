@@ -288,7 +288,7 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: err}
 	}
 	if p.mode == replyRaw {
-		return failed(unsupportedTransport("ambiguous raw/control output; explicitly use subprocess transport", Control, ErrTransportUnsupported))
+		return failed(unsupportedControl("ambiguous raw/control output; explicitly use subprocess transport", ErrTransportUnsupported))
 	}
 
 	if n > c.opts.QueuedBytes {

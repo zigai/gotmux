@@ -234,11 +234,11 @@ func unsupported(feature string) *UnsupportedError {
 	}
 }
 
-func unsupportedTransport(feature string, t Transport, err error) *UnsupportedError {
+func unsupportedControl(feature string, err error) *UnsupportedError {
 	return &UnsupportedError{
 		Feature:   feature,
 		Version:   Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false},
-		Transport: t,
+		Transport: Control,
 		Err:       err,
 	}
 }

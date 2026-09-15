@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 func localServer(t *testing.T) *Server {
 	t.Helper()
 
-	s, e := New(Config{Binary: "/bin/sh", SocketPath: filepath.Join(t.TempDir(), "s"), SocketName: "", ConfigFile: "", Env: []string{}, Dir: t.TempDir(), Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	s, e := New(Config{Binary: "/bin/sh", SocketPath: filepath.Join(t.TempDir(), "s"), SocketName: "", ConfigFile: "", Env: []string{}, Dir: t.TempDir(), Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -38,7 +39,7 @@ func TestNewIsPureAndCopiesConfig(t *testing.T) {
 
 	env := []string{"PATH=" + dir, "DATA=before"}
 
-	s, e := New(Config{Binary: "fake", Dir: dir, Env: env, SocketName: "selected", SocketPath: "", ConfigFile: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	s, e := New(Config{Binary: "fake", Dir: dir, Env: env, SocketName: "selected", SocketPath: "", ConfigFile: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -69,7 +70,7 @@ func TestNewValidation(t *testing.T) {
 }
 
 func TestEnvironmentSelection(t *testing.T) {
-	s, e := New(Config{Binary: "/bin/sh", Env: []string{"TMUX=/tmp/a,b,c,123,5", "TMUX_PANE=%9"}, SocketPath: "", SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	s, e := New(Config{Binary: "/bin/sh", Env: []string{"TMUX=/tmp/a,b,c,123,5", "TMUX_PANE=%9"}, SocketPath: "", SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -78,7 +79,7 @@ func TestEnvironmentSelection(t *testing.T) {
 		t.Fatal(s.Endpoint())
 	}
 
-	s, e = New(Config{Binary: "/bin/sh", SocketPath: "/tmp/explicit", Env: []string{"TMUX=malformed"}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	s, e = New(Config{Binary: "/bin/sh", SocketPath: "/tmp/explicit", Env: []string{"TMUX=malformed"}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil || s.Endpoint().SocketPath != "/tmp/explicit" {
 		t.Fatalf("%v %v", s, e)
 	}
@@ -88,12 +89,12 @@ func TestEnvironmentNilVersusEmpty(t *testing.T) {
 	t.Setenv("TMUX_GO_CAPTURE_TEST", "present")
 	t.Setenv("TMUX", "")
 
-	a, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	a, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	b, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", Env: []string{}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	b, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", Env: []string{}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -279,5 +280,150 @@ func TestEmptyBufferWriteIsNotSilentSuccess(t *testing.T) {
 	name, _ := NamedBuffer("x")
 	if e := s.WriteBuffer(context.Background(), name, nil); !errors.Is(e, ErrUnsupported) || outcomeOf(e).Effect != NotSent {
 		t.Fatal(e)
+	}
+}
+
+func TestConfigRootOptionsValidation(t *testing.T) {
+	dir := t.TempDir()
+	baseCfg := Config{
+		Binary:           "/bin/sh",
+		SocketPath:       "",
+		SocketName:       "test-sock",
+		ConfigFile:       "",
+		Env:              []string{},
+		Dir:              dir,
+		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         LogNone,
+		LoginShell:       false,
+	}
+
+	// Valid configurations
+	validCfg := baseCfg
+	validCfg.UTF8 = UTF8Omit
+	validCfg.Colors256 = true
+	validCfg.LoginShell = true
+	validCfg.LogLevel = LogDebug
+	features := []string{"256", "RGB", "bidi"}
+	validCfg.TerminalFeatures = features
+
+	s, err := New(validCfg)
+	if err != nil {
+		t.Fatalf("expected valid config to succeed, got %v", err)
+	}
+
+	// Verify slice was cloned
+	features[0] = "mutated"
+
+	if s.config.TerminalFeatures[0] == "mutated" {
+		t.Fatal("expected TerminalFeatures slice to be copied, but was mutated")
+	}
+
+	// Invalid UTF8Mode
+	badUTF8 := baseCfg
+	badUTF8.UTF8 = UTF8Mode(99)
+
+	if _, err := New(badUTF8); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for bad UTF8Mode, got %v", err)
+	}
+
+	// Invalid LogLevel
+	badLog := baseCfg
+	badLog.LogLevel = LogLevel(99)
+
+	if _, err := New(badLog); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for bad LogLevel, got %v", err)
+	}
+
+	// Invalid TerminalFeatures (contains comma, space, empty, or NUL)
+	for _, badFeature := range [][]string{
+		{""},
+		{" "},
+		{"RGB 256"},
+		{"has,comma"},
+		{"has\x00nul"},
+		{"has\nnewline"},
+	} {
+		badFeatCfg := baseCfg
+		badFeatCfg.TerminalFeatures = badFeature
+
+		if _, err := New(badFeatCfg); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("expected ErrInvalidArgument for bad TerminalFeatures %v, got %v", badFeature, err)
+		}
+	}
+}
+
+func TestBaseArgsRootFlags(t *testing.T) {
+	dir := t.TempDir()
+
+	s, err := New(Config{
+		Binary:           "/bin/sh",
+		SocketPath:       "",
+		SocketName:       "custom",
+		ConfigFile:       "/path/to/tmux.conf",
+		Env:              []string{},
+		Dir:              dir,
+		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             UTF8Force,
+		Colors256:        true,
+		TerminalFeatures: []string{"256", "RGB"},
+		LogLevel:         LogDebug,
+		LoginShell:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// allowStart: false -> includes -N
+	argsNoStart := s.baseArgs(false)
+
+	expectedNoStart := []string{
+		"-u",
+		"-2",
+		"-l",
+		"-vv",
+		"-T", "256,RGB",
+		"-N",
+		"-L", "custom",
+		"-f", "/path/to/tmux.conf",
+	}
+	if !reflect.DeepEqual(argsNoStart, expectedNoStart) {
+		t.Errorf("baseArgs(false) mismatch:\ngot:  %v\nwant: %v", argsNoStart, expectedNoStart)
+	}
+
+	// allowStart: true -> omits -N
+	argsStart := s.baseArgs(true)
+	if slices.Contains(argsStart, "-N") {
+		t.Errorf("expected baseArgs(true) to omit -N, got %v", argsStart)
+	}
+
+	// UTF8Omit -> omits -u
+	sOmit, err := New(Config{
+		Binary:           "/bin/sh",
+		SocketPath:       filepath.Join(dir, "sock"),
+		SocketName:       "",
+		ConfigFile:       "",
+		Env:              []string{},
+		Dir:              dir,
+		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             UTF8Omit,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         LogVerbose,
+		LoginShell:       false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	argsOmit := sOmit.baseArgs(false)
+	if slices.Contains(argsOmit, "-u") {
+		t.Errorf("expected baseArgs to omit -u when UTF8Omit, got %v", argsOmit)
+	}
+
+	if !slices.Contains(argsOmit, "-v") {
+		t.Errorf("expected baseArgs to contain -v for LogVerbose, got %v", argsOmit)
 	}
 }

@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 
@@ -10,9 +11,37 @@ import (
 )
 
 const (
+	minDebugLogVerbosity  = 2
+	minNoEchoControlCount = 2
+)
+
+const (
 	replyRaw replyMode = iota
 	replyRecords
 	replyEmpty
+)
+
+const (
+	// ActionDefault represents tmux invoked without a command or root action flag (runs default client action).
+	ActionDefault RootActionKind = iota
+
+	// ActionCommand represents tmux invoked with one or more subcommands.
+	ActionCommand
+
+	// ActionShell represents tmux invoked with -c shell-command.
+	ActionShell
+
+	// ActionForeground represents tmux daemon run in the foreground (-D flag).
+	ActionForeground
+
+	// ActionHelp represents the usage query flag (-h flag).
+	ActionHelp
+
+	// ActionVersion represents the version query flag (-V flag).
+	ActionVersion
+
+	// ActionControl represents control mode (-C or -CC flag).
+	ActionControl
 )
 
 type replyMode uint8
@@ -40,6 +69,49 @@ type (
 		ExitCode int
 	}
 
+	// RunOptions configures raw command execution against a tmux server endpoint.
+	RunOptions struct {
+		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
+		// When [AllowStart], the -N flag is omitted, allowing tmux to auto-spawn a daemon.
+		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		// Bound auxiliary servers ([Connection.AuxiliaryServer]) always forbid daemon auto-spawn regardless of this setting.
+		Start StartPolicy
+	}
+
+	// RootActionKind specifies the kind of root action requested in a parsed command line.
+	RootActionKind uint8
+
+	// ParsedCommandLine captures faithfully parsed root configuration settings,
+	// action kind, and command sequence from native tmux command-line arguments.
+	ParsedCommandLine struct {
+		// Config contains the parsed root configuration (socket, config file, UTF-8, colors, features, logging, login shell).
+		Config Config
+
+		// Action indicates the kind of root action requested.
+		Action RootActionKind
+
+		// Commands contains the parsed command sequence when Action is ActionCommand or ActionControl.
+		Commands CommandSequence
+
+		// ShellCommand contains the shell script when Action is ActionShell (-c flag).
+		ShellCommand string
+
+		// ControlNoEcho indicates whether -CC (control mode with echo disabled) was specified.
+		ControlNoEcho bool
+
+		// StartPolicy reflects whether -N was specified on the command line ([ExistingOnly]) or omitted ([AllowStart]).
+		StartPolicy StartPolicy
+	}
+
+	rawParseState struct {
+		cfg          Config
+		action       RootActionKind
+		shellCmd     string
+		controlCount int
+		verboseCount int
+		hasN         bool
+	}
+
 	wireArg struct {
 		text   string
 		nested []wireNode
@@ -56,6 +128,18 @@ type (
 		allowStart bool
 	}
 )
+
+// Command returns the single parsed command if Action is ActionCommand and exactly
+// one command was parsed. Returns false if Action is not ActionCommand or if multiple
+// or zero commands were parsed.
+func (p ParsedCommandLine) Command() (Command, bool) {
+	cmds := p.Commands.Commands()
+	if p.Action == ActionCommand && len(cmds) == 1 {
+		return cmds[0], true
+	}
+
+	return Command{name: "", args: nil}, false
+}
 
 // Sequence validates and constructs an immutable [CommandSequence].
 // Invalid commands return an error; an empty sequence is valid.
@@ -136,20 +220,312 @@ func ParseSequence(text string) (CommandSequence, error) {
 	return Sequence(cmds...)
 }
 
-// ParseCommandLine extracts global flags (-S, -L, -f) from a tmux command-line argv,
-// returning a [Config] and the remaining [Command].
-func ParseCommandLine(args []string) (Config, Command, error) {
-	cfg, i := parseGlobalFlags(args)
-	if i >= len(args) {
-		return cfg, Command{}, invalid("no command found in argv")
+// ParseCommandLine extracts native root flags, action kind, and command sequence from a tmux argv slice.
+// Returns a [ParsedCommandLine] retaining all parsed root configuration settings and commands.
+func ParseCommandLine(args []string) (ParsedCommandLine, error) {
+	s := rawParseState{
+		cfg: Config{
+			Binary:           "",
+			SocketPath:       "",
+			SocketName:       "",
+			ConfigFile:       "",
+			Env:              nil,
+			Dir:              "",
+			Limits:           DefaultLimits(),
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogNone,
+			LoginShell:       false,
+		},
+		action:       ActionDefault,
+		shellCmd:     "",
+		controlCount: 0,
+		verboseCount: 0,
+		hasN:         false,
 	}
 
-	cmd, err := NewCommand(args[i], args[i+1:]...)
+	var cmdArgs []string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			cmdArgs = args[i+1:]
+			break
+		}
+
+		if arg == "-" || !strings.HasPrefix(arg, "-") {
+			cmdArgs = args[i:]
+			break
+		}
+
+		nextI, stop, err := parseFlagBundle(arg, args, i, &s)
+		if err != nil {
+			return ParsedCommandLine{}, err
+		}
+
+		i = nextI
+		if stop {
+			cmdArgs = args[i:]
+			break
+		}
+	}
+
+	return finishCommandLineParse(&s, cmdArgs)
+}
+
+func applySimpleFlag(ch rune, s *rawParseState) bool {
+	switch ch {
+	case '2':
+		s.cfg.Colors256 = true
+		return true
+	case 'u':
+		s.cfg.UTF8 = UTF8Force
+		return true
+	case 'l':
+		s.cfg.LoginShell = true
+		return true
+	case 'v':
+		s.verboseCount++
+		return true
+	case 'N':
+		s.hasN = true
+		return true
+	case 'D':
+		s.action = ActionForeground
+		return true
+	case 'h':
+		s.action = ActionHelp
+		return true
+	case 'V':
+		s.action = ActionVersion
+		return true
+	case 'C':
+		s.controlCount++
+		return true
+	default:
+		return false
+	}
+}
+
+func isValuedFlag(ch rune) bool {
+	return ch == 'c' || ch == 'f' || ch == 'L' || ch == 'S' || ch == 'T'
+}
+
+func parseFlagBundle(arg string, args []string, i int, s *rawParseState) (int, bool, error) {
+	runes := []rune(arg[1:])
+	if len(runes) == 0 {
+		return i, true, nil
+	}
+
+	for j := range runes {
+		ch := runes[j]
+		if applySimpleFlag(ch, s) {
+			continue
+		}
+
+		if isValuedFlag(ch) {
+			nextI, err := applyValuedFlag(ch, runes[j+1:], args, i, s)
+			if err != nil {
+				return i, false, err
+			}
+
+			return nextI, false, nil
+		}
+
+		return i, false, invalid(fmt.Sprintf("unknown option: -%c", ch))
+	}
+
+	return i, false, nil
+}
+
+func extractFlagVal(ch rune, remaining []rune, args []string, i int) (string, int, error) {
+	var (
+		val   string
+		nextI = i
+	)
+
+	switch {
+	case len(remaining) > 0:
+		val = string(remaining)
+	case i+1 < len(args):
+		nextI++
+		val = args[nextI]
+	default:
+		return "", i, invalid(fmt.Sprintf("flag requires an argument: -%c", ch))
+	}
+
+	if val == "" {
+		return "", i, invalid(fmt.Sprintf("flag requires an argument: -%c", ch))
+	}
+
+	return val, nextI, nil
+}
+
+func applyValuedFlag(ch rune, remaining []rune, args []string, i int, s *rawParseState) (int, error) {
+	val, nextI, err := extractFlagVal(ch, remaining, args, i)
 	if err != nil {
-		return cfg, Command{}, err
+		return i, err
 	}
 
-	return cfg, cmd, nil
+	switch ch {
+	case 'c':
+		s.action = ActionShell
+		s.shellCmd = val
+	case 'f':
+		s.cfg.ConfigFile = val
+	case 'L':
+		if s.cfg.SocketPath != "" {
+			return i, invalid("choose SocketPath or SocketName")
+		}
+
+		s.cfg.SocketName = val
+	case 'S':
+		if s.cfg.SocketName != "" {
+			return i, invalid("choose SocketPath or SocketName")
+		}
+
+		s.cfg.SocketPath = val
+	case 'T':
+		return nextI, appendTerminalFeatures(val, &s.cfg)
+	}
+
+	return nextI, nil
+}
+
+func appendTerminalFeatures(val string, cfg *Config) error {
+	for p := range strings.SplitSeq(val, ",") {
+		if p == "" || !wire.ValidString(p) || strings.ContainsAny(p, " \t\r\n,\x00") {
+			return invalid("terminal feature")
+		}
+
+		cfg.TerminalFeatures = append(cfg.TerminalFeatures, p)
+	}
+
+	return nil
+}
+
+func applyVerbosityAndPolicy(s *rawParseState) {
+	switch {
+	case s.verboseCount >= minDebugLogVerbosity:
+		s.cfg.LogLevel = LogDebug
+	case s.verboseCount == 1:
+		s.cfg.LogLevel = LogVerbose
+	default:
+		s.cfg.LogLevel = LogNone
+	}
+
+	if s.controlCount > 0 && s.action != ActionHelp && s.action != ActionVersion {
+		s.action = ActionControl
+	}
+}
+
+func validateCommandArgs(s *rawParseState, cmdArgs []string) error {
+	if s.action == ActionForeground && len(cmdArgs) > 0 {
+		return invalid("-D does not accept command arguments")
+	}
+
+	if s.action == ActionShell && len(cmdArgs) > 0 {
+		return invalid("-c does not accept command arguments")
+	}
+
+	if s.controlCount > 0 && s.action == ActionForeground {
+		return invalid("-D and -C are mutually exclusive")
+	}
+
+	if s.controlCount > 0 && s.action == ActionShell {
+		return invalid("-c and -C are mutually exclusive")
+	}
+
+	return nil
+}
+
+func finishCommandLineParse(s *rawParseState, cmdArgs []string) (ParsedCommandLine, error) {
+	if err := validateCommandArgs(s, cmdArgs); err != nil {
+		return ParsedCommandLine{}, err
+	}
+
+	applyVerbosityAndPolicy(s)
+
+	if len(cmdArgs) > 0 && len(splitArgvCommands(cmdArgs)) == 0 {
+		return ParsedCommandLine{}, invalid("no command given")
+	}
+
+	seq, err := parseCommandSequenceArgv(cmdArgs, s.action)
+	if err != nil {
+		return ParsedCommandLine{}, err
+	}
+
+	if len(cmdArgs) > 0 && s.action == ActionDefault {
+		s.action = ActionCommand
+	}
+
+	startPolicy := AllowStart
+	if s.hasN {
+		startPolicy = ExistingOnly
+	}
+
+	return ParsedCommandLine{
+		Config:        s.cfg,
+		Action:        s.action,
+		Commands:      seq,
+		ShellCommand:  s.shellCmd,
+		ControlNoEcho: s.controlCount >= minNoEchoControlCount,
+		StartPolicy:   startPolicy,
+	}, nil
+}
+
+func parseCommandSequenceArgv(cmdArgs []string, action RootActionKind) (CommandSequence, error) {
+	if len(cmdArgs) == 0 || action == ActionHelp || action == ActionVersion {
+		return CommandSequence{commands: nil}, nil
+	}
+
+	rawCmds := splitArgvCommands(cmdArgs)
+	if len(rawCmds) == 0 {
+		return CommandSequence{commands: nil}, nil
+	}
+
+	cmdList := make([]Command, 0, len(rawCmds))
+	for _, grp := range rawCmds {
+		if len(grp) == 0 {
+			continue
+		}
+
+		cmd, err := NewCommand(grp[0], grp[1:]...)
+		if err != nil {
+			return CommandSequence{}, err
+		}
+
+		cmdList = append(cmdList, cmd)
+	}
+
+	return Sequence(cmdList...)
+}
+
+func splitArgvCommands(args []string) [][]string {
+	if len(args) == 0 {
+		return nil
+	}
+
+	var cmds [][]string
+
+	start := 0
+
+	for i, a := range args {
+		if a == ";" || a == `\;` {
+			if i > start {
+				cmds = append(cmds, args[start:i])
+			}
+
+			start = i + 1
+		}
+	}
+
+	if start < len(args) {
+		cmds = append(cmds, args[start:])
+	}
+
+	return cmds
 }
 
 // Name returns the primary name of the tmux command (e.g. "new-session", "split-window").
@@ -329,6 +705,10 @@ func (p plan) argv() ([]string, error) {
 // Raw commands require subprocess execution. On a control-bound server, use
 // [Connection.AuxiliaryServer]; Run otherwise returns [ErrTransportUnsupported] before dispatch.
 func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
+	if s.conn != nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+	}
+
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
@@ -348,7 +728,9 @@ func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 // if command N fails, changes made by commands 0 through N-1 remain in effect.
 // Stdout and Stderr contain the combined output of all executed commands.
 func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Result, error) {
-	commands := sequence.commands
+	if s.conn != nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
@@ -356,6 +738,7 @@ func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Res
 	}
 	defer op.close()
 
+	commands := sequence.commands
 	if len(commands) == 0 {
 		return Result{Stdout: []byte{}, Stderr: []byte{}, ExitCode: -1}, nil
 	}
@@ -377,73 +760,89 @@ func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Res
 	return s.execute(opCtx, op, p, nil, nil)
 }
 
+func (s *Server) rawAllowStart(start StartPolicy) (bool, error) {
+	if start > ExistingOnly {
+		return false, invalid("start policy")
+	}
+
+	if s.bound != nil {
+		return false, nil
+	}
+
+	return start == AllowStart, nil
+}
+
+// RunWith executes one raw tmux command against the server with custom execution options.
+//
+// Start policy is controlled explicitly by o.Start rather than inferred from command names.
+// Fails with [ErrTransportUnsupported] over control mode.
+func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, error) {
+	if s.conn != nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
+	}
+	defer op.close()
+
+	if !c.Valid() {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: invalid("command")}
+	}
+
+	allowStart, err := s.rawAllowStart(o.Start)
+	if err != nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
+	}
+
+	p := plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: allowStart}
+
+	return s.execute(opCtx, op, p, nil, nil)
+}
+
+// RunSequenceWith executes an ordered list of commands in a single round-trip with custom execution options.
+//
+// Start policy is controlled explicitly by o.Start rather than inferred from command names.
+// Fails with [ErrTransportUnsupported] over control mode.
+func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, o RunOptions) (Result, error) {
+	if s.conn != nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
+	}
+	defer op.close()
+
+	commands := sequence.commands
+	if len(commands) == 0 {
+		return Result{Stdout: []byte{}, Stderr: []byte{}, ExitCode: -1}, nil
+	}
+
+	allowStart, err := s.rawAllowStart(o.Start)
+	if err != nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
+	}
+
+	p := plan{nodes: nil, mode: replyRaw, allowStart: allowStart}
+
+	for _, c := range commands {
+		if !c.Valid() {
+			return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: invalid("command")}
+		}
+
+		p.nodes = append(p.nodes, leaf(c))
+	}
+
+	return s.execute(opCtx, op, p, nil, nil)
+}
+
 // cloneResult never aliases retained connection state.
 func cloneResult(r Result) Result {
 	r.Stdout = bytes.Clone(r.Stdout)
 	r.Stderr = bytes.Clone(r.Stderr)
 
 	return r
-}
-
-func parseFlagValue(args []string, i int, flag string) (string, int, bool) {
-	arg := args[i]
-	if arg == flag && i+1 < len(args) {
-		return args[i+1], i + 1, true
-	}
-
-	if strings.HasPrefix(arg, flag) && len(arg) > len(flag) {
-		return arg[len(flag):], i, true
-	}
-
-	return "", i, false
-}
-
-func tryParseConfigFlag(args []string, i int, cfg *Config) (int, bool) {
-	if val, next, ok := parseFlagValue(args, i, "-S"); ok {
-		cfg.SocketPath = val
-		return next, true
-	}
-
-	if val, next, ok := parseFlagValue(args, i, "-L"); ok {
-		cfg.SocketName = val
-		return next, true
-	}
-
-	if val, next, ok := parseFlagValue(args, i, "-f"); ok {
-		cfg.ConfigFile = val
-		return next, true
-	}
-
-	return i, false
-}
-
-func isIgnoredGlobalFlag(arg string) bool {
-	switch arg {
-	case "-u", "-v", "-N", "-C":
-		return true
-	default:
-		return strings.HasPrefix(arg, "-")
-	}
-}
-
-func parseGlobalFlags(args []string) (Config, int) {
-	var (
-		cfg Config
-		i   int
-	)
-
-	for i = 0; i < len(args); i++ {
-		if next, ok := tryParseConfigFlag(args, i, &cfg); ok {
-			i = next
-			continue
-		}
-
-		if isIgnoredGlobalFlag(args[i]) {
-			continue
-		}
-
-		break
-	}
-
-	return cfg, i
 }

@@ -130,6 +130,28 @@ func (s *Server) Version(ctx context.Context) (Version, error) {
 	return v, opError("Version", err)
 }
 
+// Usage returns the native tmux command-line usage syntax by invoking "tmux -h".
+// It executes a quick subprocess without starting or contacting a daemon.
+func (s *Server) Usage(ctx context.Context) (string, error) {
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return "", opError("Usage", err)
+	}
+	defer op.close()
+
+	r, err := s.executeProcess(opCtx, op, []string{"-h"}, nil)
+	if err != nil {
+		return "", opError("Usage", err)
+	}
+
+	usage := strings.TrimSpace(string(r.Stdout))
+	if usage == "" {
+		return "", opError("Usage", decodeError("usage", "usage", ErrProtocol))
+	}
+
+	return usage, nil
+}
+
 func (s *Server) executableVersion(ctx context.Context, op *operation) (Version, error) {
 	r, err := s.executeProcess(ctx, op, []string{"-V"}, nil)
 	if err != nil {

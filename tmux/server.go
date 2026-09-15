@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 // TransportSupport describes library execution paths, independent of daemon
@@ -65,8 +67,8 @@ func New(cfg Config) (*Server, error) {
 	}
 
 	cfg.Limits = limits
-	if cfg.SocketPath != "" && cfg.SocketName != "" {
-		return nil, invalid("choose SocketPath or SocketName")
+	if err := validateRootConfig(&cfg); err != nil {
+		return nil, err
 	}
 
 	env := cfg.Env
@@ -189,8 +191,32 @@ func (s *Server) Support() TransportSupport {
 }
 
 func (s *Server) baseArgs(allowStart bool) []string {
-	args := []string{"-u"}
-	if !allowStart {
+	args := []string{}
+	if s.config.UTF8 != UTF8Omit {
+		args = append(args, "-u")
+	}
+
+	if s.config.Colors256 {
+		args = append(args, "-2")
+	}
+
+	if s.config.LoginShell {
+		args = append(args, "-l")
+	}
+
+	switch s.config.LogLevel {
+	case LogVerbose:
+		args = append(args, "-v")
+	case LogDebug:
+		args = append(args, "-vv")
+	case LogNone:
+	}
+
+	if len(s.config.TerminalFeatures) > 0 {
+		args = append(args, "-T", strings.Join(s.config.TerminalFeatures, ","))
+	}
+
+	if !allowStart || s.bound != nil {
 		args = append(args, "-N")
 	}
 
@@ -231,6 +257,30 @@ func resolveDir(dir string) (string, error) {
 	}
 
 	return dir, nil
+}
+
+func validateRootConfig(cfg *Config) error {
+	if cfg.SocketPath != "" && cfg.SocketName != "" {
+		return invalid("choose SocketPath or SocketName")
+	}
+
+	if cfg.UTF8 > UTF8Omit {
+		return invalid("utf8 mode")
+	}
+
+	if cfg.LogLevel > LogDebug {
+		return invalid("log level")
+	}
+
+	for _, feat := range cfg.TerminalFeatures {
+		if feat == "" || !wire.ValidString(feat) || strings.ContainsAny(feat, " \t\r\n,\x00") {
+			return invalid("terminal feature")
+		}
+	}
+
+	cfg.TerminalFeatures = append([]string{}, cfg.TerminalFeatures...)
+
+	return nil
 }
 
 func validSocketName(name string) bool {

@@ -133,7 +133,7 @@ func CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
 		return CurrentInfo{}, opError("Current", err)
 	}
 
-	s, err := New(Config{Binary: "", SocketPath: hints.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}})
+	s, err := New(Config{Binary: "", SocketPath: hints.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
 	if err != nil {
 		return CurrentInfo{}, opError("Current", err)
 	}

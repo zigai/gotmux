@@ -18,6 +18,36 @@ const (
 	defaultConcurrent     = 8
 )
 
+const (
+	// UTF8Default emits -u, forcing UTF-8 encoding for reliable wire decoding (library default).
+	UTF8Default UTF8Mode = iota
+
+	// UTF8Force emits -u explicitly.
+	UTF8Force
+
+	// UTF8Omit omits -u, allowing tmux to auto-detect UTF-8 support from the environment.
+	UTF8Omit
+)
+
+const (
+	// LogNone disables tmux file logging (default).
+	LogNone LogLevel = iota
+
+	// LogVerbose enables verbose logging (-v flag, creating tmux-client/server-PID.log).
+	LogVerbose
+
+	// LogDebug enables maximum verbosity debug logging (-vv flag).
+	LogDebug
+)
+
+type (
+	// UTF8Mode controls whether the -u flag is emitted to force UTF-8 client mode.
+	UTF8Mode uint8
+
+	// LogLevel specifies tmux daemon and client file logging verbosity (-v / -vv flags).
+	LogLevel uint8
+)
+
 // Config specifies how [New] locates a tmux daemon and configures subprocess execution.
 // Frozen at [New] time; subsequent mutations have no effect.
 type Config struct {
@@ -44,6 +74,22 @@ type Config struct {
 
 	// Limits bounds timeouts, buffer sizes, and concurrent subprocesses. Zero values use [DefaultLimits].
 	Limits Limits
+
+	// UTF8 controls emission of the -u flag. The zero value [UTF8Default] emits -u for reliable wire decoding.
+	UTF8 UTF8Mode
+
+	// Colors256 forces tmux to assume the terminal supports 256 colors (-2 flag).
+	Colors256 bool
+
+	// TerminalFeatures specifies terminal features for the client (-T flag, e.g. "256", "RGB", "bidi").
+	// When non-empty, elements are joined with commas. Cannot contain NUL bytes or commas within elements.
+	TerminalFeatures []string
+
+	// LogLevel controls tmux file logging verbosity (-v or -vv flags).
+	LogLevel LogLevel
+
+	// LoginShell instructs tmux to behave as a login shell (-l flag).
+	LoginShell bool
 }
 
 // Limits bounds execution time, concurrent processes, and buffers across operations on a [Server].

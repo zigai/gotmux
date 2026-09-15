@@ -66,10 +66,12 @@ func FuzzParseCommandLine(f *testing.F) {
 
 	f.Fuzz(func(t *testing.T, raw string) {
 		testCommandLine := func(args []string) {
-			_, cmd, err := ParseCommandLine(args)
+			parsed, err := ParseCommandLine(args)
 			if err == nil {
-				if !cmd.Valid() {
-					t.Errorf("ParseCommandLine(%q) returned invalid command: %+v", args, cmd)
+				for _, cmd := range parsed.Commands.Commands() {
+					if !cmd.Valid() {
+						t.Errorf("ParseCommandLine(%q) returned invalid command: %+v", args, cmd)
+					}
 				}
 			}
 		}

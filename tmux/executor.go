@@ -105,10 +105,13 @@ func classifyStderr(data []byte) error {
 }
 
 func (s *Server) execute(ctx context.Context, op *operation, p plan, g *guard, input []byte) (Result, error) {
+	cmdName := planName(p)
+
 	failed := func(err error) (Result, error) {
 		r := failedResult()
-		return r, &CommandError{Command: planName(p), Result: r, Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
+		return r, &CommandError{Command: cmdName, Result: r, Outcome: notSentOutcome(), Timeout: contextSource(op.callerDone, err), Err: err}
 	}
+
 	if err := ctx.Err(); err != nil {
 		return failed(err)
 	}
@@ -133,14 +136,14 @@ func (s *Server) execute(ctx context.Context, op *operation, p plan, g *guard, i
 
 	if err != nil {
 		if ce, ok := errors.AsType[*CommandError](err); ok {
-			ce.Command = planName(p)
+			ce.Command = cmdName
 		}
 
 		return r, err
 	}
 
 	if err = ctx.Err(); err != nil {
-		return r, &CommandError{Command: planName(p), Result: cloneResult(r), Outcome: Outcome{Effect: Confirmed, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
+		return r, &CommandError{Command: cmdName, Result: cloneResult(r), Outcome: Outcome{Effect: Confirmed, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
 	}
 
 	return r, nil
@@ -193,7 +196,7 @@ func (s *Server) resolveGuard(p plan, g *guard) (*guard, plan) {
 func (s *Server) dispatchPlan(ctx context.Context, op *operation, p plan, n int64, input []byte) (Result, error) {
 	if s.conn != nil {
 		if input != nil {
-			return failedResult(), unsupportedTransport("stdin over control", Control, ErrTransportUnsupported)
+			return failedResult(), unsupportedControl("stdin over control", ErrTransportUnsupported)
 		}
 
 		r, err := s.conn.run(ctx, op, p, n)
