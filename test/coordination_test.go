@@ -159,3 +159,20 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 		t.Fatalf("target survived hook: %v", err)
 	}
 }
+
+// TestIntegrationRunShellDelayUnsupported verifies that RunShell with a non-zero Delay
+// is rejected with ErrUnsupported.
+func TestIntegrationRunShellDelayUnsupported(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	_, err := server.RunShell(ctx, "echo test", tmux.RunShellOptions{
+		Delay: 500 * time.Millisecond,
+	})
+	if err == nil {
+		t.Fatal("expected RunShell with Delay > 0 to fail, got nil")
+	}
+
+	if !errors.Is(err, tmux.ErrUnsupported) {
+		t.Fatalf("expected ErrUnsupported for RunShell Delay, got: %v", err)
+	}
+}

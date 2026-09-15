@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -817,4 +818,229 @@ func TestIntegrationOperations(t *testing.T) {
 	t.Run("PaneMove", func(t *testing.T) {
 		testOperationsPaneMove(t, ctx, session)
 	})
+}
+
+// TestIntegrationProcessEnvironmentNotSession verifies that NewSessionOptions.Env
+// sets the process environment via an execution wrapper, NOT the tmux session environment.
+func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	dir := t.TempDir()
+	resultFile := filepath.Join(dir, "proc_env.txt")
+
+	envKey := "TGO_PROC_ENV_TEST"
+	envVal := "process_isolated_value"
+
+	// Create a session with Env overrides and an explicit Exec program
+	session, err := server.NewSession(ctx, tmux.NewSessionOptions{
+		Window: "env-test-win",
+		Dir:    dir,
+		Env: map[string]string{
+			envKey: envVal,
+		},
+		Program: tmux.Exec("/bin/sh", "-c", "printf '%s' \"$"+envKey+"\" > "+resultFile+" && sleep 60"),
+	})
+	if err != nil {
+		t.Fatalf("NewSession with Env failed: %v", err)
+	}
+
+	// Verify the process received the environment variable
+	awaitFile(t, ctx, resultFile)
+	assertFileBytes(t, resultFile, []byte(envVal))
+
+	// Verify that the tmux session environment does NOT contain the variable
+	envScope := session.Environment()
+	envValResult, err := envScope.Get(ctx, envKey, false)
+	if err != nil {
+		t.Fatalf("session.Environment().Get failed: %v", err)
+	}
+	if val, ok := envValResult.Value.Get(); ok {
+		t.Fatalf("expected %s NOT to be set in tmux session environment, got %q", envKey, val)
+	}
+}
+
+// TestIntegrationRunWithStartPolicy verifies that RunWith explicitly controls server startup policy
+// via StartPolicy (AllowStart vs ExistingOnly) independently of command names or aliases.
+func TestIntegrationRunWithStartPolicy(t *testing.T) {
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "start-test.sock")
+	ctx := integrationContext(t)
+
+	server, err := tmux.New(tmux.Config{
+		Binary:           os.Getenv("TMUX_TEST_BINARY"),
+		SocketPath:       socketPath,
+		SocketName:       "",
+		ConfigFile:       "/dev/null",
+		Env:              nil,
+		Dir:              dir,
+		Limits:           tmux.DefaultLimits(),
+		UTF8:             tmux.UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         tmux.LogNone,
+		LoginShell:       false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1. ExistingOnly with new-session should fail with ErrNoServer (because -N is passed)
+	cmd, err := tmux.NewCommand("new-session", "-d", "-s", "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.ExistingOnly})
+	if !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("expected ErrNoServer for ExistingOnly on unstarted server, got %v", err)
+	}
+
+	// 2. AllowStart with alias "new" should succeed and spawn daemon
+	aliasCmd, err := tmux.NewCommand("new", "-d", "-s", "s-alias")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = server.RunWith(ctx, aliasCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	if err != nil {
+		t.Fatalf("RunWith with AllowStart failed: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = server.Kill(ctx)
+	})
+
+	// Verify session exists
+	sess, err := server.FindSession(ctx, "s-alias")
+	if err != nil {
+		t.Fatalf("FindSession failed after started: %v", err)
+	}
+	_ = sess
+
+	// 3. ExistingOnly with RunSequenceWith while running should succeed
+	seqCmd, err := tmux.NewCommand("display-message", "-p", "alive")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seq, err := tmux.Sequence(seqCmd)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seqRes, err := server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.ExistingOnly})
+	if err != nil {
+		t.Fatalf("RunSequenceWith failed: %v", err)
+	}
+	if !bytes.Contains(seqRes.Stdout, []byte("alive")) {
+		t.Fatalf("expected 'alive' in output, got %q", string(seqRes.Stdout))
+	}
+}
+
+// TestIntegrationRootFlagsExecution verifies execution of commands with explicit root flags
+// (Colors256, TerminalFeatures, UTF8Omit, LogLevel).
+func TestIntegrationRootFlagsExecution(t *testing.T) {
+	dir := t.TempDir()
+	socketPath := filepath.Join(dir, "root-flags.sock")
+	ctx := integrationContext(t)
+
+	server, err := tmux.New(tmux.Config{
+		Binary:           os.Getenv("TMUX_TEST_BINARY"),
+		SocketPath:       socketPath,
+		SocketName:       "",
+		ConfigFile:       "/dev/null",
+		Env:              nil,
+		Dir:              dir,
+		Limits:           tmux.DefaultLimits(),
+		UTF8:             tmux.UTF8Omit,
+		Colors256:        true,
+		TerminalFeatures: []string{"256", "RGB"},
+		LogLevel:         tmux.LogVerbose,
+		LoginShell:       false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd, err := tmux.NewCommand("new-session", "-d", "-s", "root-flags-sess")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.AllowStart})
+	if err != nil {
+		t.Fatalf("RunWith failed: %v", err)
+	}
+
+	t.Cleanup(func() {
+		_ = server.Kill(ctx)
+	})
+
+	// Verify server log file was generated (from -v flag)
+	awaitObservation(t, ctx, "server log file created", func() bool {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), "tmux-") && strings.HasSuffix(e.Name(), ".log") {
+				return true
+			}
+		}
+
+		return false
+	})
+}
+
+// TestIntegrationAuxiliaryServerNeverAutoSpawns verifies that bound auxiliary servers
+// strictly forbid auto-spawning replacement daemons across all execution paths.
+func TestIntegrationAuxiliaryServerNeverAutoSpawns(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	connection, err := server.OpenControl(ctx, session, tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	auxiliary := connection.AuxiliaryServer()
+
+	// 1. Calling RunWith with AllowStart on auxiliary server must NOT spawn daemon if dead.
+	// First, test when daemon is alive: commands execute through guard.
+	pingCmd, err := tmux.NewCommand("display-message", "-p", "alive")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := auxiliary.RunWith(ctx, pingCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	if err != nil {
+		t.Fatalf("auxiliary RunWith while alive failed: %v", err)
+	}
+	if !bytes.Contains(res.Stdout, []byte("alive")) {
+		t.Fatalf("expected 'alive', got %q", string(res.Stdout))
+	}
+
+	// 2. Kill the daemon
+	_ = server.Kill(ctx)
+	_ = connection.Close()
+
+	// 3. Both Run and RunWith with AllowStart must fail with ErrNoServer or ErrServerChanged,
+	// and must NEVER leak an auto-spawned replacement daemon on the socket!
+	leakCmd, err := tmux.NewCommand("new-session", "-d", "-s", "leak-attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = auxiliary.Run(ctx, leakCmd)
+	if err == nil {
+		t.Fatal("expected auxiliary.Run to fail after daemon killed")
+	}
+
+	_, err = auxiliary.RunWith(ctx, leakCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	if err == nil {
+		t.Fatal("expected auxiliary.RunWith to fail after daemon killed")
+	}
+
+	// Verify no daemon exists on the socket path
+	_, err = server.Panes(ctx)
+	if !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("expected ErrNoServer, indicating no daemon was spawned, got %v", err)
+	}
 }

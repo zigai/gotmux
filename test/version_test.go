@@ -4,6 +4,7 @@ package tmux_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tmux "github.com/zigai/gotmux/tmux"
@@ -87,5 +88,18 @@ func TestCapabilities(t *testing.T) {
 	}
 	if unrecognized.AtLeast(3, 6) {
 		t.Errorf("expected unrecognized version AtLeast to return false")
+	}
+}
+
+func TestIntegrationUsage(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	usage, err := server.Usage(ctx)
+	if err != nil {
+		t.Fatalf("server.Usage failed: %v", err)
+	}
+
+	if !strings.HasPrefix(usage, "usage: tmux") {
+		t.Fatalf("expected usage to start with 'usage: tmux', got %q", usage)
 	}
 }

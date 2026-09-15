@@ -81,13 +81,18 @@ func NewServer(tb testing.TB) *tmux.Server {
 	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "SHELL=/bin/sh", "TERM=xterm-256color", "LC_ALL=" + locale}
 
 	server, err = tmux.New(tmux.Config{
-		Binary:     binary,
-		SocketPath: filepath.Join(dir, "s"),
-		SocketName: "",
-		ConfigFile: config,
-		Env:        env,
-		Dir:        dir,
-		Limits:     tmux.Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		Binary:           binary,
+		SocketPath:       filepath.Join(dir, "s"),
+		SocketName:       "",
+		ConfigFile:       config,
+		Env:              env,
+		Dir:              dir,
+		Limits:           tmux.Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             tmux.UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         tmux.LogNone,
+		LoginShell:       false,
 	})
 	if err != nil {
 		tb.Fatal(err)

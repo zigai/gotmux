@@ -127,6 +127,76 @@ func TestIntegrationClientMenu(t *testing.T) {
 	awaitUserOption(t, ctx, session, "@menu-effect", "selected")
 }
 
+func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	client, terminal, output := uiClient(t, ctx, server, session)
+
+	// Subtest 1: Mouse: false (default), dismissed via 'q' key without selection
+	t.Run("MouseFalseDismissal", func(t *testing.T) {
+		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-not-selected", "ran")
+		items := []tmux.MenuItem{
+			{Label: "TGO_MENU_ITEM_1", Key: "1", Commands: testSequence(t, command), Separator: false, Disabled: false},
+		}
+
+		result := make(chan error, 1)
+		go func() {
+			result <- client.Menu(ctx, items, tmux.MenuOptions{
+				Title: "Menu-MouseFalse",
+				Mouse: false,
+			})
+		}()
+
+		awaitObservation(t, ctx, "menu rendered", func() bool {
+			return output.contains("TGO_MENU_ITEM_1")
+		})
+
+		// Send 'q' to dismiss the menu without executing the item command
+		if _, err := terminal.WriteString("q"); err != nil {
+			t.Fatal(err)
+		}
+
+		waitUIResult(t, ctx, result)
+
+		// Verify menu command was not executed
+		val, err := session.Options().User(ctx, "@menu-not-selected")
+		if err == nil {
+			if str, ok := val.Local.Get(); ok && str == "ran" {
+				t.Fatal("expected menu command NOT to run on dismissal via 'q'")
+			}
+		}
+	})
+
+	// Subtest 2: Mouse: true with RequireClick: true, selected via item key
+	t.Run("MouseTrueSelection", func(t *testing.T) {
+		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-mouse-effect", "selected")
+		items := []tmux.MenuItem{
+			{Label: "TGO_MENU_ITEM_M", Key: "m", Commands: testSequence(t, command), Separator: false, Disabled: false},
+			tmux.MenuSeparator(),
+		}
+
+		result := make(chan error, 1)
+		go func() {
+			result <- client.Menu(ctx, items, tmux.MenuOptions{
+				Title:        "Menu-MouseTrue",
+				Mouse:        true,
+				RequireClick: true,
+			})
+		}()
+
+		awaitObservation(t, ctx, "mouse menu rendered", func() bool {
+			return output.contains("TGO_MENU_ITEM_M")
+		})
+
+		// Choose the item via key shortcut 'm'
+		if _, err := terminal.WriteString("m"); err != nil {
+			t.Fatal(err)
+		}
+
+		waitUIResult(t, ctx, result)
+		awaitUserOption(t, ctx, session, "@menu-mouse-effect", "selected")
+	})
+}
+
 func TestIntegrationClientPrompt(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
@@ -240,4 +310,145 @@ func TestIntegrationClientPopupWithoutDeadline(t *testing.T) {
 	path := filepath.Join(dir, "result")
 	awaitFile(t, ctx, path)
 	assertFileBytes(t, path, []byte("ok"))
+}
+
+func TestIntegrationClientSwitchToggleReadOnly(t *testing.T) {
+	server, session1, ctx := apiFixture(t)
+
+	// Create a second session to switch between
+	session2, err := server.NewSession(ctx, tmux.NewSessionOptions{
+		Window:  "s2-win",
+		Program: tmux.Shell("sleep 60"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Case 1: Start client in Read-Write mode (AttachOptions{ReadOnly: false})
+	t.Run("StartReadWrite_ToggleToReadOnly_ThenToggleBack", func(t *testing.T) {
+		client, _, _ := uiClient(t, ctx, server, session1)
+
+		// Initial state: ReadOnly must be false
+		info, err := client.Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.ReadOnly {
+			t.Fatalf("expected initial client to be read-write, got ReadOnly=%v", info.ReadOnly)
+		}
+
+		// First toggle: Switch to session2 with ToggleReadOnly: true -> becomes read-only
+		err = client.Switch(ctx, session2, tmux.SwitchOptions{
+			ToggleReadOnly: true,
+		})
+		if err != nil {
+			t.Fatalf("client.Switch with ToggleReadOnly failed: %v", err)
+		}
+
+		awaitObservation(t, ctx, "client switched to session2 and read-only", func() bool {
+			ci, err := client.Info(ctx)
+			if err != nil {
+				return false
+			}
+			sid, ok := ci.SessionID.Get()
+			return ok && ci.ReadOnly && sid == session2.ID()
+		})
+
+		// Switch without toggle (ToggleReadOnly: false) -> remains read-only
+		err = client.Switch(ctx, session1, tmux.SwitchOptions{
+			ToggleReadOnly: false,
+		})
+		if err != nil {
+			t.Fatalf("client.Switch with ToggleReadOnly:false failed: %v", err)
+		}
+
+		awaitObservation(t, ctx, "client switched to session1 and still read-only", func() bool {
+			ci, err := client.Info(ctx)
+			if err != nil {
+				return false
+			}
+			sid, ok := ci.SessionID.Get()
+			return ok && ci.ReadOnly && sid == session1.ID()
+		})
+
+		// Second toggle: Switch back to session2 with ToggleReadOnly: true -> becomes read-write
+		err = client.Switch(ctx, session2, tmux.SwitchOptions{
+			ToggleReadOnly: true,
+		})
+		if err != nil {
+			t.Fatalf("client.Switch with ToggleReadOnly back to read-write failed: %v", err)
+		}
+
+		awaitObservation(t, ctx, "client read-write again", func() bool {
+			ci, err := client.Info(ctx)
+			if err != nil {
+				return false
+			}
+			sid, ok := ci.SessionID.Get()
+			return ok && !ci.ReadOnly && sid == session2.ID()
+		})
+	})
+
+	// Case 2: Start client in Read-Only mode (AttachOptions{ReadOnly: true})
+	t.Run("StartReadOnly_ToggleToReadWrite", func(t *testing.T) {
+		master, slave := openPTY(t)
+		readDone := make(chan struct{})
+		go func() {
+			defer close(readDone)
+			discard := make([]byte, 1024)
+			for {
+				if _, err := master.Read(discard); err != nil {
+					return
+				}
+			}
+		}()
+		t.Cleanup(func() { _ = master.Close(); <-readDone })
+
+		attachCtx, cancel := context.WithCancel(ctx)
+		done := make(chan error, 1)
+
+		go func() {
+			// Attach with ReadOnly: true
+			done <- session1.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, tmux.AttachOptions{
+				ReadOnly: true,
+			})
+		}()
+
+		t.Cleanup(func() {
+			cancel()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Error("UI attachment failed to stop")
+			}
+		})
+
+		client := waitTerminalClient(t, ctx, server, slave, done)
+
+		// Verify initial state is ReadOnly: true (from AttachOptions.ReadOnly)
+		info, err := client.Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !info.ReadOnly {
+			t.Fatalf("expected client started with AttachOptions.ReadOnly=true to be read-only, got ReadOnly=%v", info.ReadOnly)
+		}
+
+		// Toggle read-only using Switch with ToggleReadOnly: true -> becomes read-write
+		err = client.Switch(ctx, session2, tmux.SwitchOptions{
+			ToggleReadOnly: true,
+		})
+		if err != nil {
+			t.Fatalf("client.Switch with ToggleReadOnly failed: %v", err)
+		}
+
+		awaitObservation(t, ctx, "read-only client toggled to read-write", func() bool {
+			ci, err := client.Info(ctx)
+			if err != nil {
+				return false
+			}
+			sid, ok := ci.SessionID.Get()
+			return ok && !ci.ReadOnly && sid == session2.ID()
+		})
+	})
 }

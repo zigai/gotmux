@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	tmux "github.com/zigai/gotmux/tmux"
 )
@@ -184,6 +185,49 @@ func TestIntegrationPipeLifecycle(t *testing.T) {
 
 	if bytes.Contains(data, []byte("after-stop")) {
 		t.Fatalf("stopped pipe received output: %q", data)
+	}
+}
+
+// TestIntegrationPipeInputDirection verifies that PipeOptions.Input connects the shell command's stdout
+// into the pane as if typed.
+func TestIntegrationPipeInputDirection(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	dir := t.TempDir()
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatalf("failed to get server panes: %v", err)
+	}
+	pane := panes[0].Handle()
+	targetFile := filepath.Join(dir, "input_received.txt")
+
+	// Start cat > targetFile in the pane
+	if err := pane.SendText(ctx, "cat > "+targetFile+"\n"); err != nil {
+		t.Fatalf("SendText failed: %v", err)
+	}
+	time.Sleep(100 * time.Millisecond)
+
+	// Pipe a script with Input: true. The script prints a test token.
+	token := "TGO_PIPE_INPUT_TOKEN_12345"
+	script := "echo " + token
+	if err := pane.Pipe(ctx, script, tmux.PipeOptions{Input: true}); err != nil {
+		t.Fatalf("pane.Pipe with Input:true failed: %v", err)
+	}
+
+	// Allow script to run and write to pane
+	time.Sleep(300 * time.Millisecond)
+	_ = pane.StopPipe(ctx)
+
+	// Close cat in pane with Ctrl-D
+	_ = pane.SendKeys(ctx, "C-d")
+
+	awaitFile(t, ctx, targetFile)
+	data, err := os.ReadFile(targetFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(data, []byte(token)) {
+		t.Fatalf("expected %q in %s, got %q", token, targetFile, string(data))
 	}
 }
 
