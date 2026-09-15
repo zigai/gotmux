@@ -296,11 +296,7 @@ func TestIntegrationNoServerAndExistingOnly(t *testing.T) {
 	if binary == "" {
 		binary = "tmux"
 	}
-	dir, err := os.MkdirTemp("/tmp", "tg-abs-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	dir := shortTempDir(t)
 	path := filepath.Join(dir, "absent")
 	s, e := tmux.New(tmux.Config{Binary: binary, SocketPath: path, ConfigFile: "/dev/null"})
 	if e != nil {
@@ -861,16 +857,20 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 // TestIntegrationRunWithStartPolicy verifies that RunWith explicitly controls server startup policy
 // via StartPolicy (AllowStart vs ExistingOnly) independently of command names or aliases.
 func TestIntegrationRunWithStartPolicy(t *testing.T) {
-	dir := t.TempDir()
-	socketPath := filepath.Join(dir, "start-test.sock")
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "start.sock")
 	ctx := integrationContext(t)
+	binary := os.Getenv("TMUX_TEST_BINARY")
+	if binary == "" {
+		binary = "tmux"
+	}
 
 	server, err := tmux.New(tmux.Config{
-		Binary:           os.Getenv("TMUX_TEST_BINARY"),
+		Binary:           binary,
 		SocketPath:       socketPath,
 		SocketName:       "",
 		ConfigFile:       "/dev/null",
-		Env:              nil,
+		Env:              testEnvironment(dir),
 		Dir:              dir,
 		Limits:           tmux.DefaultLimits(),
 		UTF8:             tmux.UTF8Default,
@@ -939,16 +939,20 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 // TestIntegrationRootFlagsExecution verifies execution of commands with explicit root flags
 // (Colors256, TerminalFeatures, UTF8Omit, LogLevel).
 func TestIntegrationRootFlagsExecution(t *testing.T) {
-	dir := t.TempDir()
-	socketPath := filepath.Join(dir, "root-flags.sock")
+	dir := shortTempDir(t)
+	socketPath := filepath.Join(dir, "root.sock")
 	ctx := integrationContext(t)
+	binary := os.Getenv("TMUX_TEST_BINARY")
+	if binary == "" {
+		binary = "tmux"
+	}
 
 	server, err := tmux.New(tmux.Config{
-		Binary:           os.Getenv("TMUX_TEST_BINARY"),
+		Binary:           binary,
 		SocketPath:       socketPath,
 		SocketName:       "",
 		ConfigFile:       "/dev/null",
-		Env:              nil,
+		Env:              testEnvironment(dir),
 		Dir:              dir,
 		Limits:           tmux.DefaultLimits(),
 		UTF8:             tmux.UTF8Omit,

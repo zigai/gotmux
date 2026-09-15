@@ -4,6 +4,8 @@ package tmux_test
 
 import (
 	"context"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -82,5 +84,35 @@ func awaitObservation(t *testing.T, ctx context.Context, description string, obs
 			t.Fatalf("waiting for %s: %v", description, ctx.Err())
 		case <-ticker.C:
 		}
+	}
+}
+
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix domain socket path length limits on Darwin (104 bytes) require short paths in /tmp.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
+
+	return dir
+}
+
+func testEnvironment(dir string) []string {
+	locale := "C.UTF-8"
+	if runtime.GOOS == "darwin" {
+		locale = "en_US.UTF-8"
+	}
+
+	return []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + dir,
+		"SHELL=/bin/sh",
+		"TERM=xterm-256color",
+		"LC_ALL=" + locale,
 	}
 }
