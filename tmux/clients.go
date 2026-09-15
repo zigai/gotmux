@@ -29,8 +29,8 @@ type (
 
 	// SwitchOptions configures switching an attached client to a different session.
 	SwitchOptions struct {
-		// ReadOnly attaches the client in read-only mode (-r flag).
-		ReadOnly bool
+		// ToggleReadOnly toggles the client's read-only flag (-r flag to switch-client).
+		ToggleReadOnly bool
 
 		// PreserveEnvironment prevents updating the client's environment variables (-E flag).
 		PreserveEnvironment bool
@@ -59,7 +59,7 @@ type (
 		// Dir specifies the working directory for the popup process.
 		Dir string
 
-		// Env specifies environment overrides for the popup process.
+		// Env specifies environment variable overrides for the popup process via an execution wrapper.
 		Env map[string]string
 
 		// Size specifies the popup dimensions in character cells.
@@ -122,19 +122,18 @@ type (
 	MenuOptions struct {
 		Title string
 
-		// Mouse opens the menu at the current mouse cursor position (-m flag).
+		// Mouse tells tmux the menu should handle mouse events (-M flag).
+		// By default, only menus opened from mouse key bindings handle mouse events.
 		Mouse bool
 
-		// StayOpen keeps the menu open after an item is selected. (Unsupported in stock tmux).
-		StayOpen bool
+		// RequireClick prevents the menu from closing when the mouse button is released without an item selected (-O flag).
+		// A mouse button must then be clicked to choose an item.
+		RequireClick bool
 
-		// NoCloseOnOverlap prevents the menu from closing when clicked outside or when another menu opens (-O flag).
-		NoCloseOnOverlap bool
-
-		// X specifies the menu horizontal position (-x flag).
+		// X specifies the menu horizontal position (-x flag, e.g. "C", "R", "P", "M", "W", or a column/format).
 		X string
 
-		// Y specifies the menu vertical position (-y flag).
+		// Y specifies the menu vertical position (-y flag, e.g. "C", "P", "M", "W", "S", or a row/format).
 		Y string
 	}
 	// PromptTemplate specifies the template command executed by tmux when a prompt is submitted.
@@ -157,6 +156,17 @@ type (
 	}
 )
 
+func MenuSeparator() MenuItem {
+	return MenuItem{
+		Label:     "",
+		Key:       "",
+		Commands:  CommandSequence{commands: nil},
+		Command:   "",
+		Separator: true,
+		Disabled:  false,
+	}
+}
+
 // Valid reports whether this client flag is one of the recognized flags.
 func (f ClientFlag) valid() bool {
 	switch f {
@@ -176,7 +186,7 @@ func (c Client) Switch(ctx context.Context, s Session, o SwitchOptions) error {
 	defer op.close()
 
 	args := []string{"-c", c.h.id, "-t", s.h.id}
-	if o.ReadOnly {
+	if o.ToggleReadOnly {
 		args = append(args, "-r")
 	}
 
@@ -351,10 +361,6 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error
 		return opError("Menu", ErrTransportUnsupported)
 	}
 
-	if o.StayOpen {
-		return opError("Menu", unsupported("persistent menu completion policy"))
-	}
-
 	args, err := menuArgs(c.h.id, o)
 	if err != nil {
 		return opError("Menu", err)
@@ -397,10 +403,6 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
 
 	if p.h.server.conn != nil {
 		return opError("Menu", ErrTransportUnsupported)
-	}
-
-	if o.StayOpen {
-		return opError("Menu", unsupported("persistent menu completion policy"))
 	}
 
 	args, err := menuArgsWithTarget("-t", p.h.id, o)
@@ -593,11 +595,11 @@ func menuArgs(clientID string, o MenuOptions) ([]string, error) {
 
 func menuArgsWithTarget(targetFlag, targetID string, o MenuOptions) ([]string, error) {
 	args := []string{targetFlag, targetID}
-	if !o.Mouse {
+	if o.Mouse {
 		args = append(args, "-M")
 	}
 
-	if o.NoCloseOnOverlap {
+	if o.RequireClick {
 		args = append(args, "-O")
 	}
 
@@ -628,34 +630,64 @@ func menuItemArg(item MenuItem) ([]wireArg, error) {
 		return []wireArg{{text: "", nested: nil}}, nil
 	}
 
-	hasCommands := len(item.Commands.commands) > 0
-	hasCmd := item.Command != "" && wire.ValidString(item.Command)
-
-	if item.Label == "" || !item.Key.Valid() || !wire.ValidString(item.Label) || (!hasCommands && !hasCmd) {
-		return nil, invalid("menu item")
+	if err := validateMenuItem(item); err != nil {
+		return nil, err
 	}
 
-	label := wire.LiteralFormat(item.Label)
-	if strings.HasPrefix(label, "-") && !item.Disabled {
-		return nil, invalid("menu label would be disabled")
-	}
-
-	if item.Disabled {
-		label = "-" + label
-	}
-
-	var cmdArg wireArg
-	if hasCommands {
-		cmdArg = wireArg{text: "", nested: item.Commands.nodes()}
-	} else {
-		cmdArg = wireArg{text: item.Command, nested: nil}
+	label, err := formatMenuLabel(item)
+	if err != nil {
+		return nil, err
 	}
 
 	return []wireArg{
 		{text: label, nested: nil},
 		{text: string(item.Key), nested: nil},
-		cmdArg,
+		menuItemCommandArg(item),
 	}, nil
+}
+
+func validateMenuItem(item MenuItem) error {
+	if item.Label == "" || !wire.ValidString(item.Label) {
+		return invalid("menu item")
+	}
+
+	if item.Key != "" && !item.Key.Valid() {
+		return invalid("menu item key")
+	}
+
+	hasCommands := len(item.Commands.commands) > 0
+	hasCmd := item.Command != "" && wire.ValidString(item.Command)
+
+	if !item.Disabled && !hasCommands && !hasCmd {
+		return invalid("menu item command")
+	}
+
+	return nil
+}
+
+func menuItemCommandArg(item MenuItem) wireArg {
+	if len(item.Commands.commands) > 0 {
+		return wireArg{text: "", nested: item.Commands.nodes()}
+	}
+
+	if item.Command != "" && wire.ValidString(item.Command) {
+		return wireArg{text: item.Command, nested: nil}
+	}
+
+	return wireArg{text: "", nested: nil}
+}
+
+func formatMenuLabel(item MenuItem) (string, error) {
+	label := wire.LiteralFormat(item.Label)
+	if strings.HasPrefix(label, "-") && !item.Disabled {
+		return "", invalid("menu label would be disabled")
+	}
+
+	if item.Disabled && !strings.HasPrefix(label, "-") {
+		label = "-" + label
+	}
+
+	return label, nil
 }
 
 func promptArgs(clientID string, template PromptTemplate, o PromptOptions) ([]string, error) {

@@ -60,6 +60,42 @@ func TestMenuItemWithCommandString(t *testing.T) {
 	}
 }
 
+func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
+	// Keyless menu item (mouse/arrow navigation only)
+	keylessArgs, err := menuItemArg(MenuItem{
+		Label:     "Mouse Click Only",
+		Key:       "",
+		Commands:  CommandSequence{commands: nil},
+		Command:   "display-message clicked",
+		Separator: false,
+		Disabled:  false,
+	})
+	if err != nil {
+		t.Fatalf("expected keyless MenuItem to succeed, got %v", err)
+	}
+
+	if len(keylessArgs) != 3 || keylessArgs[1].text != "" {
+		t.Fatalf("expected empty key in wireArgs, got %+v", keylessArgs)
+	}
+
+	// Section header: disabled item with empty key and empty command
+	headerArgs, err := menuItemArg(MenuItem{
+		Label:     "Section Header",
+		Key:       "",
+		Commands:  CommandSequence{commands: nil},
+		Command:   "",
+		Separator: false,
+		Disabled:  true,
+	})
+	if err != nil {
+		t.Fatalf("expected section header MenuItem to succeed, got %v", err)
+	}
+
+	if len(headerArgs) != 3 || headerArgs[0].text != "-Section Header" || headerArgs[1].text != "" || headerArgs[2].text != "" {
+		t.Fatalf("unexpected section header wireArgs: %+v", headerArgs)
+	}
+}
+
 func TestPopupArgsOptions(t *testing.T) {
 	args, err := popupArgsWithTarget("-t", "%1", PopupOptions{
 		Program:        Program{kind: 0, name: "", args: nil},
@@ -159,14 +195,13 @@ func TestMessageValidation(t *testing.T) {
 	}
 }
 
-func TestMenuArgsNoCloseOnOverlap(t *testing.T) {
+func TestMenuArgsRequireClick(t *testing.T) {
 	args, err := menuArgsWithTarget("-t", "%0", MenuOptions{
-		Title:            "My Menu",
-		Mouse:            true,
-		StayOpen:         false,
-		NoCloseOnOverlap: true,
-		X:                "M",
-		Y:                "M",
+		Title:        "My Menu",
+		Mouse:        true,
+		RequireClick: true,
+		X:            "M",
+		Y:            "M",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +209,68 @@ func TestMenuArgsNoCloseOnOverlap(t *testing.T) {
 
 	if !slices.Contains(args, "-O") {
 		t.Fatalf("expected -O flag in menuArgsWithTarget, got %v", args)
+	}
+
+	if !slices.Contains(args, "-M") {
+		t.Fatalf("expected -M flag in menuArgsWithTarget when Mouse=true, got %v", args)
+	}
+}
+
+func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
+	// Default MenuOptions (Mouse: false, RequireClick: false) must emit neither -M nor -O
+	argsDefault, err := menuArgsWithTarget("-t", "%0", MenuOptions{
+		Title:        "",
+		Mouse:        false,
+		RequireClick: false,
+		X:            "",
+		Y:            "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if slices.Contains(argsDefault, "-M") {
+		t.Fatalf("expected no -M flag when Mouse=false, got %v", argsDefault)
+	}
+
+	if slices.Contains(argsDefault, "-O") {
+		t.Fatalf("expected no -O flag when RequireClick=false, got %v", argsDefault)
+	}
+
+	// Explicit Mouse: true must emit -M
+	argsMouse, err := menuArgsWithTarget("-c", "c0", MenuOptions{
+		Title:        "",
+		Mouse:        true,
+		RequireClick: false,
+		X:            "",
+		Y:            "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(argsMouse, "-M") {
+		t.Fatalf("expected -M flag when Mouse=true, got %v", argsMouse)
+	}
+
+	if slices.Contains(argsMouse, "-O") {
+		t.Fatalf("expected no -O flag when RequireClick=false, got %v", argsMouse)
+	}
+}
+
+func TestMenuSeparator(t *testing.T) {
+	sep := MenuSeparator()
+	if !sep.Separator {
+		t.Fatal("expected MenuSeparator() to have Separator=true")
+	}
+
+	args, err := menuItemArg(sep)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(args) != 1 || args[0].text != "" {
+		t.Fatalf("expected 1 empty wireArg for separator, got %+v", args)
 	}
 }
 
