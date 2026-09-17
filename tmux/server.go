@@ -1,11 +1,13 @@
 package tmux
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/zigai/gotmux/internal/wire"
 )
@@ -164,12 +166,12 @@ func (s *Server) Transport() Transport {
 // daemon identity and control-connection lifetime binding.
 func (s *Server) UsingSubprocess() (*Server, error) {
 	if s == nil || s.runner == nil {
-		return nil, ErrInvalidHandle
+		return nil, opError("UsingSubprocess", ErrInvalidHandle)
 	}
 
 	if s.lifetime != nil {
 		if err := s.lifetime.closedError(); err != nil {
-			return nil, err
+			return nil, opError("UsingSubprocess", err)
 		}
 	}
 
@@ -188,6 +190,50 @@ func (s *Server) Support() TransportSupport {
 		RawCommands: subprocess, ScalarReads: subprocess, Capture: subprocess,
 		BinaryInput: subprocess, InteractiveUI: subprocess, TerminalAttach: subprocess,
 	}
+}
+
+// RecreateSocket sends SIGUSR1 to the active tmux daemon process requesting that it
+// recreate its listening socket file.
+//
+// It requires an active running daemon and fails with [ErrNoServer] if no daemon is listening.
+func (s *Server) RecreateSocket(ctx context.Context) error {
+	return s.signalDaemon(ctx, "RecreateSocket", syscall.SIGUSR1)
+}
+
+// ToggleLogging sends SIGUSR2 to the active tmux daemon process toggling debug logging on or off.
+//
+// It requires an active running daemon and fails with [ErrNoServer] if no daemon is listening.
+func (s *Server) ToggleLogging(ctx context.Context) error {
+	return s.signalDaemon(ctx, "ToggleLogging", syscall.SIGUSR2)
+}
+
+func (s *Server) signalDaemon(ctx context.Context, opName string, sig syscall.Signal) error {
+	if s == nil || s.runner == nil {
+		return opError(opName, ErrInvalidHandle)
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return opError(opName, err)
+	}
+	defer op.close()
+
+	srvInfo, err := s.probe(opCtx, op)
+	if err != nil {
+		return opError(opName, err)
+	}
+
+	info := srvInfo.Identity
+	if info.PID <= 0 {
+		return opError(opName, ErrNoServer)
+	}
+
+	proc, err := os.FindProcess(info.PID)
+	if err != nil {
+		return opError(opName, err)
+	}
+
+	return opError(opName, proc.Signal(sig))
 }
 
 func (s *Server) baseArgs(allowStart bool) []string {

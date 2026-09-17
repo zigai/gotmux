@@ -10,11 +10,20 @@ import (
 )
 
 const (
-	paneOutputEventBaseOverhead    int64 = 96
-	layoutChangedEventBaseOverhead int64 = 96
-	sessionEventBaseOverhead       int64 = 96
-	subscriptionEventBaseOverhead  int64 = 128
-	unknownEventBaseOverhead       int64 = 64
+	paneOutputEventBaseOverhead         int64 = 96
+	layoutChangedEventBaseOverhead      int64 = 96
+	sessionEventBaseOverhead            int64 = 96
+	subscriptionEventBaseOverhead       int64 = 128
+	unknownEventBaseOverhead            int64 = 64
+	panePauseEventBaseOverhead          int64 = 64
+	paneContinueEventBaseOverhead       int64 = 64
+	configErrorEventBaseOverhead        int64 = 64
+	messageEventBaseOverhead            int64 = 64
+	clientFlagsChangedEventBaseOverhead int64 = 64
+	paneModeChangedEventBaseOverhead    int64 = 64
+	pasteBufferChangedEventBaseOverhead int64 = 64
+	pasteBufferDeletedEventBaseOverhead int64 = 64
+	windowPaneChangedEventBaseOverhead  int64 = 64
 )
 
 // Event is the common interface implemented by all tmux control mode notifications.
@@ -48,6 +57,22 @@ type PaneOutputEvent struct {
 	Age Value[time.Duration]
 
 	data []byte
+}
+
+// PanePauseEvent reports that output forwarding for a pane was paused (%pause).
+type PanePauseEvent struct {
+	eventBase
+
+	// PaneID is the ID of the pane whose output was paused.
+	PaneID PaneID
+}
+
+// PaneContinueEvent reports that output forwarding for a pane was resumed (%continue).
+type PaneContinueEvent struct {
+	eventBase
+
+	// PaneID is the ID of the pane whose output was resumed.
+	PaneID PaneID
 }
 
 // LayoutChangedEvent reports a change to a window's pane geometry or zoom state (%layout-change).
@@ -119,7 +144,9 @@ type SubscriptionEvent struct {
 	WindowID  Value[WindowID]
 	PaneID    Value[PaneID]
 
-	data []byte
+	// WindowIndex is the index of the window within the session, if present.
+	WindowIndex Value[int]
+	data        []byte
 
 	// RawHeader is the verbatim header text emitted by tmux.
 	RawHeader string
@@ -130,6 +157,68 @@ type UnknownEvent struct {
 	eventBase
 
 	payload []byte
+}
+
+// ConfigErrorEvent reports a configuration file parsing or execution error (%config-error).
+type ConfigErrorEvent struct {
+	eventBase
+
+	// Error contains the configuration error description emitted by tmux.
+	Error string
+}
+
+// MessageEvent reports an informational message emitted by tmux (%message).
+type MessageEvent struct {
+	eventBase
+
+	// Message contains the message text emitted by tmux.
+	Message string
+}
+
+// ClientFlagsChangedEvent reports changes to a client's flags (%client-flags-changed).
+type ClientFlagsChangedEvent struct {
+	eventBase
+
+	// ClientName is the name of the affected client terminal.
+	ClientName ClientName
+
+	// Flags contains the updated client flags string.
+	Flags string
+}
+
+// PaneModeChangedEvent reports that a pane entered or exited a mode (%pane-mode-changed).
+type PaneModeChangedEvent struct {
+	eventBase
+
+	// PaneID is the ID of the pane whose mode changed.
+	PaneID PaneID
+}
+
+// PasteBufferChangedEvent reports that a paste buffer was created or updated (%paste-buffer-changed).
+type PasteBufferChangedEvent struct {
+	eventBase
+
+	// Name is the name of the modified paste buffer.
+	Name string
+}
+
+// PasteBufferDeletedEvent reports that a paste buffer was deleted (%paste-buffer-deleted).
+type PasteBufferDeletedEvent struct {
+	eventBase
+
+	// Name is the name of the deleted paste buffer.
+	Name string
+}
+
+// WindowPaneChangedEvent reports that the active pane in a window changed (%window-pane-changed).
+type WindowPaneChangedEvent struct {
+	eventBase
+
+	// WindowID is the ID of the window whose active pane changed.
+	WindowID WindowID
+
+	// PaneID is the ID of the new active pane.
+	PaneID PaneID
 }
 
 func (e eventBase) RawName() string     { return e.name }
@@ -144,6 +233,15 @@ func (e PaneOutputEvent) eventBytes() int64 {
 }
 func (e PaneOutputEvent) cloneEvent() Event { e.data = bytes.Clone(e.data); return e }
 
+func (e PanePauseEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.PaneID)) + panePauseEventBaseOverhead
+}
+func (e PanePauseEvent) cloneEvent() Event { return e }
+
+func (e PaneContinueEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.PaneID)) + paneContinueEventBaseOverhead
+}
+func (e PaneContinueEvent) cloneEvent() Event { return e }
 func (e LayoutChangedEvent) eventBytes() int64 {
 	return int64(len(e.name)+len(e.Layout)+len(e.VisibleLayout)+len(e.Flags)) + layoutChangedEventBaseOverhead
 }
@@ -179,12 +277,67 @@ func (e UnknownEvent) eventBytes() int64 {
 	return int64(len(e.name)+len(e.payload)) + unknownEventBaseOverhead
 }
 func (e UnknownEvent) cloneEvent() Event { e.payload = bytes.Clone(e.payload); return e }
+
+func (e ConfigErrorEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.Error)) + configErrorEventBaseOverhead
+}
+func (e ConfigErrorEvent) cloneEvent() Event { return e }
+
+func (e MessageEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.Message)) + messageEventBaseOverhead
+}
+func (e MessageEvent) cloneEvent() Event { return e }
+
+func (e ClientFlagsChangedEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.ClientName)+len(e.Flags)) + clientFlagsChangedEventBaseOverhead
+}
+func (e ClientFlagsChangedEvent) cloneEvent() Event { return e }
+
+func (e PaneModeChangedEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.PaneID)) + paneModeChangedEventBaseOverhead
+}
+func (e PaneModeChangedEvent) cloneEvent() Event { return e }
+
+func (e PasteBufferChangedEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.Name)) + pasteBufferChangedEventBaseOverhead
+}
+func (e PasteBufferChangedEvent) cloneEvent() Event { return e }
+
+func (e PasteBufferDeletedEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.Name)) + pasteBufferDeletedEventBaseOverhead
+}
+func (e PasteBufferDeletedEvent) cloneEvent() Event { return e }
+
+func (e WindowPaneChangedEvent) eventBytes() int64 {
+	return int64(len(e.name)+len(e.WindowID)+len(e.PaneID)) + windowPaneChangedEventBaseOverhead
+}
+func (e WindowPaneChangedEvent) cloneEvent() Event { return e }
+
+func decodeFlowEvent(base eventBase, name, rest string) (Event, bool, error) {
+	switch name {
+	case "pause":
+		if !PaneID(rest).Valid() {
+			return nil, true, ErrProtocol
+		}
+
+		return PanePauseEvent{eventBase: base, PaneID: PaneID(rest)}, true, nil
+	case "continue":
+		if !PaneID(rest).Valid() {
+			return nil, true, ErrProtocol
+		}
+
+		return PaneContinueEvent{eventBase: base, PaneID: PaneID(rest)}, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
 func decodeEvent(line []byte, maxBytes int64) (Event, error) {
 	if !validateEventLine(line, maxBytes) {
 		return nil, ErrProtocol
 	}
 
-	s := strings.TrimSuffix(string(line), "\n")
+	s := strings.TrimRight(string(line), "\r\n")
 
 	name, rest, _ := strings.Cut(s[1:], " ")
 	if name == "" {
@@ -192,24 +345,123 @@ func decodeEvent(line []byte, maxBytes int64) (Event, error) {
 	}
 
 	base := eventBase{name: name, received: time.Now()}
+	if ev, ok, err := decodeKnownEvent(base, name, rest, maxBytes); ok {
+		return ev, err
+	}
 
-	switch {
-	case isOutputEvent(name):
-		return decodeOutputEvent(base, name, rest, maxBytes)
-	case name == "layout-change":
-		return decodeLayoutEvent(base, rest)
-	case isSessionEvent(name):
-		return decodeSessionEvent(base, name, rest)
-	case isWindowEvent(name):
-		return decodeWindowEvent(base, rest)
-	case isClientEvent(name):
-		return decodeClientEvent(base, name, rest)
-	case name == "subscription-changed":
-		return decodeSubscriptionEvent(base, rest)
-	case isValidEventName(name):
+	if isValidEventName(name) {
 		return UnknownEvent{eventBase: base, payload: []byte(rest)}, nil
+	}
+
+	return nil, ErrProtocol
+}
+
+func decodeKnownEvent(base eventBase, name, rest string, maxBytes int64) (Event, bool, error) {
+	if ev, ok, err := decodeFlowEvent(base, name, rest); ok {
+		return ev, true, err
+	}
+
+	if ev, ok, err := decodeServerEvent(base, name, rest); ok {
+		return ev, true, err
+	}
+
+	if ev, ok, err := decodeTargetEvent(base, name, rest); ok {
+		return ev, true, err
+	}
+
+	if isOutputEvent(name) {
+		ev, err := decodeOutputEvent(base, name, rest, maxBytes)
+		return ev, true, err
+	}
+
+	return decodeLifecycleEvent(base, name, rest)
+}
+
+func decodeServerEvent(base eventBase, name, rest string) (Event, bool, error) {
+	switch name {
+	case "config-error":
+		return ConfigErrorEvent{eventBase: base, Error: rest}, true, nil
+	case "message":
+		return MessageEvent{eventBase: base, Message: rest}, true, nil
+	case "client-flags-changed":
+		cname, flags, _ := strings.Cut(rest, " ")
+		if !ClientName(cname).Valid() {
+			return nil, true, ErrProtocol
+		}
+
+		return ClientFlagsChangedEvent{
+			eventBase:  base,
+			ClientName: ClientName(cname),
+			Flags:      flags,
+		}, true, nil
 	default:
-		return nil, ErrProtocol
+		return nil, false, nil
+	}
+}
+
+func decodePasteBufferEvent(base eventBase, name, rest string) (Event, bool, error) {
+	if name != "paste-buffer-changed" && name != "paste-buffer-deleted" {
+		return nil, false, nil
+	}
+
+	if !wire.ValidString(rest) || rest == "" {
+		return nil, true, ErrProtocol
+	}
+
+	if name == "paste-buffer-changed" {
+		return PasteBufferChangedEvent{eventBase: base, Name: rest}, true, nil
+	}
+
+	return PasteBufferDeletedEvent{eventBase: base, Name: rest}, true, nil
+}
+
+func decodeTargetEvent(base eventBase, name, rest string) (Event, bool, error) {
+	if ev, ok, err := decodePasteBufferEvent(base, name, rest); ok {
+		return ev, true, err
+	}
+
+	switch name {
+	case "pane-mode-changed":
+		if !PaneID(rest).Valid() {
+			return nil, true, ErrProtocol
+		}
+
+		return PaneModeChangedEvent{eventBase: base, PaneID: PaneID(rest)}, true, nil
+	case "window-pane-changed":
+		wid, pid, _ := strings.Cut(rest, " ")
+		if !WindowID(wid).Valid() || !PaneID(pid).Valid() {
+			return nil, true, ErrProtocol
+		}
+
+		return WindowPaneChangedEvent{
+			eventBase: base,
+			WindowID:  WindowID(wid),
+			PaneID:    PaneID(pid),
+		}, true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+func decodeLifecycleEvent(base eventBase, name, rest string) (Event, bool, error) {
+	switch {
+	case name == "layout-change":
+		ev, err := decodeLayoutEvent(base, rest)
+		return ev, true, err
+	case isSessionEvent(name):
+		ev, err := decodeSessionEvent(base, name, rest)
+		return ev, true, err
+	case isWindowEvent(name):
+		ev, err := decodeWindowEvent(base, rest)
+		return ev, true, err
+	case isClientEvent(name):
+		ev, err := decodeClientEvent(base, name, rest)
+		return ev, true, err
+	case name == "subscription-changed":
+		ev, err := decodeSubscriptionEvent(base, rest)
+		return ev, true, err
+	default:
+		return nil, false, nil
 	}
 }
 
@@ -410,13 +662,22 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		}
 	}
 
+	widx := UnavailableValue[int]()
+
+	if len(parts) >= 4 && parts[3] != "-" {
+		if n, err := strconv.Atoi(parts[3]); err == nil && n >= 0 {
+			widx = PresentValue(n)
+		}
+	}
+
 	return SubscriptionEvent{
-		eventBase: base,
-		Name:      parts[0],
-		RawHeader: header,
-		SessionID: sid,
-		WindowID:  wid,
-		PaneID:    pid,
-		data:      []byte(data),
+		eventBase:   base,
+		Name:        parts[0],
+		RawHeader:   header,
+		SessionID:   sid,
+		WindowID:    wid,
+		PaneID:      pid,
+		WindowIndex: widx,
+		data:        []byte(data),
 	}, nil
 }
