@@ -25,6 +25,23 @@ type (
 		// Hidden indicates whether the queried variable is in tmux's hidden environment table (-h flag).
 		Hidden bool
 	}
+
+	// EnvironmentEntry represents one environment variable entry returned by a scoped List operation.
+	EnvironmentEntry struct {
+		// Name is the environment variable name (e.g. "PATH", "REMOVED_VAR").
+		Name string
+
+		// Value captures the value content, unset marker (-r), and hidden status of the variable.
+		// An empty variable has Value.Value == PresentValue("").
+		// A removed variable (-r) has Value.Unset == true and Value.Value == UnavailableValue[string]().
+		Value EnvironmentValue
+	}
+
+	// ListEnvironmentOptions configures environment variable listing behavior.
+	ListEnvironmentOptions struct {
+		// Hidden includes variables from the hidden environment table (-h flag).
+		Hidden bool
+	}
 )
 
 // Environment returns the global server environment scope (set-environment -g).
@@ -84,6 +101,69 @@ func (scope EnvironmentScope) Get(ctx context.Context, name string, hidden bool)
 	}
 
 	return EnvironmentValue{Value: PresentValue(string(data[len(prefix):])), Unset: false, Hidden: hidden}, nil
+}
+
+// List returns all environment variables registered in this scope.
+func (scope EnvironmentScope) List(ctx context.Context) ([]EnvironmentEntry, error) {
+	return scope.ListWith(ctx, ListEnvironmentOptions{Hidden: false})
+}
+
+// ListWith returns environment variables registered in this scope matching the given listing options.
+func (scope EnvironmentScope) ListWith(ctx context.Context, o ListEnvironmentOptions) ([]EnvironmentEntry, error) {
+	opCtx, op, g, err := scope.target.prepare(ctx)
+	if err != nil {
+		return nil, opError("Environment.List", err)
+	}
+	defer op.close()
+
+	args := scope.base()
+	if o.Hidden {
+		args = append(args, "-h")
+	}
+
+	r, err := scope.target.server.execute(opCtx, op, plainPlan(command("show-environment", args...)), g, nil)
+	if err != nil {
+		return nil, opError("Environment.List", err)
+	}
+
+	var out []EnvironmentEntry
+
+	for line := range bytes.SplitSeq(bytes.TrimSuffix(r.Stdout, []byte{'\n'}), []byte{'\n'}) {
+		if len(line) == 0 {
+			continue
+		}
+
+		s := string(line)
+		if strings.HasPrefix(s, "-") {
+			name := s[1:]
+			out = append(out, EnvironmentEntry{
+				Name: name,
+				Value: EnvironmentValue{
+					Value:  UnavailableValue[string](),
+					Unset:  true,
+					Hidden: o.Hidden,
+				},
+			})
+
+			continue
+		}
+
+		name, val, ok := strings.Cut(s, "=")
+		if !ok {
+			continue
+		}
+
+		out = append(out, EnvironmentEntry{
+			Name: name,
+			Value: EnvironmentValue{
+				Value:  PresentValue(val),
+				Unset:  false,
+				Hidden: o.Hidden,
+			},
+		})
+	}
+
+	return out, nil
 }
 
 // Set assigns a value to an environment variable in this scope.

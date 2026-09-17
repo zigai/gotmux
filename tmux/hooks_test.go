@@ -31,32 +31,74 @@ func TestHookAndBindingPayloadsNeverEvaluate(t *testing.T) {
 
 func TestKeyValidCaseAndAliases(t *testing.T) {
 	keys := map[string]bool{
-		"Enter":   true,
-		"enter":   true,
-		"ENTER":   true,
-		"Escape":  true,
-		"escape":  true,
-		"Space":   true,
-		"space":   true,
-		"Tab":     true,
-		"tab":     true,
-		"PgUp":    true,
-		"pgup":    true,
-		"PgDn":    true,
-		"pgdn":    true,
-		"KP0":     true,
-		"kp0":     true,
-		"KPEnter": true,
-		"C-a":     true,
-		"c-a":     true,
-		"M-x":     true,
-		"m-x":     true,
-		"F1":      true,
-		"f1":      true,
-		"F12":     true,
-		"f12":     true,
+		"Enter":                 true,
+		"enter":                 true,
+		"ENTER":                 true,
+		"Escape":                true,
+		"escape":                true,
+		"Space":                 true,
+		"space":                 true,
+		"Tab":                   true,
+		"tab":                   true,
+		"PgUp":                  true,
+		"pgup":                  true,
+		"PgDn":                  true,
+		"pgdn":                  true,
+		"KP0":                   true,
+		"kp0":                   true,
+		"KPEnter":               true,
+		"C-a":                   true,
+		"c-a":                   true,
+		"M-x":                   true,
+		"m-x":                   true,
+		"F1":                    true,
+		"f1":                    true,
+		"F12":                   true,
+		"f12":                   true,
+		"F63":                   true,
+		"Any":                   true,
+		"any":                   true,
+		"None":                  true,
+		"none":                  true,
+		"User0":                 true,
+		"user0":                 true,
+		"User9":                 true,
+		"User63":                true,
+		"MouseDown1Pane":        true,
+		"mousedown1pane":        true,
+		"MouseUp1Pane":          true,
+		"MouseDrag1Pane":        true,
+		"MouseDragEnd1Pane":     true,
+		"WheelUpPane":           true,
+		"WheelDownPane":         true,
+		"DoubleClick1Pane":      true,
+		"TripleClick1Pane":      true,
+		"SecondClick1Pane":      true,
+		"MouseDown1Status":      true,
+		"MouseDown1StatusLeft":  true,
+		"MouseDown1StatusRight": true,
+		"MouseDown1Border":      true,
+		"MouseDown1Empty":       true,
+		"MouseDown1ScrollbarUp": true,
+		"MouseDown1Control7":    true,
+		"M-MouseDown1Pane":      true,
+		"C-MouseDown1Status":    true,
+		"S-WheelUpPane":         true,
+		"C-M-x":                 true,
+		"^a":                    true,
+		"":                      false,
+		"C-":                    false,
+		"M-":                    false,
+		"User":                  false,
+		"User-1":                false,
+		"MouseDown1":            false,
+		"WheelUp":               false,
+		"InvalidKey":            false,
+		"a\x00b":                false,
+		"\x00":                  false,
+		"\x01":                  false,
+		"\x7f":                  false,
 	}
-
 	for k, want := range keys {
 		got := Key(k).Valid()
 		if got != want {
@@ -93,6 +135,44 @@ func FuzzParseBinding(f *testing.F) {
 		b := parseBinding(raw, PrefixTable)
 		if b.Parsed {
 			assertValidParsedBinding(t, b)
+		}
+	})
+}
+
+func FuzzParseBindingNote(f *testing.F) {
+	seeds := []string{
+		"C-b Tab     Switch to a window",
+		"C-b Space   Select next layout",
+		"C-b !       Break pane to a new window",
+		"C-b F12 Note with multiple words",
+		"F12 Note",
+		"MYPREFIX Tab Some Note",
+		"",
+		"NoSpaces",
+		"Single Space",
+		"   Leading and trailing   ",
+		"Multiple    Spaces    Everywhere",
+	}
+
+	for _, s := range seeds {
+		f.Add(s)
+	}
+
+	f.Fuzz(func(t *testing.T, raw string) {
+		if len(raw) > 2048 {
+			return
+		}
+
+		note := parseBindingNote(raw, BindingsOptions{
+			Table:      "",
+			Key:        "",
+			FirstMatch: false,
+			NotesOnly:  true,
+			Prefix:     "",
+		})
+
+		if note.Raw != raw {
+			t.Fatalf("parseBindingNote corrupted Raw: got %q, want %q", note.Raw, raw)
 		}
 	})
 }

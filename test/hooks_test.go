@@ -256,3 +256,198 @@ func TestUnindexedHookList(t *testing.T) {
 		t.Fatalf("expected Index=0 for unindexed hook, got %d", found.Index)
 	}
 }
+
+func TestIntegrationHookScopeExtensions(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+
+	cmd1 := testCommand(t, "display-message", "first")
+	cmd2 := testCommand(t, "display-message", "second")
+	cmd3 := testCommand(t, "display-message", "replaced")
+
+	// 1. SetWhole sets whole hook without index
+	if err := session.Hooks().SetWhole(ctx, "after-new-window", testSequence(t, cmd1)); err != nil {
+		t.Fatalf("SetWhole failed: %v", err)
+	}
+
+	// 2. Append appends to the hook with -a
+	if err := session.Hooks().Append(ctx, "after-new-window", testSequence(t, cmd2)); err != nil {
+		t.Fatalf("Append failed: %v", err)
+	}
+
+	// Verify both entries exist (index 0 and index 1)
+	hooks, err := session.Hooks().List(ctx)
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	var count int
+	for _, h := range hooks {
+		if h.Name == "after-new-window" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 hooks for after-new-window after append, got %d", count)
+	}
+
+	// 3. ListFiltered returns only matching hooks
+	filtered, err := session.Hooks().ListFiltered(ctx, "after-new-window")
+	if err != nil {
+		t.Fatalf("ListFiltered failed: %v", err)
+	}
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered hooks, got %d", len(filtered))
+	}
+	for _, h := range filtered {
+		if h.Name != "after-new-window" {
+			t.Fatalf("ListFiltered returned non-matching hook: %+v", h)
+		}
+	}
+
+	// 4. Run-now (-R) executes without error
+	if err := session.Hooks().Run(ctx, "after-new-window"); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// 5. SetWhole replaces the whole hook (replaces slot 0 and removes slot 1)
+	if err := session.Hooks().SetWhole(ctx, "after-new-window", testSequence(t, cmd3)); err != nil {
+		t.Fatalf("SetWhole replace failed: %v", err)
+	}
+	hooksReplaced, err := session.Hooks().ListFiltered(ctx, "after-new-window")
+	if err != nil || len(hooksReplaced) != 1 {
+		t.Fatalf("expected 1 hook after SetWhole replace, got %d (err=%v)", len(hooksReplaced), err)
+	}
+
+	// 6. Remove deletes all slots for the hook
+	if err := session.Hooks().Remove(ctx, "after-new-window"); err != nil {
+		t.Fatalf("Remove failed: %v", err)
+	}
+	hooksRemoved, err := session.Hooks().ListFiltered(ctx, "after-new-window")
+	if err != nil || len(hooksRemoved) != 0 {
+		t.Fatalf("expected 0 hooks after Remove, got %d (err=%v)", len(hooksRemoved), err)
+	}
+}
+
+func TestIntegrationKeyBindingsExtensions(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	cmd := testCommand(t, "display-message", "pressed")
+
+	// 1. Bind key with note and repeat
+	if err := server.Bind(ctx, "root", "F12", testSequence(t, cmd), tmux.BindOptions{
+		Repeat: false,
+		Note:   "Initial Note",
+	}); err != nil {
+		t.Fatalf("Bind failed: %v", err)
+	}
+
+	// Query with BindingsWith filtering by table and key
+	bindings, err := server.BindingsWith(ctx, tmux.BindingsOptions{
+		Table: "root",
+		Key:   "F12",
+	})
+	if err != nil || len(bindings) != 1 {
+		t.Fatalf("BindingsWith failed: %v, len=%d", err, len(bindings))
+	}
+	if bindings[0].Key != "F12" || bindings[0].Repeat {
+		t.Fatalf("unexpected binding: %+v", bindings[0])
+	}
+
+	// 2. Commandless edit: update note and repeat without replacing command
+	var emptySeq tmux.CommandSequence
+	if err := server.Bind(ctx, "root", "F12", emptySeq, tmux.BindOptions{
+		Repeat: true,
+		Note:   "Updated Note",
+	}); err != nil {
+		t.Fatalf("commandless Bind failed: %v", err)
+	}
+
+	// Verify command was preserved and repeat is true
+	bindingsAfter, err := server.BindingsWith(ctx, tmux.BindingsOptions{
+		Table: "root",
+		Key:   "F12",
+	})
+	if err != nil || len(bindingsAfter) != 1 {
+		t.Fatalf("BindingsWith after edit failed: %v", err)
+	}
+	if !bindingsAfter[0].Repeat {
+		t.Fatalf("expected Repeat=true after commandless edit, got %+v", bindingsAfter[0])
+	}
+	cmds, ok := bindingsAfter[0].Payload.Commands()
+	if !ok || len(cmds) != 1 || cmds[0].Name() != "display-message" {
+		t.Fatalf("command was not preserved: %+v", bindingsAfter[0].Payload)
+	}
+
+	// 3. Query BindingNotes
+	notes, err := server.BindingNotes(ctx, tmux.BindingsOptions{
+		Table: "root",
+		Key:   "F12",
+	})
+	if err != nil || len(notes) == 0 {
+		t.Fatalf("BindingNotes failed: %v, len=%d", err, len(notes))
+	}
+	if notes[0].Note != "Updated Note" {
+		t.Fatalf("expected note 'Updated Note', got %q", notes[0].Note)
+	}
+
+	// 4. Commandless edit: clear note with ClearNote
+	if err := server.Bind(ctx, "root", "F12", emptySeq, tmux.BindOptions{
+		ClearNote: true,
+	}); err != nil {
+		t.Fatalf("ClearNote failed: %v", err)
+	}
+
+	// 5. UnbindWith specific key
+	if err := server.UnbindWith(ctx, "root", "F12", tmux.UnbindOptions{Quiet: true}); err != nil {
+		t.Fatalf("UnbindWith failed: %v", err)
+	}
+
+	// 6. Native mouse and User key bindings
+	if err := server.Bind(ctx, "root", "MouseDown1Pane", testSequence(t, cmd), tmux.BindOptions{}); err != nil {
+		t.Fatalf("failed to bind MouseDown1Pane: %v", err)
+	}
+	if err := server.Bind(ctx, "root", "User0", testSequence(t, cmd), tmux.BindOptions{}); err != nil {
+		t.Fatalf("failed to bind User0: %v", err)
+	}
+
+	mouseBindings, err := server.BindingsWith(ctx, tmux.BindingsOptions{
+		Table: "root",
+		Key:   "MouseDown1Pane",
+	})
+	if err != nil || len(mouseBindings) != 1 {
+		t.Fatalf("failed to query MouseDown1Pane binding: %v, len=%d", err, len(mouseBindings))
+	}
+	if mouseBindings[0].Key != "MouseDown1Pane" {
+		t.Fatalf("unexpected mouse key: %q", mouseBindings[0].Key)
+	}
+
+	userBindings, err := server.BindingsWith(ctx, tmux.BindingsOptions{
+		Table: "root",
+		Key:   "User0",
+	})
+	if err != nil || len(userBindings) != 1 {
+		t.Fatalf("failed to query User0 binding: %v, len=%d", err, len(userBindings))
+	}
+	if userBindings[0].Key != "User0" {
+		t.Fatalf("unexpected user key: %q", userBindings[0].Key)
+	}
+
+	// 7. UnbindWith all on custom table
+	customTable := tmux.KeyTable("custom_table")
+	if err := server.Bind(ctx, customTable, "F1", testSequence(t, cmd), tmux.BindOptions{}); err != nil {
+		t.Fatalf("failed to bind in custom table: %v", err)
+	}
+	if err := server.Bind(ctx, customTable, "F2", testSequence(t, cmd), tmux.BindOptions{}); err != nil {
+		t.Fatalf("failed to bind in custom table: %v", err)
+	}
+	customBindings, err := server.Bindings(ctx, customTable)
+	if err != nil || len(customBindings) != 2 {
+		t.Fatalf("expected 2 custom bindings, got %d, err=%v", len(customBindings), err)
+	}
+	if err := server.UnbindWith(ctx, customTable, "", tmux.UnbindOptions{All: true, Quiet: true}); err != nil {
+		t.Fatalf("UnbindWith all failed: %v", err)
+	}
+	afterAll, err := server.Bindings(ctx, customTable)
+	if err != nil || len(afterAll) != 0 {
+		t.Fatalf("expected 0 bindings after UnbindWith all, got %d, err=%v", len(afterAll), err)
+	}
+}

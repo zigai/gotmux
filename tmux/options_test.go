@@ -62,3 +62,77 @@ func TestTypedOptionValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestParseOptionName(t *testing.T) {
+	tests := []struct {
+		input       string
+		wantBase    string
+		wantIndex   int
+		wantIndexed bool
+		wantErr     bool
+	}{
+		{input: "escape-time", wantBase: "escape-time", wantIndex: 0, wantIndexed: false, wantErr: false},
+		{input: "status-format[0]", wantBase: "status-format", wantIndex: 0, wantIndexed: true, wantErr: false},
+		{input: "codepoint-widths[500]", wantBase: "codepoint-widths", wantIndex: 500, wantIndexed: true, wantErr: false},
+		{input: "@my_opt[42]", wantBase: "@my_opt", wantIndex: 42, wantIndexed: true, wantErr: false},
+		{input: "@user", wantBase: "@user", wantIndex: 0, wantIndexed: false, wantErr: false},
+		{input: "", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "@", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "[0]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[-1]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[--1]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[abc]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[0x10]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[ 1 ]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{input: "opt[1073741824]", wantBase: "opt", wantIndex: 1073741824, wantIndexed: true, wantErr: false}, // 1<<30 max bound
+		{input: "opt[1073741825]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},             // > 1<<30
+		{input: "opt[99999999999999999999999]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			base, idx, indexed, err := parseOptionName(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("parseOptionName(%q) err = %v, wantErr = %v", tt.input, err, tt.wantErr)
+			}
+
+			if !tt.wantErr {
+				if base != tt.wantBase || idx != tt.wantIndex || indexed != tt.wantIndexed {
+					t.Fatalf("parseOptionName(%q) = (%q, %d, %v), want (%q, %d, %v)",
+						tt.input, base, idx, indexed, tt.wantBase, tt.wantIndex, tt.wantIndexed)
+				}
+			}
+		})
+	}
+}
+
+func TestOptionMutationOptionsValidation(t *testing.T) {
+	server := localServer(t)
+	ctx := t.Context()
+
+	// Invalid option name
+	if err := server.Options().SetWith(ctx, "invalid name with spaces", SetOptionOptions{
+		Value:        PresentValue("1"),
+		Append:       false,
+		ExpandFormat: false,
+		OnlyIfUnset:  false,
+	}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for invalid option name, got %v", err)
+	}
+
+	// Invalid option value (NUL byte)
+	if err := server.Options().SetWith(ctx, "escape-time", SetOptionOptions{
+		Value:        PresentValue("1\x002"),
+		Append:       false,
+		ExpandFormat: false,
+		OnlyIfUnset:  false,
+	}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for NUL byte in value, got %v", err)
+	}
+
+	// Invalid unset option name
+	if err := server.Options().UnsetWith(ctx, "invalid name", UnsetOptionOptions{Cascade: true}); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("expected ErrInvalidArgument for invalid option name in UnsetWith, got %v", err)
+	}
+}

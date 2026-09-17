@@ -174,9 +174,29 @@ func (o PaneOptions) Set(ctx context.Context, name, value string) error {
 	return o.target.set(ctx, name, value, false)
 }
 
+// SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
+func (o PaneOptions) SetWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return o.target.setWith(ctx, name, opts)
+}
+
 // Unset removes the local value of an option by its tmux name.
 func (o PaneOptions) Unset(ctx context.Context, name string) error {
 	return o.target.set(ctx, name, "", true)
+}
+
+// UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
+func (o PaneOptions) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return o.target.unsetWith(ctx, name, opts)
+}
+
+// List queries all options set in this scope.
+func (o PaneOptions) List(ctx context.Context) ([]OptionEntry, error) {
+	return o.target.list(ctx, ListOptionOptions{})
+}
+
+// ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
+func (o PaneOptions) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) {
+	return o.target.list(ctx, opts)
 }
 
 // User reads the value of a user-defined option (prefixed with @) in this scope.
@@ -189,12 +209,20 @@ func (o PaneOptions) SetUser(ctx context.Context, name, value string) error {
 	return userSet(ctx, o.target, name, value, false)
 }
 
+// SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
+func (o PaneOptions) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return userSetWith(ctx, o.target, name, opts)
+}
+
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
 func (o PaneOptions) UnsetUser(ctx context.Context, name string) error {
 	return userSet(ctx, o.target, name, "", true)
 }
 
-// Array reads all index entries for the named array option in this scope.
+// UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
+func (o PaneOptions) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return userUnsetWith(ctx, o.target, name, opts)
+}
 func (o PaneOptions) Array(ctx context.Context, name string) ([]ArrayEntry, error) {
 	return o.target.array(ctx, name)
 }
@@ -382,9 +410,29 @@ func (o ServerOptions) Set(ctx context.Context, name, value string) error {
 	return o.target.set(ctx, name, value, false)
 }
 
+// SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
+func (o ServerOptions) SetWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return o.target.setWith(ctx, name, opts)
+}
+
 // Unset removes the local value of an option by its tmux name.
 func (o ServerOptions) Unset(ctx context.Context, name string) error {
 	return o.target.set(ctx, name, "", true)
+}
+
+// UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
+func (o ServerOptions) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return o.target.unsetWith(ctx, name, opts)
+}
+
+// List queries all options set in this scope.
+func (o ServerOptions) List(ctx context.Context) ([]OptionEntry, error) {
+	return o.target.list(ctx, ListOptionOptions{})
+}
+
+// ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
+func (o ServerOptions) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) {
+	return o.target.list(ctx, opts)
 }
 
 // User reads the value of a user-defined option (prefixed with @) in this scope.
@@ -397,12 +445,20 @@ func (o ServerOptions) SetUser(ctx context.Context, name, value string) error {
 	return userSet(ctx, o.target, name, value, false)
 }
 
+// SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
+func (o ServerOptions) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return userSetWith(ctx, o.target, name, opts)
+}
+
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
 func (o ServerOptions) UnsetUser(ctx context.Context, name string) error {
 	return userSet(ctx, o.target, name, "", true)
 }
 
-// Array reads all index entries for the named array option in this scope.
+// UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
+func (o ServerOptions) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return userUnsetWith(ctx, o.target, name, opts)
+}
 func (o ServerOptions) Array(ctx context.Context, name string) ([]ArrayEntry, error) {
 	return o.target.array(ctx, name)
 }
@@ -593,9 +649,29 @@ func (o SessionOptions) Set(ctx context.Context, name, value string) error {
 	return o.target.set(ctx, name, value, false)
 }
 
+// SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
+func (o SessionOptions) SetWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return o.target.setWith(ctx, name, opts)
+}
+
 // Unset removes the local value of an option by its tmux name.
 func (o SessionOptions) Unset(ctx context.Context, name string) error {
 	return o.target.set(ctx, name, "", true)
+}
+
+// UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
+func (o SessionOptions) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return o.target.unsetWith(ctx, name, opts)
+}
+
+// List queries all options set in this scope.
+func (o SessionOptions) List(ctx context.Context) ([]OptionEntry, error) {
+	return o.target.list(ctx, ListOptionOptions{})
+}
+
+// ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
+func (o SessionOptions) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) {
+	return o.target.list(ctx, opts)
 }
 
 // User reads the value of a user-defined option (prefixed with @) in this scope.
@@ -608,12 +684,20 @@ func (o SessionOptions) SetUser(ctx context.Context, name, value string) error {
 	return userSet(ctx, o.target, name, value, false)
 }
 
+// SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
+func (o SessionOptions) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return userSetWith(ctx, o.target, name, opts)
+}
+
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
 func (o SessionOptions) UnsetUser(ctx context.Context, name string) error {
 	return userSet(ctx, o.target, name, "", true)
 }
 
-// Array reads all index entries for the named array option in this scope.
+// UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
+func (o SessionOptions) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return userUnsetWith(ctx, o.target, name, opts)
+}
 func (o SessionOptions) Array(ctx context.Context, name string) ([]ArrayEntry, error) {
 	return o.target.array(ctx, name)
 }
@@ -1012,9 +1096,29 @@ func (o WindowOptions) Set(ctx context.Context, name, value string) error {
 	return o.target.set(ctx, name, value, false)
 }
 
+// SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
+func (o WindowOptions) SetWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return o.target.setWith(ctx, name, opts)
+}
+
 // Unset removes the local value of an option by its tmux name.
 func (o WindowOptions) Unset(ctx context.Context, name string) error {
 	return o.target.set(ctx, name, "", true)
+}
+
+// UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
+func (o WindowOptions) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return o.target.unsetWith(ctx, name, opts)
+}
+
+// List queries all options set in this scope.
+func (o WindowOptions) List(ctx context.Context) ([]OptionEntry, error) {
+	return o.target.list(ctx, ListOptionOptions{})
+}
+
+// ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
+func (o WindowOptions) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) {
+	return o.target.list(ctx, opts)
 }
 
 // User reads the value of a user-defined option (prefixed with @) in this scope.
@@ -1027,12 +1131,20 @@ func (o WindowOptions) SetUser(ctx context.Context, name, value string) error {
 	return userSet(ctx, o.target, name, value, false)
 }
 
+// SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
+func (o WindowOptions) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error {
+	return userSetWith(ctx, o.target, name, opts)
+}
+
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
 func (o WindowOptions) UnsetUser(ctx context.Context, name string) error {
 	return userSet(ctx, o.target, name, "", true)
 }
 
-// Array reads all index entries for the named array option in this scope.
+// UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
+func (o WindowOptions) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+	return userUnsetWith(ctx, o.target, name, opts)
+}
 func (o WindowOptions) Array(ctx context.Context, name string) ([]ArrayEntry, error) {
 	return o.target.array(ctx, name)
 }

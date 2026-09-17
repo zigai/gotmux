@@ -89,6 +89,9 @@ type (
 		// EntireHistory captures the pane's entire scrollback history (-S -).
 		EntireHistory bool
 
+		// ScrollbackEnd captures to the end of the scrollback buffer (-E -).
+		ScrollbackEnd bool
+
 		// JoinWrapped joins lines that were soft-wrapped by terminal dimensions (-J flag).
 		JoinWrapped bool
 
@@ -98,11 +101,29 @@ type (
 		// PreserveSpaces preserves trailing spaces on each line (-N flag).
 		PreserveSpaces bool
 
+		// PaneState captures the pane state as well as the content (-P flag).
+		PaneState bool
+
+		// Quiet suppresses errors if the target pane cannot be captured (-q flag).
+		Quiet bool
+
+		// Hyperlinks retains terminal hyperlinks in the captured output (-T flag).
+		Hyperlinks bool
+
 		// Screen selects which terminal screen buffer to capture.
 		Screen CaptureScreen
 
+		// Buffer specifies the target buffer name to store captured text into (-b flag).
+		Buffer string
+
 		// MaxBytes optionally tightens the maximum bytes captured below [Limits.OutputBytes].
 		MaxBytes int64
+
+		// EscapeNonPrintable escapes non-printable characters as octal \xxx (-C flag).
+		EscapeNonPrintable bool
+
+		// AlternateScreenOnly captures from the alternate screen buffer only if active (-F flag).
+		AlternateScreenOnly bool
 	}
 
 	// CopyModeOptions configures entering or exiting copy mode on a pane.
@@ -125,23 +146,51 @@ type (
 		// Title is the pane title string at capture time (#{pane_title}).
 		Title string
 	}
+
+	// SendKeysOptions configures sending key presses or text input to a pane.
+	SendKeysOptions struct {
+		// ExpandFormat expands format specifiers in key or text arguments (-F flag).
+		ExpandFormat bool
+
+		// Hex treats key arguments or text as hexadecimal byte values (-H flag).
+		Hex bool
+
+		// KeyName looks up keys in the client's key table rather than target pane (-K flag).
+		KeyName bool
+
+		// Reset resets the terminal state before sending keys (-R flag).
+		Reset bool
+
+		// RepeatCount specifies how many times to repeat each key press (-N flag).
+		// Must be non-negative.
+		RepeatCount int
+
+		// MouseForward forwards mouse events to the pane (-M flag).
+		MouseForward bool
+
+		// Client specifies the target client terminal to send keys to (-c flag).
+		Client string
+	}
 )
 
 // Valid reports whether this key string represents a syntactically valid tmux key name.
 func (k Key) Valid() bool {
 	s := string(k)
-	if s == "" || !utf8.ValidString(s) {
+	if s == "" || !utf8.ValidString(s) || strings.ContainsRune(s, '\x00') {
 		return false
 	}
 
 	s = trimModifiers(s)
+	if s == "" {
+		return false
+	}
 
 	if utf8.RuneCountInString(s) == 1 {
 		r, _ := utf8.DecodeRuneInString(s)
 		return r >= 32 && r != 127
 	}
 
-	return isNamedKey(s) || isFunctionKey(s)
+	return isNamedKey(s) || isFunctionKey(s) || isUserKey(s) || isMouseKey(s)
 }
 
 // SendText transmits literal text into the target pane without appending a newline.
@@ -219,6 +268,139 @@ func (p Pane) Submit(ctx context.Context, text string) error {
 	_, err = p.h.server.execute(opCtx, op, plan{nodes: nodes, mode: replyEmpty, allowStart: false}, p.h.guard(), nil)
 
 	return opError("Submit", err)
+}
+
+// SendKeysWith transmits key symbols into the target pane using the provided options.
+func (p Pane) SendKeysWith(ctx context.Context, o SendKeysOptions, keys ...Key) error {
+	if err := p.h.check(); err != nil {
+		return opError("SendKeysWith", err)
+	}
+
+	flagArgs, err := sendKeysFlagArgs(o)
+	if err != nil {
+		return opError("SendKeysWith", err)
+	}
+
+	if len(keys) == 0 && !o.Reset && !o.MouseForward {
+		if ctx == nil {
+			return opError("SendKeysWith", invalid("nil context"))
+		}
+
+		return opError("SendKeysWith", ctx.Err())
+	}
+
+	args := append([]string{"-t", p.h.id}, flagArgs...)
+
+	if len(keys) > 0 {
+		if err := validateKeyList(keys, o.Hex); err != nil {
+			return opError("SendKeysWith", err)
+		}
+
+		args = append(args, "--")
+		for _, k := range keys {
+			args = append(args, string(k))
+		}
+	}
+
+	return p.h.act(ctx, "send-keys", args...)
+}
+
+// SendTextWith transmits text into the target pane using the provided options.
+// Text is sent with -l to bypass key name translation unless Hex or ExpandFormat is set.
+// Cannot contain embedded NUL bytes.
+func (p Pane) SendTextWith(ctx context.Context, o SendKeysOptions, text string) error {
+	if err := p.h.check(); err != nil {
+		return opError("SendTextWith", err)
+	}
+
+	if !wire.ValidString(text) {
+		return opError("SendTextWith", invalid("text contains NUL; use a binary buffer"))
+	}
+
+	flagArgs, err := sendKeysFlagArgs(o)
+	if err != nil {
+		return opError("SendTextWith", err)
+	}
+
+	if text == "" && !o.Reset && !o.MouseForward {
+		if ctx == nil {
+			return opError("SendTextWith", invalid("nil context"))
+		}
+
+		return opError("SendTextWith", ctx.Err())
+	}
+
+	textArgs, err := sendTextArgs(text, o.Hex)
+	if err != nil {
+		return opError("SendTextWith", err)
+	}
+
+	args := append([]string{"-t", p.h.id}, flagArgs...)
+	if !o.Hex && !o.ExpandFormat {
+		args = append(args, "-l")
+	}
+
+	args = append(args, textArgs...)
+
+	return p.h.act(ctx, "send-keys", args...)
+}
+
+// SendPrefix sends the tmux prefix key (or secondary prefix if secondary is true) to this pane (send-prefix).
+func (p Pane) SendPrefix(ctx context.Context, secondary bool) error {
+	if err := p.h.check(); err != nil {
+		return opError("SendPrefix", err)
+	}
+
+	args := []string{"-t", p.h.id}
+	if secondary {
+		args = append(args, "-2")
+	}
+
+	return p.h.act(ctx, "send-prefix", args...)
+}
+
+// ClockMode displays the digital clock in this pane (clock-mode).
+func (p Pane) ClockMode(ctx context.Context) error {
+	if err := p.h.check(); err != nil {
+		return opError("ClockMode", err)
+	}
+
+	return p.h.act(ctx, "clock-mode", "-t", p.h.id)
+}
+
+func validateKeyList(keys []Key, hex bool) error {
+	for _, k := range keys {
+		if hex {
+			if !wire.ValidString(string(k)) || string(k) == "" {
+				return invalid("hex key")
+			}
+
+			continue
+		}
+
+		if !k.Valid() {
+			return invalid("key name")
+		}
+	}
+
+	return nil
+}
+
+func sendTextArgs(text string, hex bool) ([]string, error) {
+	if text == "" {
+		return nil, nil
+	}
+
+	if hex {
+		parts := strings.Fields(text)
+		if len(parts) == 0 {
+			return nil, invalid("hex text")
+		}
+
+		return append([]string{"--"}, parts...), nil
+	}
+
+	return []string{"--", text}, nil
 }
 
 // Capture returns owned bytes without trimming or decoding. Control mode cannot
@@ -327,6 +509,25 @@ func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureRe
 	}, opError("CaptureWithTitle", err)
 }
 
+// CaptureToBuffer captures the pane's visible text or scrollback directly into a tmux paste buffer.
+// The target buffer name must be specified via [CaptureOptions.Buffer].
+func (p Pane) CaptureToBuffer(ctx context.Context, o CaptureOptions) error {
+	if err := p.h.check(); err != nil {
+		return opError("CaptureToBuffer", err)
+	}
+
+	if o.Buffer == "" {
+		return opError("CaptureToBuffer", invalid("buffer name"))
+	}
+
+	args, err := captureArgs(p.h.id, o)
+	if err != nil {
+		return opError("CaptureToBuffer", err)
+	}
+
+	return p.h.act(ctx, "capture-pane", args...)
+}
+
 // CopyMode enters or exits copy mode on this pane according to opts.
 func (p Pane) CopyMode(ctx context.Context, o CopyModeOptions) error {
 	args := []string{"-t", p.h.id}
@@ -373,6 +574,11 @@ func trimModifiers(s string) string {
 			}
 		}
 
+		if len(s) >= 2 && s[0] == '^' {
+			s = s[1:]
+			continue
+		}
+
 		return s
 	}
 }
@@ -382,12 +588,66 @@ func isNamedKey(s string) bool {
 	case "enter", "escape", "tab", "btab", "bspace", "space", "up", "down", "left", "right",
 		"home", "end", "pageup", "pagedown", "ppage", "npage", "pgup", "pgdn",
 		"insert", "ic", "delete", "dc",
+		"any", "none",
 		"kpenter", "kpmul", "kpplus", "kpminus", "kpdiv", "kpdel",
 		"kp0", "kp1", "kp2", "kp3", "kp4", "kp5", "kp6", "kp7", "kp8", "kp9":
 		return true
 	default:
 		return false
 	}
+}
+
+func isUserKey(s string) bool {
+	if len(s) < 5 || (!strings.HasPrefix(s, "User") && !strings.HasPrefix(s, "user")) {
+		return false
+	}
+
+	n, err := strconv.Atoi(s[4:])
+
+	return err == nil && n >= 0 && n <= 1024
+}
+
+func isMouseKey(s string) bool {
+	var (
+		rest string
+		ok   bool
+	)
+
+	for _, event := range []string{
+		"MouseDragEnd1", "MouseDragEnd2", "MouseDragEnd3",
+		"MouseDrag1", "MouseDrag2", "MouseDrag3",
+		"MouseDown1", "MouseDown2", "MouseDown3",
+		"MouseUp1", "MouseUp2", "MouseUp3",
+		"SecondClick1", "SecondClick2", "SecondClick3",
+		"DoubleClick1", "DoubleClick2", "DoubleClick3",
+		"TripleClick1", "TripleClick2", "TripleClick3",
+		"WheelDown", "WheelUp",
+	} {
+		if len(s) > len(event) && strings.EqualFold(s[:len(event)], event) {
+			rest = s[len(event):]
+			ok = true
+
+			break
+		}
+	}
+
+	if !ok || rest == "" {
+		return false
+	}
+
+	switch strings.ToLower(rest) {
+	case "pane", "border", "status", "statusleft", "statusright", "statusdefault",
+		"scrollbarslider", "scrollbarup", "scrollbardown", "empty":
+		return true
+	}
+
+	if strings.HasPrefix(strings.ToLower(rest), "control") {
+		n, err := strconv.Atoi(rest[7:])
+
+		return err == nil && n >= 0 && n <= 1024
+	}
+
+	return false
 }
 
 func isFunctionKey(s string) bool {
@@ -401,8 +661,12 @@ func isFunctionKey(s string) bool {
 }
 
 func captureArgs(id string, o CaptureOptions) ([]string, error) {
-	if o.Screen > ModeScreen || o.MaxBytes < 0 || (o.EntireHistory && o.Start != nil) {
+	if o.Screen > ModeScreen || o.MaxBytes < 0 || (o.EntireHistory && o.Start != nil) || (o.ScrollbackEnd && o.End != nil) {
 		return nil, invalid("capture options")
+	}
+
+	if o.Buffer != "" && !wire.ValidString(o.Buffer) {
+		return nil, invalid("buffer name")
 	}
 
 	rangeArgs, err := captureRangeArgs(o)
@@ -410,7 +674,13 @@ func captureArgs(id string, o CaptureOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := append([]string{"-p", "-t", id}, rangeArgs...)
+	var args []string
+	if o.Buffer == "" {
+		args = append(args, "-p")
+	}
+
+	args = append(args, "-t", id)
+	args = append(args, rangeArgs...)
 	args = append(args, captureFlagArgs(o)...)
 
 	return args, nil
@@ -429,7 +699,13 @@ func captureRangeArgs(o CaptureOptions) ([]string, error) {
 		args = append(args, "-S", strconv.Itoa(*o.Start))
 	}
 
-	if o.End != nil {
+	if o.ScrollbackEnd && o.End != nil {
+		return nil, invalid("capture options")
+	}
+
+	if o.ScrollbackEnd {
+		args = append(args, "-E", "-")
+	} else if o.End != nil {
 		if *o.End < math.MinInt32 || *o.End > math.MaxInt32 {
 			return nil, invalid("capture end")
 		}
@@ -454,6 +730,18 @@ func captureFlagArgs(o CaptureOptions) []string {
 		args = append(args, "-N")
 	}
 
+	if o.PaneState {
+		args = append(args, "-P")
+	}
+
+	if o.Quiet {
+		args = append(args, "-q")
+	}
+
+	if o.Hyperlinks {
+		args = append(args, "-T")
+	}
+
 	if o.Screen == AlternateScreen {
 		args = append(args, "-a")
 	}
@@ -462,5 +750,58 @@ func captureFlagArgs(o CaptureOptions) []string {
 		args = append(args, "-M")
 	}
 
+	if o.Buffer != "" {
+		args = append(args, "-b", o.Buffer)
+	}
+
+	if o.EscapeNonPrintable {
+		args = append(args, "-C")
+	}
+
+	if o.AlternateScreenOnly {
+		args = append(args, "-F")
+	}
+
 	return args
+}
+
+func sendKeysFlagArgs(o SendKeysOptions) ([]string, error) {
+	if o.RepeatCount < 0 {
+		return nil, invalid("repeat count")
+	}
+
+	if o.Client != "" && !wire.ValidString(o.Client) {
+		return nil, invalid("client")
+	}
+
+	var args []string
+	if o.ExpandFormat {
+		args = append(args, "-F")
+	}
+
+	if o.Hex {
+		args = append(args, "-H")
+	}
+
+	if o.KeyName {
+		args = append(args, "-K")
+	}
+
+	if o.Reset {
+		args = append(args, "-R")
+	}
+
+	if o.MouseForward {
+		args = append(args, "-M")
+	}
+
+	if o.RepeatCount > 0 {
+		args = append(args, "-N", strconv.Itoa(o.RepeatCount))
+	}
+
+	if o.Client != "" {
+		args = append(args, "-c", o.Client)
+	}
+
+	return args, nil
 }

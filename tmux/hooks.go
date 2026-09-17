@@ -24,12 +24,56 @@ type (
 	// KeyTable identifies a named tmux key binding table (such as "prefix" or "root").
 	KeyTable string
 
-	// BindOptions configures key binding registration.
+	// BindOptions configures key binding registration and modification.
 	BindOptions struct {
 		// Repeat allows the bound key to be pressed multiple times without re-entering prefix (-r flag).
 		Repeat bool
 
 		// Note is an optional descriptive note for this key binding displayed in list-keys (-N flag).
+		Note string
+
+		// ClearNote clears any existing note attached to this key binding (-N "" flag).
+		ClearNote bool
+	}
+
+	// UnbindOptions configures key binding removal behavior.
+	UnbindOptions struct {
+		// All removes all key bindings in the specified table (-a flag).
+		// When All is true, key may be empty ("").
+		All bool
+
+		// Quiet prevents errors from being returned if the key is not bound (-q flag).
+		Quiet bool
+	}
+
+	// BindingsOptions configures key binding listing and filtering queries.
+	BindingsOptions struct {
+		// Table optionally restricts listing to a specific key table (-T flag).
+		// If Table is empty, all key tables are listed.
+		Table KeyTable
+
+		// Key optionally restricts listing to a specific key combination.
+		Key Key
+
+		// FirstMatch limits output to the first matching key binding (-1 flag).
+		FirstMatch bool
+
+		// NotesOnly queries bindings with attached notes (-N flag).
+		NotesOnly bool
+
+		// Prefix specifies a prefix string printed before each key in notes view (-P flag).
+		Prefix string
+	}
+
+	// BindingNote captures a key binding and its note from list-keys -N.
+	BindingNote struct {
+		// Raw is the exact output line from list-keys -N.
+		Raw string
+
+		// Key is the key combination string as reported in notes view (e.g. "C-b Tab", "MYPREFIX Tab").
+		Key string
+
+		// Note is the descriptive note text attached to the key.
 		Note string
 	}
 
@@ -170,6 +214,80 @@ func (h HookScope) Unset(ctx context.Context, name string, index int) error {
 	return opError("UnsetHook", err)
 }
 
+// SetWhole replaces all commands on the named hook event in this scope.
+func (h HookScope) SetWhole(ctx context.Context, name string, commands CommandSequence) error {
+	if !validFormatName(name) || len(commands.commands) == 0 {
+		return opError("SetHook", invalid("hook name/commands"))
+	}
+
+	opCtx, op, g, err := h.target.prepare(ctx)
+	if err != nil {
+		return opError("SetHook", err)
+	}
+	defer op.close()
+
+	node := leaf(command("set-hook", append(h.target.args(), "--", name)...))
+	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
+	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
+
+	return opError("SetHook", err)
+}
+
+// Append appends a command sequence to the named hook event in this scope (-a flag).
+func (h HookScope) Append(ctx context.Context, name string, commands CommandSequence) error {
+	if !validFormatName(name) || len(commands.commands) == 0 {
+		return opError("SetHook", invalid("hook name/commands"))
+	}
+
+	opCtx, op, g, err := h.target.prepare(ctx)
+	if err != nil {
+		return opError("SetHook", err)
+	}
+	defer op.close()
+
+	node := leaf(command("set-hook", append(h.target.args(), "-a", "--", name)...))
+	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
+	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
+
+	return opError("SetHook", err)
+}
+
+// Run executes the named hook event immediately in this scope (-R flag).
+func (h HookScope) Run(ctx context.Context, name string) error {
+	if !validFormatName(name) {
+		return opError("RunHook", invalid("hook name"))
+	}
+
+	opCtx, op, g, err := h.target.prepare(ctx)
+	if err != nil {
+		return opError("RunHook", err)
+	}
+	defer op.close()
+
+	args := append(h.target.args(), "-R", "--", name)
+	_, err = h.target.server.execute(opCtx, op, emptyPlan(command("set-hook", args...)), g, nil)
+
+	return opError("RunHook", err)
+}
+
+// Remove deletes all command slots registered under the named hook event in this scope.
+func (h HookScope) Remove(ctx context.Context, name string) error {
+	if !validFormatName(name) {
+		return opError("UnsetHook", invalid("hook name"))
+	}
+
+	opCtx, op, g, err := h.target.prepare(ctx)
+	if err != nil {
+		return opError("UnsetHook", err)
+	}
+	defer op.close()
+
+	args := append(h.target.args(), "-u", "--", name)
+	_, err = h.target.server.execute(opCtx, op, emptyPlan(command("set-hook", args...)), g, nil)
+
+	return opError("UnsetHook", err)
+}
+
 // List queries all hooks currently registered in this scope.
 func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 	opCtx, op, g, err := h.target.prepare(ctx)
@@ -183,9 +301,35 @@ func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 		return nil, opError("Hooks", err)
 	}
 
+	return h.parseHooksOutput(r.Stdout)
+}
+
+// ListFiltered queries hooks registered in this scope filtered to the specified event name.
+func (h HookScope) ListFiltered(ctx context.Context, name string) ([]HookInfo, error) {
+	if !validFormatName(name) {
+		return nil, opError("Hooks", invalid("hook name"))
+	}
+
+	opCtx, op, g, err := h.target.prepare(ctx)
+	if err != nil {
+		return nil, opError("Hooks", err)
+	}
+	defer op.close()
+
+	args := append(h.target.args(), "--", name)
+
+	r, err := h.target.server.execute(opCtx, op, plainPlan(command("show-hooks", args...)), g, nil)
+	if err != nil {
+		return nil, opError("Hooks", err)
+	}
+
+	return h.parseHooksOutput(r.Stdout)
+}
+
+func (h HookScope) parseHooksOutput(stdout []byte) ([]HookInfo, error) {
 	out := []HookInfo{}
 
-	for line := range bytes.SplitSeq(bytes.TrimSuffix(r.Stdout, []byte{'\n'}), []byte{'\n'}) {
+	for line := range bytes.SplitSeq(bytes.TrimSuffix(stdout, []byte{'\n'}), []byte{'\n'}) {
 		if len(line) == 0 {
 			continue
 		}
@@ -217,10 +361,37 @@ func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 
 func (b BindingInfo) Raw() string { return b.raw }
 
+func validateBind(table KeyTable, key Key, commands CommandSequence, o BindOptions) error {
+	isCommandlessEdit := len(commands.commands) == 0 && (o.Note != "" || o.ClearNote || o.Repeat)
+	if !table.Valid() || !key.Valid() || (!isCommandlessEdit && len(commands.commands) == 0) || !wire.ValidString(o.Note) {
+		return invalid("binding")
+	}
+
+	return nil
+}
+
+func bindArgs(table KeyTable, key Key, o BindOptions) []string {
+	args := []string{"-T", string(table)}
+	if o.Repeat {
+		args = append(args, "-r")
+	}
+
+	if o.Note != "" {
+		args = append(args, "-N", o.Note)
+	} else if o.ClearNote {
+		args = append(args, "-N", "")
+	}
+
+	return append(args, "--", string(key))
+}
+
 // Bind registers a key binding in the specified key table, executing commands when pressed.
+//
+// If commands is empty, [BindOptions.Note], [BindOptions.ClearNote], or [BindOptions.Repeat]
+// can be used to update an existing binding's note or repeat flag without replacing its command.
 func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands CommandSequence, o BindOptions) error {
-	if !table.Valid() || !key.Valid() || len(commands.commands) == 0 || !wire.ValidString(o.Note) {
-		return opError("Bind", invalid("binding"))
+	if err := validateBind(table, key, commands, o); err != nil {
+		return opError("Bind", err)
 	}
 
 	opCtx, op, err := s.begin(ctx)
@@ -234,16 +405,12 @@ func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands Com
 		return opError("Bind", err)
 	}
 
-	args := []string{"-T", string(table)}
-	if o.Repeat {
-		args = append(args, "-r")
+	args := bindArgs(table, key, o)
+	if len(commands.commands) == 0 {
+		_, err = s.execute(opCtx, op, emptyPlan(command("bind-key", args...)), newGuard(info.Identity), nil)
+		return opError("Bind", err)
 	}
 
-	if o.Note != "" {
-		args = append(args, "-N", o.Note)
-	}
-
-	args = append(args, "--", string(key))
 	node := leaf(command("bind-key", args...))
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
 	_, err = s.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, newGuard(info.Identity), nil)
@@ -253,11 +420,38 @@ func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands Com
 
 // Unbind removes a key binding from the specified key table.
 func (s *Server) Unbind(ctx context.Context, table KeyTable, key Key) error {
-	if !table.Valid() || !key.Valid() {
-		return opError("Unbind", invalid("binding"))
+	return s.UnbindWith(ctx, table, key, UnbindOptions{All: false, Quiet: false})
+}
+
+// UnbindWith removes key bindings with options such as -a (remove all bindings) and -q (quiet).
+func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, o UnbindOptions) error {
+	if !o.All && !key.Valid() {
+		return opError("Unbind", invalid("key"))
 	}
 
-	return s.endpointAction(ctx, "unbind-key", "-T", string(table), "--", string(key))
+	if table != "" && !table.Valid() {
+		return opError("Unbind", invalid("key table"))
+	}
+
+	var args []string
+
+	if o.All {
+		args = append(args, "-a")
+	}
+
+	if o.Quiet {
+		args = append(args, "-q")
+	}
+
+	if table != "" {
+		args = append(args, "-T", string(table))
+	}
+
+	if !o.All {
+		args = append(args, "--", string(key))
+	}
+
+	return s.endpointAction(ctx, "unbind-key", args...)
 }
 
 // Bindings queries and returns all key bindings currently registered in the specified key table.
@@ -265,8 +459,49 @@ func (s *Server) Unbind(ctx context.Context, table KeyTable, key Key) error {
 // If a binding's command text uses complex shell or tmux syntax outside what our non-evaluating
 // parser supports, [BindingInfo.Parsed] will be false and [BindingInfo.Raw] provides the verbatim text.
 func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, error) {
-	if !table.Valid() {
-		return nil, opError("Bindings", invalid("key table"))
+	return s.BindingsWith(ctx, BindingsOptions{
+		Table:      table,
+		Key:        "",
+		FirstMatch: false,
+		NotesOnly:  false,
+		Prefix:     "",
+	})
+}
+
+func listKeysArgs(o BindingsOptions) []string {
+	var args []string
+
+	if o.FirstMatch {
+		args = append(args, "-1")
+	}
+
+	if o.Table != "" {
+		args = append(args, "-T", string(o.Table))
+	}
+
+	if o.Key != "" {
+		args = append(args, "--", string(o.Key))
+	}
+
+	return args
+}
+
+func validateBindingsOptions(o BindingsOptions) error {
+	if o.Table != "" && !o.Table.Valid() {
+		return invalid("key table")
+	}
+
+	if o.Key != "" && !o.Key.Valid() {
+		return invalid("key")
+	}
+
+	return nil
+}
+
+// BindingsWith queries key bindings matching custom options such as table, key filter, or first match.
+func (s *Server) BindingsWith(ctx context.Context, o BindingsOptions) ([]BindingInfo, error) {
+	if err := validateBindingsOptions(o); err != nil {
+		return nil, opError("Bindings", err)
 	}
 
 	opCtx, op, err := s.begin(ctx)
@@ -280,17 +515,117 @@ func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, e
 		return nil, opError("Bindings", err)
 	}
 
-	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", "-T", string(table))), newGuard(info.Identity), nil)
+	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", listKeysArgs(o)...)), newGuard(info.Identity), nil)
 	if err != nil {
+		if o.Table != "" && strings.Contains(string(r.Stderr), "doesn't exist") {
+			return []BindingInfo{}, nil
+		}
+
 		return nil, opError("Bindings", err)
 	}
 
-	out := parseBindingsLines(r.Stdout, table, "")
-	if len(out) == 0 {
-		out = s.fallbackBindings(opCtx, op, info, table)
+	out := parseBindingsLines(r.Stdout, o.Table, o.Table)
+	if len(out) == 0 && o.Table != "" && o.Key == "" && !o.FirstMatch {
+		out = s.fallbackBindings(opCtx, op, info, o.Table)
 	}
 
 	return out, nil
+}
+
+// BindingNotes queries key bindings that have attached notes (tmux list-keys -N).
+func (s *Server) BindingNotes(ctx context.Context, o BindingsOptions) ([]BindingNote, error) {
+	if err := validateBindingsOptions(o); err != nil {
+		return nil, opError("BindingNotes", err)
+	}
+
+	if !wire.ValidString(o.Prefix) {
+		return nil, opError("BindingNotes", invalid("prefix"))
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return nil, opError("BindingNotes", err)
+	}
+	defer op.close()
+
+	info, err := s.probe(opCtx, op)
+	if err != nil {
+		return nil, opError("BindingNotes", err)
+	}
+
+	args := append([]string{"-N"}, listKeysArgs(o)...)
+	if o.Prefix != "" {
+		args = append(args, "-P", o.Prefix)
+	}
+
+	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
+	if err != nil {
+		if o.Table != "" && strings.Contains(string(r.Stderr), "doesn't exist") {
+			return []BindingNote{}, nil
+		}
+
+		return nil, opError("BindingNotes", err)
+	}
+
+	var notes []BindingNote
+
+	for line := range bytes.SplitSeq(bytes.TrimSuffix(r.Stdout, []byte{'\n'}), []byte{'\n'}) {
+		trimmed := strings.TrimRight(string(line), "\r\n")
+		if len(trimmed) == 0 {
+			continue
+		}
+
+		notes = append(notes, parseBindingNote(trimmed, o))
+	}
+
+	return notes, nil
+}
+
+func parseBindingNote(trimmed string, o BindingsOptions) BindingNote {
+	if i := strings.Index(trimmed, "  "); i >= 0 {
+		return BindingNote{
+			Raw:  trimmed,
+			Key:  strings.TrimSpace(trimmed[:i]),
+			Note: strings.TrimSpace(trimmed[i:]),
+		}
+	}
+
+	if o.Key != "" && strings.Contains(trimmed, string(o.Key)) {
+		idx := strings.Index(trimmed, string(o.Key))
+
+		return BindingNote{
+			Raw:  trimmed,
+			Key:  strings.TrimSpace(trimmed[:idx+len(o.Key)]),
+			Note: strings.TrimSpace(trimmed[idx+len(o.Key):]),
+		}
+	}
+
+	if o.Prefix != "" && strings.HasPrefix(trimmed, o.Prefix) {
+		rest := strings.TrimLeft(strings.TrimPrefix(trimmed, o.Prefix), " ")
+		k, n, _ := strings.Cut(rest, " ")
+
+		return BindingNote{
+			Raw:  trimmed,
+			Key:  strings.TrimSpace(o.Prefix + k),
+			Note: strings.TrimSpace(n),
+		}
+	}
+
+	first, rest, hasRest := strings.Cut(trimmed, " ")
+	if !hasRest {
+		return BindingNote{Raw: trimmed, Key: trimmed, Note: ""}
+	}
+
+	second, note, hasNote := strings.Cut(rest, " ")
+	if hasNote {
+		return BindingNote{
+			Raw:  trimmed,
+			Key:  first + " " + second,
+			Note: note,
+		}
+	}
+
+	return BindingNote{Raw: trimmed, Key: first, Note: second}
 }
 
 func parseBindingsLines(stdout []byte, defaultTable, filterTable KeyTable) []BindingInfo {
@@ -347,16 +682,15 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 	b.Key = Key(words[i])
 	i++
 
+	if b.Table == "" {
+		b.Table = PrefixTable
+	}
+
 	if !b.Table.Valid() || !b.Key.Valid() {
 		return b
 	}
 
-	first, err := NewCommand(words[i], words[i+1:]...)
-	if err != nil {
-		return b
-	}
-
-	commands, ok := parseBindingParts(parts[1:], first)
+	commands, ok := parseBindingCommands(parts, words, i)
 	if !ok {
 		return b
 	}
@@ -367,12 +701,24 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 	return b
 }
 
+func parseBindingCommands(parts []string, words []string, i int) ([]Command, bool) {
+	first, err := NewCommand(words[i], words[i+1:]...)
+	if err != nil {
+		return nil, false
+	}
+
+	return parseBindingParts(parts[1:], first)
+}
+
 func parseBindingFlags(words []string, b *BindingInfo) (int, bool) {
 	i := 1
 	for i < len(words) {
 		switch words[i] {
 		case "-r":
 			b.Repeat = true
+			i++
+		case "-n":
+			b.Table = "root"
 			i++
 		case "-T":
 			if i+1 >= len(words) {

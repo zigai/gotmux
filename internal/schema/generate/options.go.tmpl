@@ -22,15 +22,26 @@ func (v {{$type}}) valid() bool {
 func (o {{$scope}}) Get(ctx context.Context, name string) (OptionValue[string], error) { return o.target.read(ctx,name) }
 // Set sets a scalar option by its tmux name. Tmux validates the value.
 func (o {{$scope}}) Set(ctx context.Context, name,value string) error { return o.target.set(ctx,name,value,false) }
+// SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
+func (o {{$scope}}) SetWith(ctx context.Context, name string, opts SetOptionOptions) error { return o.target.setWith(ctx,name,opts) }
 // Unset removes the local value of an option by its tmux name.
 func (o {{$scope}}) Unset(ctx context.Context, name string) error { return o.target.set(ctx,name,"",true) }
+// UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
+func (o {{$scope}}) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return o.target.unsetWith(ctx,name,opts) }
+// List queries all options set in this scope.
+func (o {{$scope}}) List(ctx context.Context) ([]OptionEntry, error) { return o.target.list(ctx, ListOptionOptions{}) }
+// ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
+func (o {{$scope}}) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) { return o.target.list(ctx, opts) }
 // User reads the value of a user-defined option (prefixed with @) in this scope.
 func (o {{$scope}}) User(ctx context.Context, name string) (OptionValue[string],error) { return userGet(ctx,o.target,name) }
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
 func (o {{$scope}}) SetUser(ctx context.Context,name,value string) error { return userSet(ctx,o.target,name,value,false) }
+// SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
+func (o {{$scope}}) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error { return userSetWith(ctx,o.target,name,opts) }
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
 func (o {{$scope}}) UnsetUser(ctx context.Context,name string) error { return userSet(ctx,o.target,name,"",true) }
-// Array reads all index entries for the named array option in this scope.
+// UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
+func (o {{$scope}}) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return userUnsetWith(ctx,o.target,name,opts) }
 func (o {{$scope}}) Array(ctx context.Context,name string) ([]ArrayEntry,error) { return o.target.array(ctx,name) }
 // UpdateArray applies a batch of index updates and deletions to the named array option.
 func (o {{$scope}}) UpdateArray(ctx context.Context,name string,updates []ArrayUpdate) (ArrayUpdateResult,error) { return o.target.updateArray(ctx,name,updates) }
