@@ -96,6 +96,23 @@ func main() {
 		panic("empty value lost presence")
 	}
 
+	// Key grammar verification for downstream consumers
+	if !t.Key("MouseDown1Pane").Valid() || !t.Key("User0").Valid() {
+		panic("mouse or user key reported invalid")
+	}
+
+	// Buffer and options methods verification
+	if err := server.RenameBuffer(context.Background(), "", "new"); !errors.Is(err, t.ErrInvalidArgument) {
+		panic("RenameBuffer with empty name did not return ErrInvalidArgument")
+	}
+
+	// Typed notifications and signal methods verification
+	var _ t.Event = t.ConfigErrorEvent{}
+	var _ t.Event = t.MessageEvent{}
+	if err := server.RecreateSocket(context.Background()); !errors.Is(err, t.ErrNoServer) {
+		panic(fmt.Sprintf("RecreateSocket on unstarted server expected ErrNoServer, got: %v", err))
+	}
+
 	fmt.Println("External consumer runtime contracts passed.")
 }
 EOF_GO

@@ -246,7 +246,15 @@ func FuzzControlFrames(f *testing.F) {
 	f.Add([]byte("%client-detached /dev/pts/1\n"))
 	f.Add([]byte("%exit\n"))
 	f.Add([]byte("%error 1 2 1\nunknown command\n%end 1 2 1\n"))
-
+	f.Add([]byte("%config-error bad syntax in line 10\n"))
+	f.Add([]byte("%message server message\n"))
+	f.Add([]byte("%client-flags-changed /dev/pts/1 read-only\n"))
+	f.Add([]byte("%pane-mode-changed %2\n"))
+	f.Add([]byte("%paste-buffer-changed mybuf\n"))
+	f.Add([]byte("%paste-buffer-deleted mybuf\n"))
+	f.Add([]byte("%window-pane-changed @1 %2\n"))
+	f.Add([]byte("%pause %0\n"))
+	f.Add([]byte("%continue %0\n"))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 8192 {
 			return
@@ -275,4 +283,106 @@ func FuzzEmbeddedFrameDelimiters(f *testing.F) {
 			t.Fatal(e)
 		}
 	})
+}
+
+func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
+	// Test that \x1bP1000p prefix before a frame is stripped cleanly
+	raw := "\x1bP1000p%begin 1 10 1\nTGO-READY:hello\n%end 1 10 1\n"
+
+	u, err := readControlUnit(bufio.NewReader(strings.NewReader(raw)), 4096, func(Event) {})
+	if err != nil {
+		t.Fatalf("expected readControlUnit to succeed after stripping DSC preamble, got: %v", err)
+	}
+
+	if u.frame == nil || string(u.frame.data) != "TGO-READY:hello\n" {
+		t.Fatalf("unexpected frame data: %#v", u.frame)
+	}
+
+	// Test boundedLine with trailing \r
+	r := bufio.NewReader(strings.NewReader("%session-changed $0 s1\r\n"))
+
+	line, err := boundedLine(r, 4096)
+	if err != nil {
+		t.Fatalf("boundedLine failed on CRLF: %v", err)
+	}
+
+	if string(line) != "%session-changed $0 s1\n" {
+		t.Fatalf("expected \\r to be stripped, got: %q", string(line))
+	}
+
+	// Test boundedLine EOF with exit trailer \x1b\
+	r = bufio.NewReader(strings.NewReader("\x1b\\"))
+
+	_, err = boundedLine(r, 4096)
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("expected io.EOF on trailing \\x1b\\, got %v", err)
+	}
+}
+
+func TestControlStreamReader(t *testing.T) {
+	// Stream contains DSC preamble, CRLF lines, a wire record, and exit trailer
+	raw := "\x1bP1000p%begin 1 1 0\r\nTGO1:1:5:hello,\r\n%end 1 1 0\r\n%exit\r\n\x1b\\"
+	cr := newControlStreamReader(strings.NewReader(raw))
+
+	data, err := io.ReadAll(cr)
+	if err != nil {
+		t.Fatalf("io.ReadAll on controlStreamReader failed: %v", err)
+	}
+
+	expected := "%begin 1 1 0\nTGO1:1:5:hello,\n%end 1 1 0\n%exit\n"
+	if string(data) != expected {
+		t.Fatalf("stream normalization mismatch:\ngot:  %q\nwant: %q", string(data), expected)
+	}
+}
+
+func TestWireCodec_BufferBoundarySplits(t *testing.T) {
+	// Reader buffer size is 32KB. We place a multi-byte UTF-8 rune exactly across the 32768 boundary.
+	const bufSize = 32 << 10
+
+	prefixLen := bufSize - len("%begin 1 1 0\n") - 1 // 1 byte before boundary
+	padding := strings.Repeat("a", prefixLen)
+
+	// 3-byte UTF-8 check mark: \xe2\x9c\x93
+	checkMark := "✓"
+	rawRecord := wire.EncodeRecord([]string{padding + checkMark + "suffix"})
+	frame := fmt.Sprintf("%%begin 1 1 0\n%s%%end 1 1 0\n", rawRecord)
+
+	reader := bufio.NewReaderSize(strings.NewReader(frame), bufSize)
+
+	u, err := readControlUnit(reader, int64(len(frame)+1024), func(Event) {})
+	if err != nil {
+		t.Fatalf("readControlUnit failed across buffer boundary: %v", err)
+	}
+
+	if u.frame == nil {
+		t.Fatal("expected non-nil frame")
+	}
+
+	rows, err := wire.ParseRecords(u.frame.data, 1)
+	if err != nil {
+		t.Fatalf("ParseRecords failed: %v", err)
+	}
+
+	if rows[0][0] != padding+checkMark+"suffix" {
+		t.Fatalf("boundary split corrupted data: got %q, want %q", rows[0][0], padding+checkMark+"suffix")
+	}
+}
+
+func TestControlStreamReader_CorruptedDSCAndTerminalNoise(t *testing.T) {
+	// Terminal noise: incomplete ESC sequence, cursor movement, window title, raw bytes
+	noise := "\x1b[?1049h\x1b[2J\x1b]0;terminal title\a\x1bP1000p"
+	payload := "%begin 1 1 0\r\nTGO1:1:4:done,\r\n%end 1 1 0\r\n"
+	trailer := "\x1b[?1049l\x1b\\"
+
+	cr := newControlStreamReader(strings.NewReader(noise + payload + trailer))
+
+	data, err := io.ReadAll(cr)
+	if err != nil {
+		t.Fatalf("io.ReadAll failed: %v", err)
+	}
+
+	expected := "%begin 1 1 0\nTGO1:1:4:done,\n%end 1 1 0\n"
+	if !strings.Contains(string(data), expected) {
+		t.Fatalf("corrupted noise was not cleaned properly:\ngot:  %q\nwant contains: %q", string(data), expected)
+	}
 }

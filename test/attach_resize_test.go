@@ -131,3 +131,86 @@ func TestAttachResizeAndSignal(t *testing.T) {
 		t.Fatal("terminal state was not restored to initial state")
 	}
 }
+
+func TestIntegrationAttachResize_HighBandwidthStorm(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	master, slave := openPTY(t)
+	setTerminalSize(t, slave)
+
+	doneReading := make(chan struct{})
+	go func() {
+		defer close(doneReading)
+		_, _ = io.Copy(io.Discard, master)
+	}()
+	t.Cleanup(func() {
+		_ = master.Close()
+		<-doneReading
+	})
+
+	attachCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+
+	go func() {
+		var options tmux.AttachOptions
+		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, options)
+	}()
+
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+		}
+	})
+
+	client := waitTerminalClient(t, ctx, server, slave, done)
+	if !client.Valid() {
+		t.Fatal("expected valid client")
+	}
+
+	clients, err := server.Clients(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var clientPID int
+	for _, c := range clients {
+		if string(c.Name) == slave.Name() {
+			clientPID = c.PID
+			break
+		}
+	}
+
+	panes, err := session.Panes(ctx)
+	if err != nil || len(panes) == 0 {
+		t.Fatalf("failed to query panes: %v", err)
+	}
+	pane := panes[0].Handle()
+
+	// Start high-bandwidth output in the background
+	_ = pane.Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
+
+	// Blast rapid resize signals while data is streaming
+	for i := range 30 {
+		rows := uint16(24 + (i % 10))
+		cols := uint16(80 + (i % 20))
+		sz := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: rows, Columns: cols, Xpixel: 0, Ypixel: 0}
+		ptyIoctl(t, int(master.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&sz))
+		ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&sz))
+		if clientPID > 0 {
+			_ = syscall.Kill(clientPID, syscall.SIGWINCH)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Verify clean teardown without deadlock
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil && !errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected error from Attach after resize storm: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Attach deadlocked or timed out after resize storm")
+	}
+}
