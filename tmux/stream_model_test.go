@@ -84,7 +84,6 @@ func (m *rapidEventStreamModel) cleanup() {
 
 func (m *rapidEventStreamModel) stepPush(step int) {
 	payload := []byte(strings.Repeat("x", rapid.IntRange(0, 32).Draw(m.rt, fmt.Sprintf("size-%d", step))))
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	event := PaneOutputEvent{eventBase: eventBase{name: "output", received: time.Now()}, PaneID: "%1", Age: UnavailableValue[time.Duration](), data: payload}
 	m.s.push(event)
 

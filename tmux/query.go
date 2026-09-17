@@ -122,7 +122,6 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 		return wrapErr(err)
 	}
 
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	return ServerInfo{rawRecord: rawRecord{raw: rows[0]}, Identity: id, Version: v}, nil
 }
 

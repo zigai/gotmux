@@ -151,7 +151,6 @@ func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 			created = PresentValue(d.timestamp("buffer_created"))
 		}
 
-		//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 		v := BufferInfo{rawRecord: rawRecord{raw: raw}, Name: name, Size: size, Created: created, server: s, origin: id, originalName: name}
 
 		if name == "" {

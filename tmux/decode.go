@@ -155,7 +155,6 @@ func (s *Server) decodeSession(m map[string]string, expected *ServerIdentity) (S
 		group = PresentValue(d.str("session_group"))
 	}
 
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	v := SessionInfo{
 		rawRecord:   rawRecord{raw: m},
 		ID:          sid,
@@ -190,7 +189,6 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 	}
 
 	wh := s.newHandle(string(wid), WindowKind, id)
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	v := WindowInfo{
 		rawRecord: rawRecord{raw: m},
 		ID:        wid,
@@ -204,7 +202,6 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 	}
 
 	windex := d.nonnegative("window_index")
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	l := WindowLinkInfo{
 		rawRecord:  rawRecord{raw: m},
 		SessionID:  sid,
@@ -253,7 +250,6 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 	selectionVal := decodePaneSelection(d, inMode)
 	pCtx := decodePaneContext(d, m)
 
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	v := PaneInfo{
 		rawRecord:      rawRecord{raw: m},
 		ID:             pid,
@@ -377,7 +373,6 @@ func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (Cl
 
 		return d.nonnegative(field)
 	}
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	v := ClientInfo{
 		rawRecord: rawRecord{raw: m},
 		Name:      cname,

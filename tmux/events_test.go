@@ -24,7 +24,6 @@ func eventConnection(t *testing.T) *Connection {
 }
 
 func oneEvent() Event {
-	//nolint:modernize // reason: embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 	return PaneOutputEvent{eventBase: eventBase{name: "output", received: time.Now()}, PaneID: "%1", Age: UnavailableValue[time.Duration](), data: []byte("abc")}
 }
 
@@ -453,7 +452,6 @@ func TestEventStream_BurstSaturation(t *testing.T) {
 
 	const totalEvents = 10000
 	for i := range totalEvents {
-		//nolint:modernize // embedlit conflicts with exhaustruct_v5 requiring explicit embedded struct field
 		c.publish(PaneOutputEvent{
 			eventBase: eventBase{name: "output", received: time.Now()},
 			PaneID:    PaneID("%0"),
