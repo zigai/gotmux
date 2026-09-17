@@ -159,7 +159,7 @@ func cleanupDaemon(tb testing.TB, server *tmux.Server, identity tmux.Value[tmux.
 func fixtureDirectory(tb testing.TB) string {
 	tb.Helper()
 	// A caller's TMPDIR and test name can exceed the Unix socket path limit.
-	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix sockets require a short path independent of TMPDIR; Cleanup removes it; tested on the Go 1.27 baseline.
+	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix sockets require a short path independent of TMPDIR; Cleanup removes it; tested on the Go 1.26 baseline.
 	if err != nil {
 		tb.Fatal(err)
 	}
