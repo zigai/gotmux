@@ -141,23 +141,7 @@ func TestServerAccessValidation(t *testing.T) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.RevokeAccess, got: %v", err)
 	}
 
-	s, err := New(Config{
-		Binary:           "",
-		SocketPath:       "/tmp/test.sock",
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              nil,
-		Dir:              "",
-		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
-		UTF8:             0,
-		Colors256:        false,
-		TerminalFeatures: nil,
-		LogLevel:         0,
-		LoginShell:       false,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := localServer(t)
 
 	invalidNames := []string{"", "\x00bad", "bad\x00user"}
 	for _, name := range invalidNames {
@@ -200,23 +184,7 @@ func TestPromptHistoryValidation(t *testing.T) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.ClearPromptHistory, got: %v", err)
 	}
 
-	s, err := New(Config{
-		Binary:           "",
-		SocketPath:       "/tmp/test.sock",
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              nil,
-		Dir:              "",
-		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
-		UTF8:             0,
-		Colors256:        false,
-		TerminalFeatures: nil,
-		LogLevel:         0,
-		LoginShell:       false,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	s := localServer(t)
 
 	if _, err := s.PromptHistory(ctx, "\x00invalid"); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument on PromptHistory with NUL byte, got: %v", err)
