@@ -13,23 +13,149 @@ import (
 	"golang.org/x/term"
 )
 
-// TerminalStreams supplies the file descriptors for an interactive terminal attachment.
-// In and Out must refer to real terminal devices (validated via [term.IsTerminal]).
-type TerminalStreams struct {
-	In *os.File
+const (
+	// DetachNone leaves existing attached clients undisturbed (default native behavior).
+	DetachNone DetachMode = iota
 
-	Out *os.File
+	// DetachOtherClients detaches any other clients attached to the session (-d flag).
+	DetachOtherClients
 
-	Err *os.File
+	// DetachParentSignal detaches any other clients attached to the session and sends
+	// SIGHUP to their parent processes (-x flag).
+	DetachParentSignal
+)
+
+type (
+	// DetachMode specifies how other attached clients should be handled during session attachment.
+	DetachMode uint8
+
+	// TerminalStreams supplies the file descriptors for an interactive terminal attachment.
+	// In and Out must refer to real terminal devices (validated via [term.IsTerminal]).
+	TerminalStreams struct {
+		In *os.File
+
+		Out *os.File
+
+		Err *os.File
+	}
+
+	// AttachOptions configures interactive terminal attachment to a session.
+	AttachOptions struct {
+		// ReadOnly attaches the client in read-only mode (-r flag), preventing input transmission.
+		ReadOnly bool
+
+		// PreserveEnvironment prevents tmux from updating client environment variables (-E flag).
+		PreserveEnvironment bool
+
+		// Detach controls whether other attached clients are detached or signaled (-d, -x flags).
+		Detach DetachMode
+
+		// Dir sets the session working directory used for new windows (-c flag).
+		Dir string
+		// Flags specifies client flags to apply (-f flag), such as [ClientReadOnly], [ClientIgnoreSize], etc.
+		Flags []ClientFlag
+	}
+
+	// CommandOptions configures prepared subprocess command execution.
+	CommandOptions struct {
+		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
+		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		Start StartPolicy
+	}
+
+	// Streams supplies caller-owned operating system file descriptors for standard input,
+	// standard output, and standard error of a prepared subprocess command.
+	//
+	// Unlike [TerminalStreams], the streams do not need to refer to real terminal devices,
+	// permitting ordinary files, pipes, and sockets.
+	// Any stream field left nil is detached (connected to /dev/null).
+	Streams struct {
+		// In is connected to the child process's standard input.
+		In *os.File
+
+		// Out is connected to the child process's standard output.
+		Out *os.File
+
+		// Err is connected to the child process's standard error.
+		Err *os.File
+	}
+	// TerminalOptions configures interactive terminal command preparation.
+	TerminalOptions struct {
+		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
+		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		Start StartPolicy
+	}
+
+	// RootShellOptions configures root shell compatibility command execution (-c flag).
+	RootShellOptions struct {
+		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
+		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		Start StartPolicy
+	}
+)
+
+func validateAttachOptions(o AttachOptions) error {
+	if o.Detach > DetachParentSignal {
+		return invalid("detach mode")
+	}
+
+	if o.Dir != "" && !wire.ValidString(o.Dir) {
+		return invalid("working directory")
+	}
+
+	for _, f := range o.Flags {
+		if !f.Valid() {
+			return invalid("client flag")
+		}
+	}
+
+	return nil
 }
 
-// AttachOptions configures interactive terminal attachment to a session.
-type AttachOptions struct {
-	// ReadOnly attaches the client in read-only mode (-r flag), preventing input transmission.
-	ReadOnly bool
+func attachFlags(o AttachOptions) []string {
+	var flags []string
 
-	// PreserveEnvironment prevents tmux from updating client environment variables (-E flag).
-	PreserveEnvironment bool
+	switch o.Detach {
+	case DetachOtherClients:
+		flags = append(flags, "-d")
+	case DetachParentSignal:
+		flags = append(flags, "-x")
+	case DetachNone:
+	}
+
+	if o.ReadOnly {
+		flags = append(flags, "-r")
+	}
+
+	if o.PreserveEnvironment {
+		flags = append(flags, "-E")
+	}
+
+	if o.Dir != "" {
+		flags = append(flags, "-c", o.Dir)
+	}
+
+	if len(o.Flags) > 0 {
+		flags = append(flags, "-f", formatClientFlags(o.Flags))
+	}
+
+	return flags
+}
+
+func attachArgs(target string, o AttachOptions) ([]string, error) {
+	if err := validateAttachOptions(o); err != nil {
+		return nil, err
+	}
+
+	args := []string{"attach-session"}
+	if target != "" {
+		args = append(args, "-t", target)
+	}
+
+	return append(args, attachFlags(o)...), nil
 }
 
 func validateTerminals(t TerminalStreams) error {
@@ -57,47 +183,30 @@ func validateTerminals(t TerminalStreams) error {
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
 func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams TerminalStreams, o AttachOptions) (*exec.Cmd, error) {
 	if !session.Valid() {
-		return nil, opError("PrepareAttach", invalid("context/session"))
+		return nil, opError("PrepareAttach", invalid("session"))
 	}
 
 	return s.PrepareAttachTarget(ctx, string(session), streams, o)
 }
 
-// PrepareAttachTarget returns an unstarted [exec.Cmd] for interactive terminal attachment to any target
-// (such as a human-readable session name "dev", session ID "$0", or window target).
+// PrepareAttachTarget returns an unstarted [exec.Cmd] for interactive terminal attachment to target
+// (such as a session name, session ID, or empty string to attach to the most recently used unattached session).
 // It validates streams; the caller manages Start, Wait, signals, cancellation, and exit codes.
+//
+// Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
 func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams TerminalStreams, o AttachOptions) (*exec.Cmd, error) {
-	if s == nil || s.runner == nil {
-		return nil, opError("PrepareAttach", ErrInvalidHandle)
+	if !wire.ValidString(target) {
+		return nil, opError("PrepareAttachTarget", invalid("target"))
 	}
 
-	if ctx == nil || target == "" || !wire.ValidString(target) {
-		return nil, opError("PrepareAttach", invalid("context/target"))
+	subArgs, err := attachArgs(target, o)
+	if err != nil {
+		return nil, opError("PrepareAttachTarget", err)
 	}
 
-	if s.conn != nil || s.bound != nil {
-		return nil, opError("PrepareAttach", ErrTransportUnsupported)
-	}
+	argv := append(s.baseArgs(false), subArgs...)
 
-	if err := validateTerminals(streams); err != nil {
-		return nil, opError("PrepareAttach", err)
-	}
-
-	args := append(s.baseArgs(false), "attach-session", "-t", target)
-	if o.ReadOnly {
-		args = append(args, "-r")
-	}
-
-	if o.PreserveEnvironment {
-		args = append(args, "-E")
-	}
-
-	cmd := s.runner.command(ctx, args)
-	cmd.Stdin = streams.In
-	cmd.Stdout = streams.Out
-	cmd.Stderr = streams.Err
-
-	return cmd, nil
+	return s.prepareTerminalArgs(ctx, "PrepareAttachTarget", argv, streams)
 }
 
 // PrepareAttach returns an unstarted [exec.Cmd] for interactive terminal attachment to this session.
@@ -149,18 +258,15 @@ func (s Session) Attach(ctx context.Context, streams TerminalStreams, o AttachOp
 }
 
 func (s Session) attachmentArgs(o AttachOptions) ([]string, error) {
-	args := []string{"-t", s.h.id}
-	if o.ReadOnly {
-		args = append(args, "-r")
+	subArgs, err := attachArgs(s.h.id, o)
+	if err != nil {
+		return nil, err
 	}
 
-	if o.PreserveEnvironment {
-		args = append(args, "-E")
-	}
 	// Successful attachment discards queued command output. Only the rejection
 	// branch emits a marker; it never attaches.
 	p := plan{nodes: []wireNode{conditionNode(s.h.origin.condition(),
-		[]wireNode{leaf(command("attach-session", args...))},
+		[]wireNode{leaf(command(subArgs[0], subArgs[1:]...))},
 		[]wireNode{markerNode(guardServerChanged)}, "")}, mode: replyEmpty, allowStart: false}
 	if _, err := p.size(s.h.server.config.Limits.InputBytes); err != nil {
 		return nil, err
@@ -232,4 +338,290 @@ func (s Session) runAttachment(ctx context.Context, terminal *os.File, argv []st
 		Outcome: Outcome{Effect: effect, Steps: nil, Created: nil},
 		Timeout: contextSource(ctx.Done(), err), Err: err,
 	}
+}
+
+func (s *Server) prepareSubprocessCheck(ctx context.Context, opName string) error {
+	if s == nil || s.runner == nil {
+		return opError(opName, ErrInvalidHandle)
+	}
+
+	if ctx == nil {
+		return opError(opName, invalid("nil context"))
+	}
+
+	if s.conn != nil || s.bound != nil {
+		return opError(opName, ErrTransportUnsupported)
+	}
+
+	return nil
+}
+
+func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []string, streams TerminalStreams) (*exec.Cmd, error) {
+	if err := s.prepareSubprocessCheck(ctx, opName); err != nil {
+		return nil, err
+	}
+
+	if err := validateTerminals(streams); err != nil {
+		return nil, opError(opName, err)
+	}
+
+	cmd := s.runner.command(ctx, argv)
+	cmd.Stdin = streams.In
+	cmd.Stdout = streams.Out
+	cmd.Stderr = streams.Err
+
+	return cmd, nil
+}
+
+func (s *Server) prepareRawArgv(opName string, commands []Command, start StartPolicy) ([]string, error) {
+	allowStart, err := s.rawAllowStart(start)
+	if err != nil {
+		return nil, opError(opName, err)
+	}
+
+	p := plan{nodes: make([]wireNode, 0, len(commands)), mode: replyRaw, allowStart: allowStart}
+	for _, c := range commands {
+		p.nodes = append(p.nodes, leaf(c))
+	}
+
+	if _, err := p.size(s.config.Limits.InputBytes); err != nil {
+		return nil, opError(opName, err)
+	}
+
+	args, err := p.argv()
+	if err != nil {
+		return nil, opError(opName, err)
+	}
+
+	return append(s.baseArgs(allowStart), args...), nil
+}
+
+func (s *Server) rootShellArgv(opName string, shellCommand string, start StartPolicy) ([]string, error) {
+	allowStart, err := s.rawAllowStart(start)
+	if err != nil {
+		return nil, opError(opName, err)
+	}
+
+	return append(s.baseArgs(allowStart), "-c", shellCommand), nil
+}
+
+func applyStreams(cmd *exec.Cmd, streams Streams) {
+	cmd.Stdin = streams.In
+	cmd.Stdout = streams.Out
+	cmd.Stderr = streams.Err
+}
+
+func validateSequenceCommands(commands []Command) error {
+	if len(commands) == 0 {
+		return invalid("empty sequence")
+	}
+
+	for _, c := range commands {
+		if !c.Valid() {
+			return invalid("command")
+		}
+	}
+
+	return nil
+}
+
+// PrepareTerminal returns an unstarted [exec.Cmd] for executing a single tmux command
+// in an interactive terminal (such as new-session -A, attach-session, or custom window creation).
+// It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareTerminal(ctx context.Context, c Command, streams TerminalStreams, o TerminalOptions) (*exec.Cmd, error) {
+	if !c.Valid() {
+		return nil, opError("PrepareTerminal", invalid("command"))
+	}
+
+	argv, err := s.prepareRawArgv("PrepareTerminal", []Command{c}, o.Start)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.prepareTerminalArgs(ctx, "PrepareTerminal", argv, streams)
+}
+
+// PrepareTerminalSequence returns an unstarted [exec.Cmd] for executing an ordered sequence of
+// tmux commands in an interactive terminal.
+// It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequence, streams TerminalStreams, o TerminalOptions) (*exec.Cmd, error) {
+	commands := seq.commands
+	if err := validateSequenceCommands(commands); err != nil {
+		return nil, opError("PrepareTerminalSequence", err)
+	}
+
+	argv, err := s.prepareRawArgv("PrepareTerminalSequence", commands, o.Start)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.prepareTerminalArgs(ctx, "PrepareTerminalSequence", argv, streams)
+}
+
+// PrepareDefaultTerminal returns an unstarted [exec.Cmd] for invoking tmux with no commands
+// in an interactive terminal (ROOT.default invocation).
+//
+// Tmux honors the native default-client-command option (typically new-session), creating or
+// attaching to a session. The server handle remains side-effect free; the caller owns the process lifecycle.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams TerminalStreams, o TerminalOptions) (*exec.Cmd, error) {
+	allowStart, err := s.rawAllowStart(o.Start)
+	if err != nil {
+		return nil, opError("PrepareDefaultTerminal", err)
+	}
+
+	argv := s.baseArgs(allowStart)
+
+	return s.prepareTerminalArgs(ctx, "PrepareDefaultTerminal", argv, streams)
+}
+
+// PrepareCommand returns an unstarted [exec.Cmd] for executing a single tmux command
+// with caller-owned file descriptor streams and custom execution options.
+//
+// Unlike [Server.Run] and [Server.RunWith], execution is neither buffered into memory
+// nor subject to [Limits.CommandTimeout]. The caller owns the process lifecycle (calling
+// Start, Wait, managing signals, and closing the supplied stream files).
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareCommand(ctx context.Context, c Command, streams Streams, o CommandOptions) (*exec.Cmd, error) {
+	if err := s.prepareSubprocessCheck(ctx, "PrepareCommand"); err != nil {
+		return nil, err
+	}
+
+	if !c.Valid() {
+		return nil, opError("PrepareCommand", invalid("command"))
+	}
+
+	argv, err := s.prepareRawArgv("PrepareCommand", []Command{c}, o.Start)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := s.runner.command(ctx, argv)
+	applyStreams(cmd, streams)
+
+	return cmd, nil
+}
+
+// PrepareSequence returns an unstarted [exec.Cmd] for executing an ordered sequence of tmux commands
+// with caller-owned file descriptor streams and custom execution options.
+//
+// Unlike [Server.RunSequence] and [Server.RunSequenceWith], execution is neither buffered into memory
+// nor subject to [Limits.CommandTimeout]. The caller owns the process lifecycle.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareSequence(ctx context.Context, seq CommandSequence, streams Streams, o CommandOptions) (*exec.Cmd, error) {
+	if err := s.prepareSubprocessCheck(ctx, "PrepareSequence"); err != nil {
+		return nil, err
+	}
+
+	commands := seq.commands
+	if err := validateSequenceCommands(commands); err != nil {
+		return nil, opError("PrepareSequence", err)
+	}
+
+	argv, err := s.prepareRawArgv("PrepareSequence", commands, o.Start)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := s.runner.command(ctx, argv)
+	applyStreams(cmd, streams)
+
+	return cmd, nil
+}
+
+// PrepareForegroundServer returns an unstarted [exec.Cmd] for running the tmux server in the
+// foreground without daemonizing (-D flag).
+//
+// Commands may not be specified with -D per native tmux semantics. The caller owns the process
+// lifecycle, standard streams, signals, and termination. No command timeout applies, and no
+// automatic daemon termination occurs outside the caller's process.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareForegroundServer(ctx context.Context) (*exec.Cmd, error) {
+	if err := s.prepareSubprocessCheck(ctx, "PrepareForegroundServer"); err != nil {
+		return nil, err
+	}
+
+	argv := append(s.baseArgs(true), "-D")
+
+	return s.runner.command(ctx, argv), nil
+}
+
+// PrepareRootShell returns an unstarted [exec.Cmd] for executing a shell command via tmux's
+// root shell compatibility path (-c shell-command) with caller-owned file descriptor streams.
+//
+// Unlike [Server.RunShell] (which executes run-shell inside tmux), this uses native tmux -c,
+// honoring default-shell semantics and start policy without rewriting to a tmux command.
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) PrepareRootShell(ctx context.Context, shellCommand string, streams Streams, o RootShellOptions) (*exec.Cmd, error) {
+	if err := s.prepareSubprocessCheck(ctx, "PrepareRootShell"); err != nil {
+		return nil, err
+	}
+
+	if !wire.ValidString(shellCommand) {
+		return nil, opError("PrepareRootShell", invalid("shell command"))
+	}
+
+	argv, err := s.rootShellArgv("PrepareRootShell", shellCommand, o.Start)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := s.runner.command(ctx, argv)
+	applyStreams(cmd, streams)
+
+	return cmd, nil
+}
+
+// RunRootShell executes a shell command via tmux's root shell compatibility path (-c shell-command),
+// capturing standard output and standard error into a bounded [Result].
+//
+// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+func (s *Server) RunRootShell(ctx context.Context, shellCommand string, o RootShellOptions) (Result, error) {
+	if err := s.prepareSubprocessCheck(ctx, "RunRootShell"); err != nil {
+		return failedResult(), err
+	}
+
+	if !wire.ValidString(shellCommand) {
+		return failedResult(), opError("RunRootShell", invalid("shell command"))
+	}
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return failedResult(), opError("RunRootShell", err)
+	}
+	defer op.close()
+
+	argv, err := s.rootShellArgv("RunRootShell", shellCommand, o.Start)
+	if err != nil {
+		return failedResult(), err
+	}
+
+	res, started, err := s.runner.run(opCtx, argv, nil, max(op.output, 0), max(op.stderr, 0))
+	if err != nil {
+		effect := NotSent
+		if started {
+			effect = Unknown
+		}
+
+		err = errors.Join(err, classifyStderr(res.Stderr))
+
+		return res, opError("RunRootShell", &CommandError{
+			Command: "root-shell",
+			Result:  res,
+			Outcome: Outcome{Effect: effect, Steps: nil, Created: nil},
+			Timeout: contextSource(op.callerDone, err),
+			Err:     err,
+		})
+	}
+
+	return res, nil
 }
