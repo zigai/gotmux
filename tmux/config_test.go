@@ -167,9 +167,15 @@ func TestVersionGates(t *testing.T) {
 		}
 	}
 
-	for _, s := range []string{"3.5a", "3.6-next", "next-3.8", "3.7vendor"} {
+	for _, s := range []string{"3.6-next", "next-3.8", "3.7vendor"} {
+		if err := supportedVersion(ParseVersion(s)); err != nil {
+			t.Fatal("expected supported:", s, err)
+		}
+	}
+
+	for _, s := range []string{"3.5a", "2.9", "unknown"} {
 		if supportedVersion(ParseVersion(s)) == nil {
-			t.Fatal("accepted", s)
+			t.Fatal("expected unsupported:", s)
 		}
 	}
 

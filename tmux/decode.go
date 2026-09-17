@@ -55,6 +55,21 @@ func (d *recordDecoder) nonnegative(field string) int {
 	return v
 }
 
+func (d *recordDecoder) optionalNonnegative(field string) int {
+	s := d.str(field)
+	if s == "" {
+		return 0
+	}
+
+	v, err := strconv.Atoi(s)
+	if err != nil || v < 0 {
+		d.fail(field, wire.ErrRecord)
+		return 0
+	}
+
+	return v
+}
+
 func (d *recordDecoder) boolean(field string) bool {
 	v := d.str(field)
 	if v != "0" && v != "1" {
@@ -251,7 +266,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		Title:          d.str("pane_title"),
 		CurrentPath:    d.str("pane_current_path"),
 		CurrentCommand: d.str("pane_current_command"),
-		PID:            d.nonnegative("pane_pid"),
+		PID:            d.optionalNonnegative("pane_pid"),
 		TTY:            d.str("pane_tty"),
 		Width:          d.nonnegative("pane_width"),
 		Height:         d.nonnegative("pane_height"),

@@ -82,12 +82,12 @@ func TestCapabilities(t *testing.T) {
 		t.Errorf("unexpected ParseVersion result: %+v", parsedPlain)
 	}
 
-	unrecognized := tmux.ParseVersion("3.6-rc1")
-	if unrecognized.Recognized {
-		t.Errorf("expected unrecognized version with suffix to have Recognized=false")
+	devVer := tmux.ParseVersion("3.6-rc1")
+	if devVer.Recognized {
+		t.Errorf("expected development version with suffix to have Recognized=false")
 	}
-	if unrecognized.AtLeast(3, 6) {
-		t.Errorf("expected unrecognized version AtLeast to return false")
+	if !devVer.AtLeast(3, 6) {
+		t.Errorf("expected development version AtLeast(3, 6) to return true")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/zigai/gotmux/internal/wire"
@@ -13,6 +14,7 @@ import (
 const (
 	minDebugLogVerbosity  = 2
 	minNoEchoControlCount = 2
+	approxArgsPerNode     = 3
 )
 
 const (
@@ -76,6 +78,25 @@ type (
 		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
 		// Bound auxiliary servers ([Connection.AuxiliaryServer]) always forbid daemon auto-spawn regardless of this setting.
 		Start StartPolicy
+
+		// Input supplies bounded standard input bytes for the tmux command or sequence execution.
+		//
+		// Ownership: The caller retains ownership of the slice. The library does not modify or retain
+		// the slice after execution completes. Callers should snapshot or clone the slice before concurrent
+		// or asynchronous reuse.
+		//
+		// Absence vs. zero value:
+		// A nil slice means no standard input is connected (stdin is nil/detached).
+		// An empty non-nil slice ([]byte{}) connects standard input and immediately sends EOF.
+		//
+		// Accounting: Input bytes count against the operation's [Limits.InputBytes] limit alongside
+		// command arguments. If the combined size of command arguments and input exceeds the limit,
+		// execution fails with [ErrInputLimit].
+		//
+		// Sequences: Native stdin is a single shared stream delivered to the tmux process; it is not
+		// duplicated per command in a sequence. Typically, only the first command in the sequence that
+		// reads stdin will consume these bytes.
+		Input []byte
 	}
 
 	// RootActionKind specifies the kind of root action requested in a parsed command line.
@@ -133,9 +154,10 @@ type (
 // one command was parsed. Returns false if Action is not ActionCommand or if multiple
 // or zero commands were parsed.
 func (p ParsedCommandLine) Command() (Command, bool) {
-	cmds := p.Commands.Commands()
-	if p.Action == ActionCommand && len(cmds) == 1 {
-		return cmds[0], true
+	if p.Action == ActionCommand && len(p.Commands.commands) == 1 {
+		c := p.Commands.commands[0]
+
+		return Command{name: c.name, args: slices.Clone(c.args)}, true
 	}
 
 	return Command{name: "", args: nil}, false
@@ -156,10 +178,11 @@ func Sequence(commands ...Command) (CommandSequence, error) {
 	return CommandSequence{commands: out}, nil
 }
 
+// Commands returns a copy of the validated commands in this sequence.
 func (s CommandSequence) Commands() []Command {
 	out := make([]Command, len(s.commands))
 	for i, c := range s.commands {
-		out[i], _ = NewCommand(c.name, c.args...)
+		out[i] = Command{name: c.name, args: slices.Clone(c.args)}
 	}
 
 	return out
@@ -671,8 +694,7 @@ func (p plan) text() (string, error) {
 }
 
 func (p plan) argv() ([]string, error) {
-	out := []string{}
-
+	out := make([]string, 0, len(p.nodes)*approxArgsPerNode)
 	for i, n := range p.nodes {
 		if i > 0 {
 			out = append(out, ";")
@@ -798,7 +820,7 @@ func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, 
 
 	p := plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: allowStart}
 
-	return s.execute(opCtx, op, p, nil, nil)
+	return s.execute(opCtx, op, p, nil, o.Input)
 }
 
 // RunSequenceWith executes an ordered list of commands in a single round-trip with custom execution options.
@@ -836,7 +858,7 @@ func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, 
 		p.nodes = append(p.nodes, leaf(c))
 	}
 
-	return s.execute(opCtx, op, p, nil, nil)
+	return s.execute(opCtx, op, p, nil, o.Input)
 }
 
 // cloneResult never aliases retained connection state.

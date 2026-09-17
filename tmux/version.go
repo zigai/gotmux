@@ -12,13 +12,13 @@ import (
 )
 
 const (
-	supportedStablePattern    = `^(([4-9]|[1-9][0-9]+)[.][0-9]+|3[.]([6-9]|[1-9][0-9]+))[a-z]?$`
+	supportedStablePattern    = `^([a-zA-Z_-]+-)?(([4-9]|[1-9][0-9]+)[.][0-9]+|3[.]([6-9]|[1-9][0-9]+))[a-z]?(-.*)?$|^master$|^next$`
 	unsupportedStartupVersion = "TGO-GUARD-1:unsupported-version\n"
 	minMajorVersion           = 3
 	minMinorVersion           = 6
 )
 
-var versionPattern = regexp.MustCompile(`^(\d+)\.(\d+)([a-z]?)(.*)$`)
+var versionPattern = regexp.MustCompile(`^(?:([a-zA-Z_-]+)-)?(\d+)\.(\d+)([a-z]?)(.*)$`)
 
 // Version retains the exact version string reported by tmux alongside parsed numeric components.
 // Recognized is true only for canonical stable releases (e.g. "3.6", "3.6a"); git/vendor builds return false.
@@ -68,46 +68,66 @@ func ParseVersion(raw string) Version {
 	v := Version{Raw: raw, Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false}
 	s := strings.TrimSpace(strings.TrimPrefix(raw, "tmux "))
 
+	if strings.EqualFold(s, "master") || strings.EqualFold(s, "next") {
+		v.Major = 3
+		v.Minor = 9
+		v.Suffix = s
+		v.Recognized = true
+
+		return v
+	}
+
 	m := versionPattern.FindStringSubmatch(s)
 	if m == nil {
 		return v
 	}
 
+	prefix := m[1]
+
 	var err error
 
-	v.Major, err = strconv.Atoi(m[1])
+	v.Major, err = strconv.Atoi(m[2])
 	if err != nil {
 		return v
 	}
 
-	v.Minor, err = strconv.Atoi(m[2])
+	v.Minor, err = strconv.Atoi(m[3])
 	if err != nil {
 		return v
 	}
 
-	v.Patch = m[3]
-	v.Suffix = m[4]
-	v.Recognized = v.Suffix == ""
+	v.Patch = m[4]
+
+	suffix := m[5]
+	switch {
+	case prefix != "" && suffix != "":
+		v.Suffix = prefix + "-" + strings.TrimPrefix(suffix, "-")
+	case prefix != "":
+		v.Suffix = prefix
+	default:
+		v.Suffix = suffix
+	}
+
+	v.Recognized = prefix == "" && suffix == ""
 
 	return v
 }
 
-// AtLeast reports whether the version is a recognized stable release and is greater than
-// or equal to the specified major and minor version numbers.
-// Unrecognized versions (development or vendor builds) always return false.
+// AtLeast reports whether the version's major and minor numbers are greater than
+// or equal to the specified numbers.
 func (v Version) AtLeast(major, minor int) bool {
-	return v.Recognized && (v.Major > major || v.Major == major && v.Minor >= minor)
+	return v.Major > major || (v.Major == major && v.Minor >= minor)
 }
 
 // String returns the raw version string originally parsed.
 func (v Version) String() string { return v.Raw }
 
 func supportedVersion(v Version) error {
-	if !v.AtLeast(minMajorVersion, minMinorVersion) {
-		return unsupportedVersion("tmux version (requires recognized stable 3.6+)", v)
+	if v.Major > minMajorVersion || (v.Major == minMajorVersion && v.Minor >= minMinorVersion) {
+		return nil
 	}
 
-	return nil
+	return unsupportedVersion("tmux version (requires 3.6+)", v)
 }
 
 // Version reports the version of the selected tmux binary without starting or contacting a daemon.
