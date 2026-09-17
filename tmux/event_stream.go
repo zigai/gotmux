@@ -87,7 +87,8 @@ func (c *Connection) Events(ctx context.Context, o EventOptions) (*EventStream, 
 	s := newEventStream(c, o.MaxBytes, o.MaxCount)
 	c.streams[s] = struct{}{}
 	c.eventReserved += o.MaxBytes
-	c.work.Go(func() {
+
+	go func() {
 		select {
 		case <-ctx.Done():
 			s.finish(ctx.Err())
@@ -95,7 +96,7 @@ func (c *Connection) Events(ctx context.Context, o EventOptions) (*EventStream, 
 		case <-c.stopCh:
 			s.finish(c.closedError())
 		}
-	})
+	}()
 	c.mu.Unlock()
 
 	return s, nil

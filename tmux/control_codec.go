@@ -4,10 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/zigai/gotmux/internal/wire"
+)
+
+const (
+	dscPreambleLength = 7
+	dscEscapeByte     = 0x1b
 )
 
 type frameID struct {
@@ -23,6 +29,12 @@ type controlFrame struct {
 type controlUnit struct {
 	frame *controlFrame
 	event Event
+}
+type controlStreamReader struct {
+	r       io.Reader
+	hasCR   bool
+	seenDSC bool
+	pending []byte
 }
 
 func frameHeader(line []byte, kind string) (frameID, error) {
@@ -65,10 +77,20 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 
 		out = append(out, part...)
 		if err == nil {
+			if len(out) >= 2 && out[len(out)-2] == '\r' {
+				out = append(out[:len(out)-2], '\n')
+			}
+
 			return out, nil
 		}
 
 		if !errors.Is(err, bufio.ErrBufferFull) {
+			if errors.Is(err, io.EOF) && len(out) > 0 {
+				if bytes.Equal(bytes.TrimSpace(out), []byte("\x1b\\")) {
+					return nil, io.EOF
+				}
+			}
+
 			return nil, err //nolint:wrapcheck // bufio.Reader error is propagated directly
 		}
 	}
@@ -77,6 +99,12 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 // readControlUnit never scans for a delimiter inside a length-framed record.
 // Arbitrary output-producing commands are not accepted on this transport.
 func readControlUnit(r *bufio.Reader, maxBytes int64, publish func(Event)) (controlUnit, error) {
+	if b, err := r.Peek(1); err == nil && b[0] == dscEscapeByte {
+		if dsc, err := r.Peek(dscPreambleLength); err == nil && bytes.Equal(dsc, []byte("\x1bP1000p")) {
+			_, _ = r.Discard(dscPreambleLength)
+		}
+	}
+
 	line, err := boundedLine(r, maxBytes)
 	if err != nil {
 		return controlUnit{frame: nil, event: nil}, err
@@ -255,4 +283,99 @@ func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (
 	f.data = append(f.data, wire...)
 
 	return int64(len(wire)), nil
+}
+
+func newControlStreamReader(r io.Reader) io.Reader {
+	return &controlStreamReader{
+		r:       r,
+		hasCR:   false,
+		seenDSC: false,
+		pending: nil,
+	}
+}
+
+func (c *controlStreamReader) Read(p []byte) (int, error) {
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	for {
+		if len(c.pending) > 0 {
+			n := copy(p, c.pending)
+			c.pending = c.pending[n:]
+
+			return n, nil
+		}
+
+		readSlice := p
+		if c.hasCR && len(p) > 1 {
+			readSlice = p[1:]
+		}
+
+		n, err := c.r.Read(readSlice)
+		if n == 0 {
+			if c.hasCR {
+				c.hasCR = false
+				p[0] = '\r'
+
+				return 1, err //nolint:wrapcheck // io.Reader contract propagates raw error
+			}
+
+			return 0, err //nolint:wrapcheck // io.Reader contract propagates raw error
+		}
+
+		src := c.filterDSC(readSlice[:n])
+		dst := c.transform(src, p)
+
+		if dst > 0 || err != nil {
+			return dst, err //nolint:wrapcheck // io.Reader contract propagates raw error
+		}
+	}
+}
+
+func (c *controlStreamReader) filterDSC(src []byte) []byte {
+	if !c.seenDSC {
+		c.seenDSC = true
+
+		if bytes.HasPrefix(src, []byte("\x1bP1000p")) {
+			return src[dscPreambleLength:]
+		}
+	}
+
+	return src
+}
+
+func (c *controlStreamReader) emit(p []byte, dst *int, b byte) {
+	if *dst < len(p) {
+		p[*dst] = b
+		*dst++
+	} else {
+		c.pending = append(c.pending, b)
+	}
+}
+
+func (c *controlStreamReader) transform(src []byte, p []byte) int {
+	dst := 0
+
+	for _, b := range src {
+		if c.hasCR {
+			c.hasCR = false
+			if b != '\n' {
+				c.emit(p, &dst, '\r')
+			}
+		}
+
+		if b == '\r' {
+			c.hasCR = true
+			continue
+		}
+
+		c.emit(p, &dst, b)
+	}
+
+	if dst >= 2 && bytes.Equal(p[dst-2:dst], []byte("\x1b\\")) {
+		dst -= 2
+	}
+
+	return dst
 }

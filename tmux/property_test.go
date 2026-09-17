@@ -36,13 +36,12 @@ func TestRapidVersionProperties(t *testing.T) {
 		}
 
 		if !isCanonical {
-			// Documented contract: Unrecognized versions (development/vendor) always return false for AtLeast
 			if v.Recognized {
-				rt.Fatalf("vendor version %s should not be recognized", raw)
+				rt.Fatalf("vendor version %s should not be recognized as canonical", raw)
 			}
 
-			if v.AtLeast(major, minor) {
-				rt.Fatalf("unrecognized version %s must return false for AtLeast", raw)
+			if !v.AtLeast(major, minor) {
+				rt.Fatalf("vendor version %s should satisfy AtLeast(%d, %d)", raw, major, minor)
 			}
 
 			return
