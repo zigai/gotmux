@@ -3,6 +3,7 @@
 package tmux_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -244,7 +245,7 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
 	// 1. RunShell with Delay and Background
-	shellScript := "sleep 0.05 && tmux set-option -t " + string(session.ID()) + " @shell_ran \"yes\""
+	shellScript := "sleep 0.05 && echo shell_ran_yes"
 	res, err := server.RunShell(ctx, shellScript, tmux.RunShellOptions{
 		Background:       false,
 		Delay:            0.05,
@@ -256,7 +257,9 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 	if err != nil || res.ExitCode != 0 {
 		t.Fatalf("RunShell with Delay failed: %v, res: %+v", err, res)
 	}
-	assertUserOption(t, ctx, session, "@shell_ran", "yes")
+	if !bytes.Contains(res.Stdout, []byte("shell_ran_yes")) {
+		t.Fatalf("expected stdout to contain 'shell_ran_yes', got: %q", string(res.Stdout))
+	}
 
 	// 2. Server.IfShell: true branch
 	cmdTrue := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "true_branch")
