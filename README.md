@@ -15,8 +15,8 @@ gotmux is a Go library for controlling, inspecting, and automating [tmux](https:
 - **Deep tmux coverage:** Controls sessions, windows, shared window links, pane splits, layouts, paste buffer stacks, and terminal history capture.
 - **Control mode streaming:** Connects via control mode (`-C`/`-CC`) for push-based automation without polling.
 - **Typed options:** Reads and sets over 100 native tmux options and custom `@user` options using native Go types across server, session, window, and pane scopes.
-- **Environment discovery:** Detects the current session, window, and pane directly from ambient `$TMUX` and `$TMUX_PANE` environment variables.
-- **Testing fixtures:** Launches isolated, temporary tmux instances through `tmuxtest` with clean environments for integration testing.
+- **Environment discovery:** Detects the current session, window, and pane from `$TMUX` and `$TMUX_PANE`.
+- **Testing fixtures:** Launches isolated tmux instances via `tmuxtest` for integration tests.
 
 ## Installation
 
