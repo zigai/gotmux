@@ -301,6 +301,10 @@ func TestDiscoverSockets(t *testing.T) {
 		t.Fatalf("DiscoverServers failed: %v", err)
 	}
 
+	if servers == nil {
+		t.Fatal("expected non-nil servers slice")
+	}
+
 	if len(servers) != len(sockets) {
 		t.Fatalf("expected len(servers) == len(sockets) (%d != %d)", len(servers), len(sockets))
 	}

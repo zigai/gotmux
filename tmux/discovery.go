@@ -9,8 +9,7 @@ import (
 // DiscoverSockets searches standard tmux socket directories and returns absolute paths
 // to all active tmux UNIX domain sockets owned by the current user.
 func DiscoverSockets() ([]string, error) {
-	var sockets []string
-
+	sockets := []string{}
 	seen := map[string]bool{}
 
 	uid := os.Getuid()
@@ -58,7 +57,7 @@ func DiscoverServers(baseCfg Config) ([]*Server, error) {
 		return nil, err
 	}
 
-	var servers []*Server
+	servers := []*Server{}
 
 	for _, sock := range sockets {
 		cfg := baseCfg
