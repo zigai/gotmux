@@ -11,12 +11,17 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        go: ['1.26.x', '1.27.1']
     runs-on: ${{ matrix.os }}
+    env:
+      # Run exactly the matrix toolchain instead of having the go.mod toolchain
+      # line auto-upgrade the 1.26 job to a newer release.
+      GOTOOLCHAIN: 'local'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.27.1'
+          go-version: ${{ matrix.go }}
           cache: false
       - run: go mod tidy -diff
       - run: go test ./...
