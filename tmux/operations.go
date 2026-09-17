@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -38,8 +39,14 @@ type (
 		// Env specifies environment variable overrides for the respawned process via an execution wrapper.
 		Env map[string]string
 
+		// TmuxEnv specifies environment variables set natively via tmux -e flags.
+		TmuxEnv map[string]string
+
 		// KillRunning kills the process if still running (-k flag).
 		KillRunning bool
+
+		// PreserveEnvironment prevents tmux from updating environment variables from the session (-E flag).
+		PreserveEnvironment bool
 	}
 
 	// LinkOptions configures linking an existing window into another session.
@@ -64,6 +71,9 @@ type (
 
 		// Before places the pane before (above or left of) the target pane (-b flag).
 		Before bool
+
+		// FullSize creates the new split across the full width or height of the window (-f flag).
+		FullSize bool
 
 		// Select controls whether the joined pane gains focus immediately.
 		Select bool
@@ -118,6 +128,15 @@ func (s *Server) endpointAction(ctx context.Context, name string, args ...string
 // This is an explicit administrative action; normal cleanup of a [Connection] or [Server] never invokes it.
 func (s *Server) Kill(ctx context.Context) error { return s.endpointAction(ctx, "kill-server") }
 
+// KillOtherSessions terminates all sessions on the server except the target session.
+func (s *Server) KillOtherSessions(ctx context.Context, target SessionID) error {
+	if !target.Valid() {
+		return opError("KillOtherSessions", invalid("target session"))
+	}
+
+	return s.endpointAction(ctx, "kill-session", "-a", "-t", string(target))
+}
+
 // Kill terminates this session and all windows that have no remaining links in other sessions.
 func (s Session) Kill(ctx context.Context) error { return s.h.act(ctx, "kill-session", "-t", s.h.id) }
 
@@ -129,6 +148,27 @@ func (s Session) Rename(ctx context.Context, name string) error {
 	}
 
 	return s.h.act(ctx, "rename-session", "-t", s.h.id, "--", wire.LiteralFormat(name))
+}
+
+// LockScreen locks this session by running the lock-command on attached clients.
+func (s Session) LockScreen(ctx context.Context) error {
+	return s.h.act(ctx, "lock-session", "-t", s.h.id)
+}
+
+// RenumberWindows renumbers all windows in this session in sequential order,
+// respecting the base-index option (-r flag).
+func (s Session) RenumberWindows(ctx context.Context) error {
+	return s.h.act(ctx, "move-window", "-r", "-s", s.h.id+":")
+}
+
+// KillOtherWindows terminates all windows in this session except the currently active window.
+func (s Session) KillOtherWindows(ctx context.Context) error {
+	return s.h.act(ctx, "kill-window", "-a", "-t", s.h.id+":")
+}
+
+// ClearAlerts clears alerts (bell, activity, or silence) in all windows linked to this session (-C flag).
+func (s Session) ClearAlerts(ctx context.Context) error {
+	return s.h.act(ctx, "kill-session", "-C", "-t", s.h.id)
 }
 
 // Rename changes the title/name of this window.
@@ -145,6 +185,17 @@ func (w Window) Rename(ctx context.Context, name string) error {
 // To remove the window from only one session without killing it globally,
 // use [WindowLink.Unlink].
 func (w Window) Kill(ctx context.Context) error { return w.h.act(ctx, "kill-window", "-t", w.h.id) }
+
+// Rotate rotates the positions of the panes within this window upward or downward.
+// If reverse is true, panes rotate downward (-D flag); otherwise upward (-U flag).
+func (w Window) Rotate(ctx context.Context, reverse bool) error {
+	flag := "-U"
+	if reverse {
+		flag = "-D"
+	}
+
+	return w.h.act(ctx, "rotate-window", "-t", w.h.id, flag)
+}
 
 // Kill terminates this pane and sends SIGHUP to its child process.
 func (p Pane) Kill(ctx context.Context) error { return p.h.act(ctx, "kill-pane", "-t", p.h.id) }
@@ -171,6 +222,11 @@ func (p Pane) SetInputEnabled(ctx context.Context, enabled bool) error {
 	}
 
 	return p.h.act(ctx, "select-pane", "-t", p.h.id, flag)
+}
+
+// ClearHistory removes and clears the scrollback history for this pane.
+func (p Pane) ClearHistory(ctx context.Context) error {
+	return p.h.act(ctx, "clear-history", "-t", p.h.id)
 }
 
 // Select switches the active/focused window in this session to this link slot.
@@ -264,6 +320,32 @@ func (p Pane) ToggleZoom(ctx context.Context) error {
 	return p.h.act(ctx, "resize-pane", "-t", p.h.id, "-Z")
 }
 
+func tmuxEnvFlags(env map[string]string) ([]string, error) {
+	if len(env) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, 0, len(env))
+	for k, v := range env {
+		if !envName(k) || !wire.ValidString(v) {
+			return nil, invalid("tmux environment")
+		}
+
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+
+	const envArgsPerVar = 2
+
+	args := make([]string, 0, len(keys)*envArgsPerVar)
+	for _, k := range keys {
+		args = append(args, "-e", k+"="+env[k])
+	}
+
+	return args, nil
+}
+
 func respawn(h handle, ctx context.Context, name string, o RespawnOptions) error {
 	extra, argv, err := programArgs(o.Dir, o.Env, o.Program)
 	if err != nil {
@@ -274,6 +356,17 @@ func respawn(h handle, ctx context.Context, name string, o RespawnOptions) error
 	if o.KillRunning {
 		args = append(args, "-k")
 	}
+
+	if o.PreserveEnvironment {
+		args = append(args, "-E")
+	}
+
+	tmuxEnvArgs, err := tmuxEnvFlags(o.TmuxEnv)
+	if err != nil {
+		return opError(name, err)
+	}
+
+	args = append(args, tmuxEnvArgs...)
 
 	args = append(args, extra...)
 	if len(argv) > 0 {
@@ -474,6 +567,10 @@ func (p Pane) Join(ctx context.Context, target Pane, o JoinOptions) error {
 
 	if o.Before {
 		args = append(args, "-b")
+	}
+
+	if o.FullSize {
+		args = append(args, "-f")
 	}
 
 	if o.Direction == Horizontal {

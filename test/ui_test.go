@@ -452,3 +452,46 @@ func TestIntegrationClientSwitchToggleReadOnly(t *testing.T) {
 		})
 	})
 }
+
+func TestIntegrationUIControls(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	client, terminal, output := uiClient(t, ctx, server, session)
+
+	// 1. Client.DisplayMessageWith with Duration
+	if err := client.DisplayMessageWith(ctx, "hello from ui controls test", tmux.DisplayMessageOptions{Duration: 200}); err != nil {
+		t.Fatalf("DisplayMessageWith failed: %v", err)
+	}
+
+	// 2. Client.ClosePopup when popup is active or closed
+	if err := client.ClosePopup(ctx); err != nil {
+		t.Fatalf("ClosePopup failed: %v", err)
+	}
+
+	// 3. Client.Menu with keyless item, Style, and SelectedStyle
+	cmd := testCommand(t, "display-message", "menu_clicked")
+	items := []tmux.MenuItem{
+		{Label: "TGO_KEYLESS_ITEM", Key: "", Commands: testSequence(t, cmd)},
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- client.Menu(ctx, items, tmux.MenuOptions{
+			Title:         "Interactive Menu",
+			X:             "0",
+			Y:             "0",
+			Style:         "bg=blue",
+			SelectedStyle: "bg=red",
+		})
+	}()
+
+	awaitObservation(t, ctx, "keyless menu rendered", func() bool { return output.contains("TGO_KEYLESS_ITEM") })
+
+	if _, err := terminal.WriteString("q"); err != nil {
+		t.Fatal(err)
+	}
+	waitUIResult(t, ctx, result)
+
+	// 4. Client.LockScreen
+	if err := client.LockScreen(ctx); err != nil {
+		t.Fatalf("Client.LockScreen failed: %v", err)
+	}
+}

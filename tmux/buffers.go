@@ -35,19 +35,41 @@ type (
 		originalName string
 	}
 
+	// SetBufferOptions configures creating or modifying a paste buffer.
+	SetBufferOptions struct {
+		// Append appends data to an existing buffer rather than overwriting it (-a flag).
+		Append bool
+	}
+
 	// PasteOptions configures how a buffer's content is pasted into a target pane.
 	PasteOptions struct {
-		// DeleteAfter deletes the buffer immediately after pasting (-d flag).
+		// Buffer specifies the buffer name to paste from (-b flag).
+		// If empty, the most recently added buffer is used.
+		Buffer string
+
+		// Delete deletes the buffer immediately after pasting (-d flag).
+		Delete bool
+
+		// DeleteAfter is retained for backward compatibility with [Pane.PasteBuffer] (-d flag).
 		DeleteAfter bool
 
-		// Bracketed wraps pasted text in bracketed paste escape sequences (-p flag).
+		// BracketedPaste wraps pasted text in bracketed paste escape sequences (-p flag).
+		BracketedPaste bool
+
+		// Bracketed is retained for backward compatibility with [Pane.PasteBuffer] (-p flag).
 		Bracketed bool
 
-		// Separator specifies an optional delimiter between lines (-s flag). Conflicts with RawNewlines.
-		Separator *string
+		// ReplaceEscapes prevents replacing LF with CR when pasting (-r flag).
+		ReplaceEscapes bool
 
-		// RawNewlines prevents replacing LF with CR when pasting (-r flag). Conflicts with Separator.
+		// RawNewlines is retained for backward compatibility with [Pane.PasteBuffer] (-r flag).
 		RawNewlines bool
+
+		// NoTrailingNewline suppresses the trailing newline by setting the separator to empty string (-s "").
+		NoTrailingNewline bool
+
+		// Separator specifies an optional delimiter between lines (-s flag).
+		Separator string
 	}
 )
 
@@ -215,6 +237,40 @@ func (s *Server) DeleteBuffer(ctx context.Context, b BufferRef) error {
 	return err
 }
 
+// RenameBuffer renames a paste buffer from oldName to newName.
+func (s *Server) RenameBuffer(ctx context.Context, oldName, newName string) error {
+	if oldName == "" || !wire.ValidString(oldName) {
+		return opError("RenameBuffer", invalid("old buffer name"))
+	}
+
+	if newName == "" || !wire.ValidString(newName) {
+		return opError("RenameBuffer", invalid("new buffer name"))
+	}
+
+	return s.endpointAction(ctx, "set-buffer", "-b", oldName, "-n", newName)
+}
+
+// SetBufferWith sets the contents of the named paste buffer to data according to opts.
+func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, o SetBufferOptions) error {
+	if name == "" || !wire.ValidString(name) {
+		return opError("SetBufferWith", invalid("buffer name"))
+	}
+
+	if !wire.ValidString(string(data)) {
+		return opError("SetBufferWith", invalid("buffer data"))
+	}
+
+	var args []string
+
+	if o.Append {
+		args = append(args, "-a")
+	}
+
+	args = append(args, "-b", name, "--", string(data))
+
+	return s.endpointAction(ctx, "set-buffer", args...)
+}
+
 // LoadBufferFile loads the contents of a filesystem file into the target buffer.
 func (s *Server) LoadBufferFile(ctx context.Context, b BufferRef, path string) error {
 	if path == "" || path == "-" || !wire.ValidString(path) {
@@ -244,6 +300,59 @@ func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, a
 	return err
 }
 
+func pasteSeparator(o PasteOptions) (string, bool, error) {
+	replaceEscapes := o.ReplaceEscapes || o.RawNewlines
+
+	if replaceEscapes && (o.NoTrailingNewline || o.Separator != "") {
+		return "", false, invalid("separator and raw newlines conflict")
+	}
+
+	if o.NoTrailingNewline && o.Separator != "" {
+		return "", false, invalid("separator and no trailing newline conflict")
+	}
+
+	if o.NoTrailingNewline {
+		return "", true, nil
+	}
+
+	if o.Separator != "" {
+		if !wire.ValidString(o.Separator) {
+			return "", false, invalid("separator")
+		}
+
+		return o.Separator, true, nil
+	}
+
+	return "", false, nil
+}
+
+func pasteFlags(o PasteOptions) ([]string, error) {
+	sep, hasSep, err := pasteSeparator(o)
+	if err != nil {
+		return nil, err
+	}
+
+	var flags []string
+
+	if o.ReplaceEscapes || o.RawNewlines {
+		flags = append(flags, "-r")
+	}
+
+	if o.BracketedPaste || o.Bracketed {
+		flags = append(flags, "-p")
+	}
+
+	if o.Delete || o.DeleteAfter {
+		flags = append(flags, "-d")
+	}
+
+	if hasSep {
+		flags = append(flags, "-s", sep)
+	}
+
+	return flags, nil
+}
+
 // PasteBuffer pastes the contents of the target buffer into this pane according to opts.
 func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, o PasteOptions) error {
 	args, err := b.args()
@@ -251,29 +360,33 @@ func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, o PasteOptions) erro
 		return opError("PasteBuffer", err)
 	}
 
-	if o.RawNewlines && o.Separator != nil {
-		return opError("PasteBuffer", invalid("separator and raw newlines conflict"))
+	flags, err := pasteFlags(o)
+	if err != nil {
+		return opError("PasteBuffer", err)
 	}
 
 	args = append(args, "-t", p.h.id)
-	if o.DeleteAfter {
-		args = append(args, "-d")
+	args = append(args, flags...)
+
+	return p.h.act(ctx, "paste-buffer", args...)
+}
+
+// PasteWith pastes buffer contents into this pane according to opts.
+func (p Pane) PasteWith(ctx context.Context, o PasteOptions) error {
+	if o.Buffer != "" && !wire.ValidString(o.Buffer) {
+		return opError("PasteWith", invalid("buffer name"))
 	}
 
-	if o.Bracketed {
-		args = append(args, "-p")
+	flags, err := pasteFlags(o)
+	if err != nil {
+		return opError("PasteWith", err)
 	}
 
-	if o.RawNewlines {
-		args = append(args, "-r")
-	}
+	args := []string{"-t", p.h.id}
+	args = append(args, flags...)
 
-	if o.Separator != nil {
-		if !wire.ValidString(*o.Separator) {
-			return opError("PasteBuffer", invalid("separator"))
-		}
-
-		args = append(args, "-s", *o.Separator)
+	if o.Buffer != "" {
+		args = append(args, "-b", o.Buffer)
 	}
 
 	return p.h.act(ctx, "paste-buffer", args...)

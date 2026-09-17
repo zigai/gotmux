@@ -4,95 +4,227 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
 	"github.com/zigai/gotmux/internal/wire"
 )
 
-// NewSessionOptions configures the creation of a new tmux session.
-type NewSessionOptions struct {
-	// Name is the session name (cannot contain colons or periods). Empty defaults to automatic naming.
-	Name string
+const (
+	PaneBorderSingle PaneBorderLines = "single"
+	PaneBorderDouble PaneBorderLines = "double"
+	PaneBorderHeavy  PaneBorderLines = "heavy"
+	PaneBorderSimple PaneBorderLines = "simple"
+	PaneBorderNumber PaneBorderLines = "number"
+)
 
-	// Dir specifies the initial working directory for the session's first window.
-	Dir string
+type (
+	// PaneBorderLines specifies the border style for pane dividers and floating panes (-B flag).
+	PaneBorderLines string
 
-	// Window specifies the name for the initial window. Disallowed when joining a Group.
-	Window string
+	// NewSessionOptions configures the creation of a new tmux session.
+	NewSessionOptions struct {
+		// Name is the session name (cannot contain colons or periods). Empty defaults to automatic naming.
+		Name string
 
-	// Program specifies the initial command. Zero value runs the default shell.
-	Program Program
+		// Dir specifies the initial working directory for the session's first window.
+		Dir string
 
-	// Env specifies environment variable overrides for the launched initial process.
-	// Overrides are applied directly to the process environment via an execution wrapper,
-	// not native session environment variables (new-session -e).
-	// Overriding environment variables requires an explicit [Exec] or [Shell] Program;
-	// using Env with the zero Program{} returns [ErrUnsupported] to prevent ambient PATH corruption.
-	Env map[string]string
+		// Window specifies the name for the initial window. Disallowed when joining a Group.
+		Window string
 
-	// Size specifies initial window dimensions in character cells.
-	Size Size
+		// Program specifies the initial command. Zero value runs the default shell.
+		Program Program
 
-	// Start controls whether to start a new daemon if one is not running.
-	Start StartPolicy
+		// Env specifies environment variable overrides for the launched initial process.
+		// Overrides are applied directly to the process environment via an execution wrapper,
+		// not native session environment variables (new-session -e).
+		// Overriding environment variables requires an explicit [Exec] or [Shell] Program;
+		// using Env with the zero Program{} returns [ErrUnsupported] to prevent ambient PATH corruption.
+		Env map[string]string
 
-	// Group joins an existing session group. Disallows initial window name or program.
-	Group string
-}
+		// SessionEnv specifies native tmux session environment variables (-e KEY=VAL).
+		// Each entry is emitted as a native -e flag on new-session.
+		// Unlike [Env], which wraps program execution and requires explicit [Exec] or [Shell],
+		// SessionEnv sets environment variables directly in tmux and can be used when Program
+		// is the zero value (running the default shell with native session environment).
+		SessionEnv map[string]string
 
-// NewWindowOptions configures the creation of a new window inside an existing session.
-type NewWindowOptions struct {
-	// Name is the window name (#{window_name}).
-	Name string
+		// Size specifies initial window dimensions in character cells.
+		Size Size
 
-	// Dir is the working directory for the initial pane.
-	Dir string
+		// Start controls whether to start a new daemon if one is not running.
+		Start StartPolicy
 
-	// Program specifies the initial command. Zero value runs the default shell.
-	Program Program
+		// Group joins an existing session group. Disallows initial window name or program.
+		Group string
+	}
 
-	// Env specifies environment variable overrides for the launched process via an execution wrapper.
-	// Requires explicit [Exec] or [Shell].
-	Env map[string]string
+	// NewWindowOptions configures the creation of a new window inside an existing session.
+	NewWindowOptions struct {
+		// Name is the window name (#{window_name}).
+		Name string
 
-	// Index optionally specifies the slot index in the session.
-	Index *int
+		// Dir is the working directory for the initial pane.
+		Dir string
 
-	// Select controls whether the new window gains focus immediately (default false).
-	Select bool
-}
+		// Program specifies the initial command. Zero value runs the default shell.
+		Program Program
 
-// SplitOptions configures splitting an existing pane into two panes.
-type SplitOptions struct {
-	// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
-	Direction Direction
+		// Env specifies environment variable overrides for the launched process via an execution wrapper.
+		// Requires explicit [Exec] or [Shell].
+		Env map[string]string
 
-	// Size specifies cell count or percentage. Zero splits available space evenly.
-	Size SplitSize
+		// TmuxEnv specifies native tmux environment variables to set for the new window (-e KEY=VAL).
+		TmuxEnv map[string]string
 
-	// Dir is the working directory for the new pane.
-	Dir string
+		// Index optionally specifies the slot index in the session.
+		// Mutually exclusive with Before and After.
+		Index *int
 
-	// Program specifies the initial process. Zero value runs the default shell.
-	Program Program
+		// Before inserts the new window before the target window (-b flag).
+		// Mutually exclusive with Index and After.
+		Before bool
 
-	// Env specifies environment variable overrides for the launched process via an execution wrapper.
-	// Requires explicit [Exec] or [Shell].
-	Env map[string]string
+		// After inserts the new window after the target window (-a flag).
+		// Mutually exclusive with Index and Before.
+		After bool
 
-	// Select controls whether the new pane gains focus immediately.
-	Select bool
+		// Select controls whether the new window gains focus immediately (default false).
+		Select bool
+	}
 
-	// Before places the new pane before (above or left of) the target pane (-b flag).
-	Before bool
+	// SplitOptions configures splitting an existing pane into two panes.
+	SplitOptions struct {
+		// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
+		Direction Direction
 
-	// FullSize splits across the full window span (-f flag) rather than just the target pane.
-	FullSize bool
-}
-type startGuard struct {
-	guard      *guard
-	allowStart bool
+		// Size specifies cell count or percentage. Zero splits available space evenly.
+		Size SplitSize
+
+		// Dir is the working directory for the new pane.
+		Dir string
+
+		// Program specifies the initial process. Zero value runs the default shell.
+		Program Program
+
+		// Env specifies environment variable overrides for the launched process via an execution wrapper.
+		// Requires explicit [Exec] or [Shell].
+		Env map[string]string
+
+		// TmuxEnv specifies native tmux environment variables to set for the new pane (-e KEY=VAL).
+		TmuxEnv map[string]string
+
+		// Select controls whether the new pane gains focus immediately.
+		Select bool
+
+		// Before places the new pane before (above or left of) the target pane (-b flag).
+		Before bool
+
+		// FullSize splits across the full window span (-f flag) rather than just the target pane.
+		FullSize bool
+
+		// KillTarget kills the target pane instead of splitting (-k flag).
+		KillTarget bool
+
+		// Zoom keeps the window zoomed or zooms the new pane (-Z flag).
+		Zoom bool
+
+		// Title sets the initial title for the pane (-T flag).
+		Title string
+
+		// BorderLines specifies the border style for the pane (-B flag).
+		BorderLines PaneBorderLines
+
+		// Style specifies the pane style (-s flag).
+		Style string
+
+		// ActiveBorderStyle specifies the active border style (-S flag).
+		ActiveBorderStyle string
+
+		// InactiveBorderStyle specifies the inactive border style (-R flag).
+		InactiveBorderStyle string
+
+		// Message specifies an optional message to display in the pane (-m flag).
+		Message string
+	}
+
+	// NewPaneOptions configures creating a new (potentially floating or modal) pane via tmux new-pane.
+	NewPaneOptions struct {
+		// Width specifies the pane width in character cells or percentage (e.g. "50%" or "40").
+		Width string
+
+		// Height specifies the pane height in character cells or percentage (e.g. "50%" or "15").
+		Height string
+
+		// X specifies the horizontal position in character cells or percentage (e.g. "10" or "10%").
+		X string
+
+		// Y specifies the vertical position in character cells or percentage (e.g. "5" or "5%").
+		Y string
+
+		// Modal creates a modal pane blocking input to other panes until dismissed (-O flag).
+		Modal bool
+
+		// Dir specifies the initial working directory (-c flag).
+		Dir string
+
+		// Program specifies the initial process. Zero value runs the default shell.
+		Program Program
+
+		// Env specifies environment variable overrides for the launched process via an execution wrapper.
+		// Requires explicit [Exec] or [Shell].
+		Env map[string]string
+
+		// TmuxEnv specifies native tmux environment variables to set (-e KEY=VAL).
+		TmuxEnv map[string]string
+
+		// Select controls whether the new pane gains focus immediately.
+		Select bool
+
+		// Zoom keeps the window zoomed or zooms the new pane (-Z flag).
+		Zoom bool
+
+		// Title sets the initial title for the pane (-T flag).
+		Title string
+
+		// BorderLines specifies the border style for the pane (-B flag).
+		BorderLines PaneBorderLines
+
+		// Style specifies the pane style (-s flag).
+		Style string
+
+		// ActiveBorderStyle specifies the active border style (-S flag).
+		ActiveBorderStyle string
+
+		// InactiveBorderStyle specifies the inactive border style (-R flag).
+		InactiveBorderStyle string
+
+		// FloatOverZoom permits floating over zoomed panes (-A flag).
+		FloatOverZoom bool
+
+		// CloseOnClick closes the modal pane on mouse click outside (-C flag).
+		CloseOnClick bool
+
+		// CaptureAllKeys routes all keys to the modal pane (-K flag).
+		CaptureAllKeys bool
+	}
+
+	startGuard struct {
+		guard      *guard
+		allowStart bool
+	}
+)
+
+// Valid reports whether the pane border style is a recognized tmux pane-border-lines value.
+func (b PaneBorderLines) Valid() bool {
+	switch b {
+	case PaneBorderSingle, PaneBorderDouble, PaneBorderHeavy, PaneBorderSimple, PaneBorderNumber:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewSession creates a new session on the server and returns a verified [Session] handle.
@@ -241,6 +373,58 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 	return v.Handle(), nil
 }
 
+func createNewPane(h handle, opName string, targetID string, opts NewPaneOptions, ctx context.Context) (Pane, error) {
+	if err := h.check(); err != nil {
+		return Pane{}, opError(opName, err)
+	}
+
+	opCtx, op, err := h.server.begin(ctx)
+	if err != nil {
+		return Pane{}, opError(opName, err)
+	}
+	defer op.close()
+
+	args, err := newPaneArgs(targetID, opts)
+	if err != nil {
+		return Pane{}, opError(opName, err)
+	}
+
+	r, err := h.server.execute(opCtx, op, recordsPlan(command("new-pane", args...)), h.guard(), nil)
+	if err != nil {
+		return Pane{}, creationError(opName, err, r.Stdout, PaneKind)
+	}
+
+	rows, err := parseRaw(r.Stdout, fieldsFor(PaneKind), "pane")
+	if err != nil || len(rows) != 1 {
+		if err == nil {
+			err = decodeError("pane", "record count", wire.ErrRecord)
+		}
+
+		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
+	}
+
+	v, err := h.server.decodePane(rows[0], &h.origin)
+	if err != nil {
+		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
+	}
+
+	if err = opCtx.Err(); err != nil {
+		return v.Handle(), afterError(opName, err, createdFromHandle(v.h))
+	}
+
+	return v.Handle(), nil
+}
+
+// NewPane creates a new (potentially floating or modal) pane targeting this window (new-pane).
+func (w Window) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
+	return createNewPane(w.h, "NewPane", w.h.id, opts, ctx)
+}
+
+// NewPane creates a new (potentially floating or modal) pane targeting this pane (new-pane).
+func (p Pane) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
+	return createNewPane(p.h, "NewPane", p.h.id, opts, ctx)
+}
+
 func creationError(name string, err error, data []byte, kind ObjectKind) error {
 	outcome := outcomeOf(err)
 	outcome.Created = append(outcome.Created, recoverCreated(data, kind)...)
@@ -250,6 +434,11 @@ func creationError(name string, err error, data []byte, kind ObjectKind) error {
 
 func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
+	if err != nil {
+		return nil, err
+	}
+
+	envArgs, err := tmuxEnvArgs(opts.SessionEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -273,28 +462,42 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 			return nil, err
 		}
 
-		if opts.Window != "" || opts.Program.kind != 0 {
-			return nil, invalid("group conflicts with program/window")
-		}
-
 		args = append(args, "-t", opts.Group)
 	}
 
-	if opts.Size.Width != 0 {
-		args = append(args, "-x", strconv.Itoa(opts.Size.Width))
-	}
-
-	if opts.Size.Height != 0 {
-		args = append(args, "-y", strconv.Itoa(opts.Size.Height))
-	}
-
+	args = append(args, sessionSizeArgs(opts.Size)...)
+	args = append(args, envArgs...)
 	args = append(args, extra...)
+
 	if len(argv) > 0 {
 		args = append(args, "--")
 		args = append(args, argv...)
 	}
 
 	return args, nil
+}
+
+func (s *Server) parseCreatedSession(data []byte, g *guard) (Session, error) {
+	rows, err := parseRaw(data, fieldsFor(SessionKind), "session")
+	if err != nil || len(rows) != 1 {
+		if err == nil {
+			err = decodeError("session", "record count", wire.ErrRecord)
+		}
+
+		return Session{}, afterError("NewSession", err, recoverCreated(data, SessionKind)...)
+	}
+
+	var expected *ServerIdentity
+	if g != nil {
+		expected = &g.identity
+	}
+
+	sess, err := s.decodeSession(rows[0], expected)
+	if err != nil {
+		return Session{}, afterError("NewSession", err, recoverCreated(data, SessionKind)...)
+	}
+
+	return sess.Handle(), nil
 }
 
 func newSessionPlan(args []string, sg startGuard) plan {
@@ -306,29 +509,6 @@ func newSessionPlan(args []string, sg startGuard) plan {
 	}
 
 	return p
-}
-
-func (s *Server) parseCreatedSession(stdout []byte, g *guard) (Session, error) {
-	rows, err := parseRaw(stdout, fieldsFor(SessionKind), "session")
-	if err != nil || len(rows) != 1 {
-		if err == nil {
-			err = decodeError("session", "record count", wire.ErrRecord)
-		}
-
-		return Session{}, afterError("NewSession", err, recoverCreated(stdout, SessionKind)...)
-	}
-
-	var expected *ServerIdentity
-	if g != nil {
-		expected = &g.identity
-	}
-
-	v, err := s.decodeSession(rows[0], expected)
-	if err != nil {
-		return Session{}, afterError("NewSession", err, recoverCreated(stdout, SessionKind)...)
-	}
-
-	return v.Handle(), nil
 }
 
 func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start StartPolicy) (startGuard, error) {
@@ -347,28 +527,38 @@ func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start Sta
 		}
 
 		return startGuard{guard: nil, allowStart: true}, nil
+	case errors.Is(err, ErrNoServer) && start == ExistingOnly:
+		return startGuard{guard: nil, allowStart: false}, ErrNoServer
 	default:
 		return startGuard{guard: nil, allowStart: false}, err
 	}
 }
 
 func newWindowArgs(sessionID string, opts NewWindowOptions) ([]string, error) {
+	target, err := newWindowTarget(sessionID, opts)
+	if err != nil {
+		return nil, err
+	}
+
 	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
 	if err != nil {
 		return nil, err
 	}
 
-	target := sessionID + ":"
-
-	if opts.Index != nil {
-		if *opts.Index < 0 || *opts.Index > 1<<30 {
-			return nil, invalid("index")
-		}
-
-		target += strconv.Itoa(*opts.Index)
+	envArgs, err := tmuxEnvArgs(opts.TmuxEnv)
+	if err != nil {
+		return nil, err
 	}
 
 	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(WindowKind)), "-t", target}
+	if opts.Before {
+		args = append(args, "-b")
+	}
+
+	if opts.After {
+		args = append(args, "-a")
+	}
+
 	if !opts.Select {
 		args = append(args, "-d")
 	}
@@ -382,13 +572,120 @@ func newWindowArgs(sessionID string, opts NewWindowOptions) ([]string, error) {
 		args = append(args, "-n", v)
 	}
 
+	args = append(args, envArgs...)
 	args = append(args, extra...)
+
 	if len(argv) > 0 {
 		args = append(args, "--")
 		args = append(args, argv...)
 	}
 
 	return args, nil
+}
+
+func splitLayoutFlags(opts SplitOptions) []string {
+	var flags []string
+	if opts.Direction == Horizontal {
+		flags = append(flags, "-h")
+	} else {
+		flags = append(flags, "-v")
+	}
+
+	if !opts.Select {
+		flags = append(flags, "-d")
+	}
+
+	if opts.Before {
+		flags = append(flags, "-b")
+	}
+
+	if opts.FullSize {
+		flags = append(flags, "-f")
+	}
+
+	if opts.KillTarget {
+		flags = append(flags, "-k")
+	}
+
+	if opts.Zoom {
+		flags = append(flags, "-Z")
+	}
+
+	return flags
+}
+
+func splitTitleBorderFlags(opts SplitOptions) ([]string, error) {
+	var flags []string
+
+	if opts.Title != "" {
+		if !wire.ValidString(opts.Title) {
+			return nil, invalid("title")
+		}
+
+		flags = append(flags, "-T", opts.Title)
+	}
+
+	if opts.BorderLines != "" {
+		if !opts.BorderLines.Valid() {
+			return nil, invalid("border lines")
+		}
+
+		flags = append(flags, "-B", string(opts.BorderLines))
+	}
+
+	return flags, nil
+}
+
+func splitColorStyleFlags(opts SplitOptions) ([]string, error) {
+	var flags []string
+
+	if opts.Style != "" {
+		if !wire.ValidString(opts.Style) {
+			return nil, invalid("style")
+		}
+
+		flags = append(flags, "-s", opts.Style)
+	}
+
+	if opts.ActiveBorderStyle != "" {
+		if !wire.ValidString(opts.ActiveBorderStyle) {
+			return nil, invalid("active border style")
+		}
+
+		flags = append(flags, "-S", opts.ActiveBorderStyle)
+	}
+
+	if opts.InactiveBorderStyle != "" {
+		if !wire.ValidString(opts.InactiveBorderStyle) {
+			return nil, invalid("inactive border style")
+		}
+
+		flags = append(flags, "-R", opts.InactiveBorderStyle)
+	}
+
+	if opts.Message != "" {
+		if !wire.ValidString(opts.Message) {
+			return nil, invalid("message")
+		}
+
+		flags = append(flags, "-m", opts.Message)
+	}
+
+	return flags, nil
+}
+
+func splitStyleFlags(opts SplitOptions) ([]string, error) {
+	tbFlags, err := splitTitleBorderFlags(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	csFlags, err := splitColorStyleFlags(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(tbFlags, csFlags...), nil
 }
 
 func splitArgs(paneID string, opts SplitOptions) ([]string, error) {
@@ -402,31 +699,52 @@ func splitArgs(paneID string, opts SplitOptions) ([]string, error) {
 		return nil, err
 	}
 
+	envArgs, err := tmuxEnvArgs(opts.TmuxEnv)
+	if err != nil {
+		return nil, err
+	}
+
+	styleArgs, err := splitStyleFlags(opts)
+	if err != nil {
+		return nil, err
+	}
+
 	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(PaneKind)), "-t", paneID}
-	if opts.Direction == Horizontal {
-		args = append(args, "-h")
-	} else {
-		args = append(args, "-v")
-	}
-
-	if !opts.Select {
-		args = append(args, "-d")
-	}
-
-	if opts.Before {
-		args = append(args, "-b")
-	}
-
-	if opts.FullSize {
-		args = append(args, "-f")
-	}
-
+	args = append(args, splitLayoutFlags(opts)...)
+	args = append(args, styleArgs...)
 	args = append(args, size...)
-
+	args = append(args, envArgs...)
 	args = append(args, extra...)
+
 	if len(argv) > 0 {
 		args = append(args, "--")
 		args = append(args, argv...)
+	}
+
+	return args, nil
+}
+
+func tmuxEnvArgs(env map[string]string) ([]string, error) {
+	if len(env) == 0 {
+		return nil, nil
+	}
+
+	keys := make([]string, 0, len(env))
+	for k, v := range env {
+		if !envName(k) || !wire.ValidString(v) {
+			return nil, invalid("environment entry")
+		}
+
+		keys = append(keys, k)
+	}
+
+	slices.Sort(keys)
+
+	const envArgsPerVar = 2
+
+	args := make([]string, 0, len(keys)*envArgsPerVar)
+	for _, k := range keys {
+		args = append(args, "-e", k+"="+env[k])
 	}
 
 	return args, nil
@@ -473,10 +791,6 @@ func splitRecordFormat(fields []string) string {
 
 	for _, f := range fields {
 		if f == "pane_current_command" || f == "pane_current_path" {
-			// pane_current_command and pane_current_path query the live process table (/proc or proc_pidinfo).
-			// At the moment of split-window, the child process is concurrently forking and execing,
-			// causing a race where #{n:...} and #{...} evaluate to different values (or resolve firmlinks
-			// inconsistently on macOS). Emitting empty strings avoids this race while keeping field count aligned.
 			b.WriteString("0:,")
 			continue
 		}
@@ -485,4 +799,199 @@ func splitRecordFormat(fields []string) string {
 	}
 
 	return b.String()
+}
+
+func sessionSizeArgs(s Size) []string {
+	var args []string
+
+	if s.Width != 0 {
+		args = append(args, "-x", strconv.Itoa(s.Width))
+	}
+
+	if s.Height != 0 {
+		args = append(args, "-y", strconv.Itoa(s.Height))
+	}
+
+	return args
+}
+
+func newWindowTarget(sessionID string, opts NewWindowOptions) (string, error) {
+	placement := 0
+	if opts.Index != nil {
+		placement++
+	}
+
+	if opts.Before {
+		placement++
+	}
+
+	if opts.After {
+		placement++
+	}
+
+	if placement > 1 {
+		return "", invalid("window placement")
+	}
+
+	target := sessionID + ":"
+
+	if opts.Index != nil {
+		if *opts.Index < 0 || *opts.Index > 1<<30 {
+			return "", invalid("index")
+		}
+
+		target += strconv.Itoa(*opts.Index)
+	}
+
+	return target, nil
+}
+
+func newPaneGeometryFlags(opts NewPaneOptions) ([]string, error) {
+	var flags []string
+
+	if opts.Width != "" {
+		if !wire.ValidString(opts.Width) {
+			return nil, invalid("width")
+		}
+
+		flags = append(flags, "-x", opts.Width)
+	}
+
+	if opts.Height != "" {
+		if !wire.ValidString(opts.Height) {
+			return nil, invalid("height")
+		}
+
+		flags = append(flags, "-y", opts.Height)
+	}
+
+	if opts.X != "" {
+		if !wire.ValidString(opts.X) {
+			return nil, invalid("x position")
+		}
+
+		flags = append(flags, "-X", opts.X)
+	}
+
+	if opts.Y != "" {
+		if !wire.ValidString(opts.Y) {
+			return nil, invalid("y position")
+		}
+
+		flags = append(flags, "-Y", opts.Y)
+	}
+
+	return flags, nil
+}
+
+func newPaneModalFlags(opts NewPaneOptions) []string {
+	var flags []string
+
+	if opts.Modal {
+		flags = append(flags, "-O")
+
+		if opts.CloseOnClick {
+			flags = append(flags, "-C")
+		}
+
+		if opts.CaptureAllKeys {
+			flags = append(flags, "-K")
+		}
+	}
+
+	if opts.FloatOverZoom {
+		flags = append(flags, "-A")
+	}
+
+	if !opts.Select {
+		flags = append(flags, "-d")
+	}
+
+	if opts.Zoom {
+		flags = append(flags, "-Z")
+	}
+
+	return flags
+}
+
+func newPaneStyleFlags(opts NewPaneOptions) ([]string, error) {
+	var flags []string
+
+	if opts.Title != "" {
+		if !wire.ValidString(opts.Title) {
+			return nil, invalid("title")
+		}
+
+		flags = append(flags, "-T", opts.Title)
+	}
+
+	if opts.BorderLines != "" {
+		if !opts.BorderLines.Valid() {
+			return nil, invalid("border lines")
+		}
+
+		flags = append(flags, "-B", string(opts.BorderLines))
+	}
+
+	if opts.Style != "" {
+		if !wire.ValidString(opts.Style) {
+			return nil, invalid("style")
+		}
+
+		flags = append(flags, "-s", opts.Style)
+	}
+
+	if opts.ActiveBorderStyle != "" {
+		if !wire.ValidString(opts.ActiveBorderStyle) {
+			return nil, invalid("active border style")
+		}
+
+		flags = append(flags, "-S", opts.ActiveBorderStyle)
+	}
+
+	if opts.InactiveBorderStyle != "" {
+		if !wire.ValidString(opts.InactiveBorderStyle) {
+			return nil, invalid("inactive border style")
+		}
+
+		flags = append(flags, "-R", opts.InactiveBorderStyle)
+	}
+
+	return flags, nil
+}
+
+func newPaneArgs(targetID string, opts NewPaneOptions) ([]string, error) {
+	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
+	if err != nil {
+		return nil, err
+	}
+
+	envArgs, err := tmuxEnvArgs(opts.TmuxEnv)
+	if err != nil {
+		return nil, err
+	}
+
+	geoFlags, err := newPaneGeometryFlags(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	styleFlags, err := newPaneStyleFlags(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(PaneKind)), "-t", targetID}
+	args = append(args, geoFlags...)
+	args = append(args, newPaneModalFlags(opts)...)
+	args = append(args, styleFlags...)
+	args = append(args, envArgs...)
+	args = append(args, extra...)
+
+	if len(argv) > 0 {
+		args = append(args, "--")
+		args = append(args, argv...)
+	}
+
+	return args, nil
 }

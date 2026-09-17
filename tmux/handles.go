@@ -2,8 +2,11 @@ package tmux
 
 import (
 	"context"
+	"sort"
 	"strconv"
 	"time"
+
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 var zeroHandle handle
@@ -50,6 +53,24 @@ type (
 		h       handle
 		session SessionID
 		index   int
+	}
+
+	// SelectWindowOptions configures selecting a window.
+	SelectWindowOptions struct {
+		// PreserveZoom preserves the window's zoom state (-Z flag).
+		PreserveZoom bool
+
+		// Last selects the previously active window (-l flag).
+		Last bool
+	}
+
+	// SelectPaneOptions configures selecting a pane.
+	SelectPaneOptions struct {
+		// PreserveZoom preserves the pane's zoom state (-Z flag).
+		PreserveZoom bool
+
+		// Last selects the previously active pane (-l flag).
+		Last bool
 	}
 )
 
@@ -395,7 +416,7 @@ func (h handle) usingSubprocess() (handle, error) {
 
 	server, err := h.server.UsingSubprocess()
 	if err != nil {
-		return handle{}, err
+		return handle{}, opError("UsingSubprocess", err)
 	}
 
 	h.server = server
@@ -425,4 +446,119 @@ func (w Window) UsingSubprocess() (Window, error) {
 func (c Client) UsingSubprocess() (Client, error) {
 	h, err := c.h.usingSubprocess()
 	return Client{h: h}, err
+}
+
+// SelectWith switches the active window to this window using the specified options.
+func (w Window) SelectWith(ctx context.Context, o SelectWindowOptions) error {
+	args := []string{"-t", w.h.id}
+
+	if o.PreserveZoom {
+		args = append(args, "-Z")
+	}
+
+	if o.Last {
+		args = append(args, "-l")
+	}
+
+	return w.h.act(ctx, "select-window", args...)
+}
+
+// SelectWith gives user focus to this pane within its window using the specified options.
+func (p Pane) SelectWith(ctx context.Context, o SelectPaneOptions) error {
+	args := []string{"-t", p.h.id}
+
+	if o.PreserveZoom {
+		args = append(args, "-Z")
+	}
+
+	if o.Last {
+		args = append(args, "-l")
+	}
+
+	return p.h.act(ctx, "select-pane", args...)
+}
+
+// Clients queries all client terminals currently attached to this session, returning
+// their point-in-time metadata sorted by client terminal name.
+func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
+	if err := s.h.check(); err != nil {
+		return nil, opError("Session.Clients", err)
+	}
+
+	opCtx, op, err := s.h.server.begin(ctx)
+	if err != nil {
+		return nil, opError("Session.Clients", err)
+	}
+	defer op.close()
+
+	rows, err := s.h.server.listRaw(opCtx, op, ClientKind, s.h.origin, QueryOptions{Filter: "", ExtraFields: nil}, s.h.id)
+	if err != nil {
+		return nil, opError("Session.Clients", err)
+	}
+
+	out := make([]ClientInfo, 0, len(rows))
+	for _, m := range rows {
+		v, err := s.h.server.decodeClient(m, &s.h.origin)
+		if err != nil {
+			return nil, afterError("Clients", err)
+		}
+
+		out = append(out, v)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+
+	return out, nil
+}
+
+// Panes queries all panes currently belonging to this session, sorted by numeric pane ID.
+func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
+	if err := s.h.check(); err != nil {
+		return nil, opError("Session.Panes", err)
+	}
+
+	opCtx, op, err := s.h.server.begin(ctx)
+	if err != nil {
+		return nil, opError("Session.Panes", err)
+	}
+	defer op.close()
+
+	fields, err := queryFields(fieldsFor(PaneKind), nil)
+	if err != nil {
+		return nil, opError("Session.Panes", err)
+	}
+
+	args := []string{"-s", "-t", s.h.id, "-F", wire.RecordFormat(fields)}
+	p := recordsPlan(command("list-panes", args...))
+	g := newGuard(s.h.origin)
+
+	r, err := s.h.server.execute(opCtx, op, p, g, nil)
+	if err != nil {
+		return nil, opError("Session.Panes", err)
+	}
+
+	rows, err := s.h.server.parseOrRetry(opCtx, op, p, g, r, fields, "pane")
+	if err != nil {
+		return nil, afterError("Panes", err)
+	}
+
+	out := make([]PaneInfo, 0, len(rows))
+
+	seen := make(map[PaneID]bool, len(rows))
+
+	for _, m := range rows {
+		v, err := s.h.server.decodePane(m, &s.h.origin)
+		if err != nil {
+			return nil, afterError("Panes", err)
+		}
+
+		if !seen[v.ID] {
+			seen[v.ID] = true
+			out = append(out, v)
+		}
+	}
+
+	sort.Slice(out, func(i, j int) bool { return numericID(string(out[i].ID)) < numericID(string(out[j].ID)) })
+
+	return out, nil
 }
