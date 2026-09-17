@@ -2,7 +2,7 @@
 
 # gotmux
 
-gotmux is a Go library for controlling, inspecting, and automating tmux sessions, windows, panes, and buffers.
+gotmux is a Go library for controlling, inspecting, and automating [tmux](https://github.com/tmux/tmux) sessions, windows, panes, and buffers.
 
 [![Tests](https://img.shields.io/github/actions/workflow/status/zigai/gotmux/test.yml?branch=master&label=Tests)](https://github.com/zigai/gotmux/actions/workflows/test.yml)
 [![Latest Release](https://img.shields.io/github/v/release/zigai/gotmux?color=blue)](https://github.com/zigai/gotmux/releases/latest)
