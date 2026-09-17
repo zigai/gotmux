@@ -109,10 +109,13 @@ func main() {
 	// Typed notifications and signal methods verification
 	var _ t.Event = t.ConfigErrorEvent{}
 	var _ t.Event = t.MessageEvent{}
-	if err := server.RecreateSocket(context.Background()); !errors.Is(err, t.ErrNoServer) {
-		panic(fmt.Sprintf("RecreateSocket on unstarted server expected ErrNoServer, got: %v", err))
+	var nilServer *t.Server
+	if err := nilServer.RecreateSocket(context.Background()); !errors.Is(err, t.ErrInvalidHandle) {
+		panic(fmt.Sprintf("RecreateSocket on nil server expected ErrInvalidHandle, got: %v", err))
 	}
-
+	if err := server.RecreateSocket(context.Background()); err == nil {
+		panic("RecreateSocket on unstarted server unexpectedly succeeded")
+	}
 	fmt.Println("External consumer runtime contracts passed.")
 }
 EOF_GO
