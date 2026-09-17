@@ -29,12 +29,17 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 	ctx, cancel := context.WithCancelCause(context.Background())
 
 	o, err := normalizeControlOptions(ControlOptions{
-		QueueDepth:  depth,
-		QueuedBytes: 65536,
-		PaneOutput:  false,
-		FrameBytes:  0,
-		EventBytes:  0,
-		MaxStreams:  0,
+		QueueDepth:       depth,
+		QueuedBytes:      65536,
+		PaneOutput:       false,
+		NoEcho:           false,
+		ClientFlags:      nil,
+		UTF8:             UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		FrameBytes:       0,
+		EventBytes:       0,
+		MaxStreams:       0,
 	})
 	if err != nil {
 		t.Fatal(err)

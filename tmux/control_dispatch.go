@@ -38,7 +38,12 @@ type controlReply struct {
 }
 
 func (c *Connection) reader() {
-	r := bufio.NewReaderSize(c.stdout, readerBufferSize)
+	var inReader io.Reader = c.stdout
+	if c.opts.NoEcho {
+		inReader = newControlStreamReader(c.stdout)
+	}
+
+	r := bufio.NewReaderSize(inReader, readerBufferSize)
 	for {
 		unit, err := readControlUnit(r, c.opts.FrameBytes, c.publish)
 		if err != nil {
@@ -173,7 +178,10 @@ func (c *Connection) performStartupHandshake(ctx context.Context, nonce string, 
 
 	result, err := c.collect(startup, nonce, c.original.config.Limits.OutputBytes, c.original.config.Limits.OutputBytes)
 
-	_, err = g.unwrap(result, err)
+	if g != nil {
+		_, err = g.unwrap(result, err)
+	}
+
 	c.ready <- err
 
 	if err != nil {
@@ -330,7 +338,7 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 	case v := <-r.result:
 		return v.result, v.err
 	case <-ctx.Done():
-		if v, ok := checkDelivered(r); ok {
+		if v, ok := checkDeliveredOrState(r); ok {
 			return v.result, v.err
 		}
 
@@ -338,7 +346,7 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 
 		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: abortOutcome(r), Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, ctx.Err()), Err: ctx.Err()}
 	case <-c.stopCh:
-		if v, ok := checkDelivered(r); ok {
+		if v, ok := checkDeliveredOrState(r); ok {
 			return v.result, v.err
 		}
 
@@ -356,16 +364,19 @@ func abortOutcome(r *controlRequest) Effect {
 	return Unknown
 }
 
+func checkDeliveredOrState(r *controlRequest) (controlReply, bool) {
+	if r.state.Load() == requestDelivered {
+		return <-r.result, true
+	}
+
+	return checkDelivered(r)
+}
+
 func checkDelivered(r *controlRequest) (controlReply, bool) {
 	select {
 	case v := <-r.result:
 		return v, true
 	default:
-		if r.state.Load() == requestDelivered {
-			v := <-r.result
-			return v, true
-		}
-
 		return controlReply{result: Result{Stdout: nil, Stderr: nil, ExitCode: 0}, err: nil}, false
 	}
 }
@@ -393,14 +404,21 @@ func requestDeadline(ctx context.Context) time.Time {
 
 func (c *Connection) enqueueRequest(r *controlRequest) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if c.closed {
+		terminal := c.terminal
+		c.mu.Unlock()
 		c.releaseRequest(r)
+
+		return errors.Join(ErrClosed, terminal)
+	}
+	c.mu.Unlock()
+
+	select {
+	case c.requests <- r:
+		return nil
+	case <-c.stopCh:
+		c.releaseRequest(r)
+
 		return errors.Join(ErrClosed, c.terminal)
 	}
-
-	c.requests <- r
-
-	return nil
 }

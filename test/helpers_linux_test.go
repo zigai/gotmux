@@ -13,7 +13,7 @@ import (
 func openPTY(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
 
-	masterFD, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK, 0)
+	masterFD, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

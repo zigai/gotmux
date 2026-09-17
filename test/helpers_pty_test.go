@@ -18,7 +18,10 @@ func interactiveTerminal(t *testing.T) (*os.File, *os.File) {
 	done := make(chan struct{})
 	go func() { defer close(done); _, _ = io.Copy(io.Discard, master) }()
 
-	t.Cleanup(func() { _ = master.Close(); <-done })
+	t.Cleanup(func() {
+		_ = master.Close()
+		<-done
+	})
 
 	return master, slave
 }
