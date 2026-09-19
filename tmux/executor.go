@@ -78,7 +78,7 @@ func isNotFoundStderr(s string) bool {
 }
 
 func isNoServerStderr(s string) bool {
-	return (strings.HasPrefix(s, "error connecting to ") && strings.Contains(s, "(No such file or directory)")) || strings.HasPrefix(s, "no server running on ")
+	return strings.HasPrefix(s, "error connecting to ") || strings.HasPrefix(s, "no server running on ")
 }
 
 func classifyStderr(data []byte) error {

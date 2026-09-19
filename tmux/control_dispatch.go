@@ -165,10 +165,9 @@ func (c *Connection) deliver(r *controlRequest, result Result, err error, effect
 		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: err}
 	}
 
-	r.state.Store(requestDelivered)
-
 	r.result <- controlReply{result: result, err: err}
 
+	r.state.Store(requestDelivered)
 	c.releaseRequest(r)
 }
 
@@ -338,30 +337,29 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 	case v := <-r.result:
 		return v.result, v.err
 	case <-ctx.Done():
-		if v, ok := checkDeliveredOrState(r); ok {
-			return v.result, v.err
-		}
-
-		result := failedResult()
-
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: abortOutcome(r), Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, ctx.Err()), Err: ctx.Err()}
+		return c.abortRequest(r, p, contextSource(op.callerDone, ctx.Err()), ctx.Err())
 	case <-c.stopCh:
-		if v, ok := checkDeliveredOrState(r); ok {
-			return v.result, v.err
-		}
-
-		result := failedResult()
-
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: abortOutcome(r), Steps: nil, Created: nil}, Timeout: NoTimeout, Err: c.closedError()}
+		return c.abortRequest(r, p, NoTimeout, c.closedError())
 	}
 }
 
-func abortOutcome(r *controlRequest) Effect {
-	if r.state.CompareAndSwap(requestQueued, requestCanceled) {
-		return NotSent
+func (c *Connection) abortRequest(r *controlRequest, p plan, timeout TimeoutSource, err error) (Result, error) {
+	if v, ok := checkDeliveredOrState(r); ok {
+		return v.result, v.err
 	}
 
-	return Unknown
+	if r.state.CompareAndSwap(requestQueued, requestCanceled) {
+		result := failedResult()
+		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
+	}
+
+	if v, ok := checkDeliveredOrState(r); ok {
+		return v.result, v.err
+	}
+
+	result := failedResult()
+
+	return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
 }
 
 func checkDeliveredOrState(r *controlRequest) (controlReply, bool) {
