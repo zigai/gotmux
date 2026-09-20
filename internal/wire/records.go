@@ -24,9 +24,10 @@ const (
 
 var ErrRecord = errors.New("invalid length-prefixed record")
 
+// Reader is the byte source consumed by record scanning: bulk reads plus single-byte delimiters.
 type Reader interface {
 	io.Reader
-	ReadByte() (byte, error)
+	io.ByteReader
 }
 
 func RecordFormat(fields []string) string {
