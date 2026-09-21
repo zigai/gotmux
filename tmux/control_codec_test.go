@@ -393,11 +393,14 @@ func (r *chunkReader) Read(p []byte) (int, error) {
 	for len(r.chunks) > 0 && len(r.chunks[0]) == 0 {
 		r.chunks = r.chunks[1:]
 	}
+
 	if len(r.chunks) == 0 {
 		return 0, io.EOF
 	}
+
 	n := copy(p, r.chunks[0])
 	r.chunks[0] = r.chunks[0][n:]
+
 	return n, nil
 }
 
@@ -406,14 +409,18 @@ func TestNoEchoFramingBoundarySplits(t *testing.T) {
 	// Model ordinary PTY ONLCR conversion (LF -> CRLF) before decoding -CC.
 	raw := []byte("\x1bP1000p" + strings.ReplaceAll("%begin 1 1 1\n"+string(record)+"%end 1 1 1\n", "\n", "\r\n") + "\x1b\\")
 	bad := 0
+
 	for cut := 1; cut < len(raw); cut++ {
 		r := &chunkReader{chunks: [][]byte{raw[:cut], raw[cut:]}}
+
 		u, err := readControlUnit(bufio.NewReader(newControlStreamReader(r)), 4096, func(Event) {})
 		if err != nil || u.frame == nil || !bytes.Equal(u.frame.data, record) {
 			bad++
+
 			t.Errorf("transport split at byte %d corrupts record: err=%v frame=%+v", cut, err, u.frame)
 		}
 	}
+
 	if bad > 0 {
 		t.Fatalf("bad boundaries: %d / %d", bad, len(raw)-1)
 	}
@@ -422,10 +429,12 @@ func TestNoEchoFramingBoundarySplits(t *testing.T) {
 func TestNoEchoFragmentedPreamble(t *testing.T) {
 	record := wire.EncodeRecord([]string{"ordinary title"})
 	raw := []byte("\x1bP1000p" + strings.ReplaceAll("%begin 1 1 1\n"+string(record)+"%end 1 1 1\n", "\n", "\r\n") + "\x1b\\")
+
 	chunks := make([][]byte, len(raw))
 	for i := range raw {
 		chunks[i] = raw[i : i+1]
 	}
+
 	u, err := readControlUnit(bufio.NewReader(newControlStreamReader(&chunkReader{chunks: chunks})), 4096, func(Event) {})
 	if err != nil || u.frame == nil || !bytes.Equal(u.frame.data, record) {
 		t.Fatalf("fragmented preamble: %v %+v", err, u.frame)

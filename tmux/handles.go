@@ -190,9 +190,11 @@ func (h handle) expectedOrigin() *ServerIdentity {
 	if h.origin.valid() {
 		return &h.origin
 	}
+
 	if h.server != nil && h.server.bound != nil {
 		return h.server.bound
 	}
+
 	return nil
 }
 
@@ -201,6 +203,7 @@ func (h handle) guard() *guard {
 		if h.server != nil && h.server.bound != nil {
 			return newGuard(*h.server.bound)
 		}
+
 		return nil
 	}
 
@@ -353,6 +356,7 @@ func (l WindowLink) guard() *guard {
 	if !id.valid() && l.h.server != nil && l.h.server.bound != nil {
 		id = *l.h.server.bound
 	}
+
 	return &guard{identity: id, links: []linkCheck{{session: l.session, index: l.index, window: WindowID(l.h.id)}}, clients: nil}
 }
 

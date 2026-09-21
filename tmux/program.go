@@ -19,6 +19,8 @@ shift
 exec "$@"`
 
 	shellEnvironmentLauncher = `s=$1; shift; exec env "$@" "${SHELL:-/bin/sh}" -c "$s"`
+
+	shellLauncherFixedArgs = 5
 )
 
 const (
@@ -203,11 +205,13 @@ func wrapProgramEnv(program Program, env map[string]string, keys []string) ([]st
 		argv = append(argv, assignments...)
 		argv = append(argv, "--")
 		argv = append(argv, tail...)
+
 		return argv, nil
 	}
 
-	argv := make([]string, 0, 5+len(assignments))
+	argv := make([]string, 0, shellLauncherFixedArgs+len(assignments))
 	argv = append(argv, "/bin/sh", "-c", shellEnvironmentLauncher, "gotmux-env", program.name)
 	argv = append(argv, assignments...)
+
 	return argv, nil
 }

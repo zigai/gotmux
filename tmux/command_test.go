@@ -755,6 +755,7 @@ func TestNativeEscapedSemicolon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cmds := p.Commands.Commands()
 	if len(cmds) != 1 || !reflect.DeepEqual(cmds[0].Args(), []string{"-p", ";"}) {
 		t.Fatalf("literal semicolon was consumed as a separator: %+v", cmds)
@@ -766,6 +767,7 @@ func TestNativeTrailingSemicolon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cmds := p.Commands.Commands()
 	if len(cmds) != 2 {
 		t.Fatalf("native trailing separator did not split commands: %+v", cmds)
@@ -774,17 +776,28 @@ func TestNativeTrailingSemicolon(t *testing.T) {
 
 func TestNilServerMethods(t *testing.T) {
 	var s *Server
+
 	c, _ := NewCommand("display-message", "test")
 	seq, _ := Sequence(c)
+
 	cases := []struct {
 		name string
 		run  func() error
 	}{
 		{"Run", func() error { _, e := s.Run(context.Background(), c); return e }},
-		{"RunWith", func() error { _, e := s.RunWith(context.Background(), c, RunOptions{}); return e }},
+		{"RunWith", func() error {
+			_, e := s.RunWith(context.Background(), c, RunOptions{Start: AllowStart, Input: nil})
+			return e
+		}},
 		{"RunSequence", func() error { _, e := s.RunSequence(context.Background(), seq); return e }},
-		{"RunSequenceWith", func() error { _, e := s.RunSequenceWith(context.Background(), seq, RunOptions{}); return e }},
-		{"SourceText", func() error { _, e := s.SourceText(context.Background(), "", SourceOptions{}); return e }},
+		{"RunSequenceWith", func() error {
+			_, e := s.RunSequenceWith(context.Background(), seq, RunOptions{Start: AllowStart, Input: nil})
+			return e
+		}},
+		{"SourceText", func() error {
+			_, e := s.SourceText(context.Background(), "", SourceOptions{QuietMissing: false, ParseOnly: false, Verbose: false})
+			return e
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -793,6 +806,7 @@ func TestNilServerMethods(t *testing.T) {
 					t.Errorf("panicked instead of returning ErrInvalidHandle: %v", p)
 				}
 			}()
+
 			if err := tc.run(); err == nil {
 				t.Error("expected invalid-handle error")
 			}

@@ -270,6 +270,7 @@ func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, o 
 	if o.Append && len(data) == 0 {
 		return nil
 	}
+
 	var args []string
 
 	if o.Append {
@@ -325,6 +326,7 @@ func pasteSeparator(o PasteOptions) (string, bool, error) {
 	if stripNewlines {
 		return "", true, nil
 	}
+
 	if o.Separator != "" {
 		if !wire.ValidString(o.Separator) {
 			return "", false, invalid("separator")

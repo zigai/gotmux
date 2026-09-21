@@ -409,39 +409,85 @@ func TestControlStartFailureClosesPipes(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("counts descriptors with /proc/self/fd")
 	}
+
 	dir := t.TempDir()
+
 	binary := filepath.Join(dir, "tmux")
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0700); err != nil {
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(Config{Binary: binary, SocketPath: filepath.Join(dir, "socket")})
+
+	if err := os.Chmod(binary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err := New(testConfig(binary, filepath.Join(dir, "socket")))
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := os.Remove(binary); err != nil {
 		t.Fatal(err)
 	}
+
 	old := debug.SetGCPercent(-1)
 	defer debug.SetGCPercent(old)
+
 	count := func() int {
 		files, err := os.ReadDir("/proc/self/fd")
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		return len(files)
 	}
 	before := count()
+
 	for range 12 {
 		ctx, cancel := context.WithCancelCause(context.Background())
-		c := &Connection{}
+		c := testConnection(s, cancel)
 		err := s.setupControlProcess(c, ctx, nil, cancel)
 		cancel(nil)
+
 		if err == nil {
 			t.Fatal("expected missing-executable start failure")
 		}
 	}
+
 	after := count()
 	if after != before {
 		t.Fatalf("12 failed starts retained %d descriptors before GC (before=%d after=%d)", after-before, before, after)
 	}
+}
+
+func testConnection(s *Server, cancel context.CancelCauseFunc) *Connection {
+	opts, _ := normalizeControlOptions(ControlOptions{
+		PaneOutput:       false,
+		NoEcho:           false,
+		ClientFlags:      nil,
+		UTF8:             UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		QueueDepth:       0,
+		QueuedBytes:      0,
+		FrameBytes:       0,
+		EventBytes:       0,
+		MaxStreams:       0,
+	})
+
+	dummySession := Session{h: handle{
+		server: nil,
+		origin: ServerIdentity{
+			Endpoint:       Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0},
+			ReportedSocket: "",
+			PID:            0,
+			Started:        time.Time{},
+			Generation:     0,
+		},
+		id:     "",
+		kind:   SessionKind,
+		client: clientCheck{name: "", pid: 0, created: 0},
+	}}
+
+	return newConnection(s, dummySession, opts, cancel)
 }

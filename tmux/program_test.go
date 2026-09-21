@@ -150,8 +150,11 @@ func TestEnvironmentOverrides(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command(argv[0], argv[1:]...)
+
+			cmd := exec.CommandContext(t.Context(), argv[0], argv[1:]...)
+
 			cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+
 			out, err := cmd.CombinedOutput()
 			if err != nil || string(out) != tc.want {
 				t.Fatalf("environment changed launcher behavior: output=%q error=%v", out, err)
