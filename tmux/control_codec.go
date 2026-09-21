@@ -80,6 +80,9 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 			if len(out) >= 2 && out[len(out)-2] == '\r' {
 				out = append(out[:len(out)-2], '\n')
 			}
+			if bytes.Equal(bytes.TrimSpace(out), []byte("\x1b\\")) {
+				return nil, io.EOF
+			}
 
 			return out, nil
 		}
@@ -102,6 +105,9 @@ func readControlUnit(r *bufio.Reader, maxBytes int64, publish func(Event)) (cont
 	if b, err := r.Peek(1); err == nil && b[0] == dscEscapeByte {
 		if dsc, err := r.Peek(dscPreambleLength); err == nil && bytes.Equal(dsc, []byte("\x1bP1000p")) {
 			_, _ = r.Discard(dscPreambleLength)
+		} else if trailer, err := r.Peek(2); err == nil && bytes.Equal(trailer, []byte("\x1b\\")) {
+			_, _ = r.Discard(2)
+			return controlUnit{frame: nil, event: nil}, io.EOF
 		}
 	}
 
@@ -371,10 +377,6 @@ func (c *controlStreamReader) transform(src []byte, p []byte) int {
 		}
 
 		c.emit(p, &dst, b)
-	}
-
-	if dst >= 2 && bytes.Equal(p[dst-2:dst], []byte("\x1b\\")) {
-		dst -= 2
 	}
 
 	return dst

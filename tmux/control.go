@@ -837,6 +837,7 @@ func (s *Server) setupControlProcess(c *Connection, cctx context.Context, args [
 	c.diagnostics = newBuffer(s.config.Limits.OutputBytes, func() { c.stop(ErrOutputLimit, false) })
 
 	if err = c.cmd.Start(); err != nil {
+		_ = inChild.Close()
 		_ = inWrite.Close()
 		_ = outRead.Close()
 		_ = outChild.Close()

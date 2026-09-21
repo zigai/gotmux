@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"runtime"
+	"runtime/debug"
 	"sync"
 	"testing"
 	"time"
@@ -400,4 +403,45 @@ func TestControlWireFault_OutputLimitExceeded(t *testing.T) {
 	}
 
 	f.assertCleanup(t)
+}
+
+func TestControlStartFailureClosesPipes(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("counts descriptors with /proc/self/fd")
+	}
+	dir := t.TempDir()
+	binary := filepath.Join(dir, "tmux")
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{Binary: binary, SocketPath: filepath.Join(dir, "socket")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(binary); err != nil {
+		t.Fatal(err)
+	}
+	old := debug.SetGCPercent(-1)
+	defer debug.SetGCPercent(old)
+	count := func() int {
+		files, err := os.ReadDir("/proc/self/fd")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(files)
+	}
+	before := count()
+	for range 12 {
+		ctx, cancel := context.WithCancelCause(context.Background())
+		c := &Connection{}
+		err := s.setupControlProcess(c, ctx, nil, cancel)
+		cancel(nil)
+		if err == nil {
+			t.Fatal("expected missing-executable start failure")
+		}
+	}
+	after := count()
+	if after != before {
+		t.Fatalf("12 failed starts retained %d descriptors before GC (before=%d after=%d)", after-before, before, after)
+	}
 }
