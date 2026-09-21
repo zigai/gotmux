@@ -314,7 +314,7 @@ func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLi
 		return WindowLink{}, afterError("NewWindow", err, recoverCreated(r.Stdout, WindowKind)...)
 	}
 
-	_, link, err := s.h.server.decodeWindow(rows[0], &s.h.origin)
+	_, link, err := s.h.server.decodeWindow(rows[0], s.h.expectedOrigin())
 	if err != nil {
 		return WindowLink{}, afterError("NewWindow", err, recoverCreated(r.Stdout, WindowKind)...)
 	}
@@ -361,7 +361,7 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 		return Pane{}, afterError("Split", err, recoverCreated(r.Stdout, PaneKind)...)
 	}
 
-	v, err := p.h.server.decodePane(rows[0], &p.h.origin)
+	v, err := p.h.server.decodePane(rows[0], p.h.expectedOrigin())
 	if err != nil {
 		return Pane{}, afterError("Split", err, recoverCreated(r.Stdout, PaneKind)...)
 	}
@@ -403,7 +403,7 @@ func createNewPane(h handle, opName string, targetID string, opts NewPaneOptions
 		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
 	}
 
-	v, err := h.server.decodePane(rows[0], &h.origin)
+	v, err := h.server.decodePane(rows[0], h.expectedOrigin())
 	if err != nil {
 		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
 	}

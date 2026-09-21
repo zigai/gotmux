@@ -126,7 +126,7 @@ func (s *Server) decoder(m map[string]string, kind string, expected *ServerIdent
 	d := &recordDecoder{kind: kind, raw: m, err: nil}
 
 	id := s.decodeIdentity(d)
-	if expected != nil && !id.sameDaemon(*expected) {
+	if expected != nil && expected.valid() && !id.sameDaemon(*expected) {
 		d.fail("identity", ErrServerChanged)
 	}
 

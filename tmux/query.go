@@ -669,7 +669,7 @@ func (s Session) InfoWith(ctx context.Context, opts QueryOptions) (SessionInfo, 
 		return SessionInfo{}, opError("Session.Info", err)
 	}
 
-	v, err := s.h.server.decodeSession(m, &s.h.origin)
+	v, err := s.h.server.decodeSession(m, s.h.expectedOrigin())
 	if err != nil {
 		return SessionInfo{}, afterError("Session.Info", err)
 	}
@@ -693,7 +693,7 @@ func (w Window) InfoWith(ctx context.Context, opts QueryOptions) (WindowInfo, er
 		return WindowInfo{}, opError("Window.Info", err)
 	}
 
-	v, _, err := w.h.server.decodeWindow(m, &w.h.origin)
+	v, _, err := w.h.server.decodeWindow(m, w.h.expectedOrigin())
 	if err != nil {
 		return WindowInfo{}, afterError("Window.Info", err)
 	}
@@ -717,7 +717,7 @@ func (p Pane) InfoWith(ctx context.Context, opts QueryOptions) (PaneInfo, error)
 		return PaneInfo{}, opError("Pane.Info", err)
 	}
 
-	v, err := p.h.server.decodePane(m, &p.h.origin)
+	v, err := p.h.server.decodePane(m, p.h.expectedOrigin())
 	if err != nil {
 		return PaneInfo{}, afterError("Pane.Info", err)
 	}
@@ -741,7 +741,7 @@ func (c Client) InfoWith(ctx context.Context, opts QueryOptions) (ClientInfo, er
 		return ClientInfo{}, opError("Client.Info", err)
 	}
 
-	v, err := c.h.server.decodeClient(m, &c.h.origin)
+	v, err := c.h.server.decodeClient(m, c.h.expectedOrigin())
 	if err != nil {
 		return ClientInfo{}, afterError("Client.Info", err)
 	}
