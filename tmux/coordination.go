@@ -9,7 +9,7 @@ import (
 )
 
 type (
-	// RunShellOptions configures execution of a shell script on the tmux server.
+	// RunShellOptions configures execution of a shell script or tmux commands via run-shell.
 	RunShellOptions struct {
 		// Background executes the script in the background without blocking (-b flag).
 		// When true, RunShell succeeds as soon as tmux schedules the command.
@@ -19,11 +19,19 @@ type (
 		// Supports fractional seconds (e.g. 0.5). Must be non-negative.
 		Delay float64
 
-		// Cancel cancels an existing background shell command (-C flag).
+		// Deprecated: Cancel does not cancel a background job in tmux; native -C parses and
+		// executes tmux commands instead. Setting this returns an error. Use TmuxCommands instead.
 		Cancel bool
 
-		// ClearEnvironment prevents default TMUX environment variables from being set (-E flag).
+		// Deprecated: ClearEnvironment does not clear the environment in tmux; native -E enables
+		// standard error output. Setting this returns an error. Use IncludeStderr instead.
 		ClearEnvironment bool
+
+		// TmuxCommands parses and executes script as tmux commands rather than a shell command (-C flag).
+		TmuxCommands bool
+
+		// IncludeStderr enables standard error output capture from the command (-E flag).
+		IncludeStderr bool
 
 		// Dir specifies the working directory for the shell command (-c flag).
 		Dir string
@@ -104,6 +112,14 @@ func (s *Server) Unlock(ctx context.Context, channel string) error {
 }
 
 func validateRunShell(script string, o RunShellOptions) error {
+	if o.Cancel {
+		return unsupported("RunShellOptions.Cancel is unsupported; cancellation requires explicit job tracking")
+	}
+
+	if o.ClearEnvironment {
+		return unsupported("RunShellOptions.ClearEnvironment is unsupported; native -E enables stderr output, not environment clearing")
+	}
+
 	if !wire.ValidString(script) || o.Delay < 0 || math.IsNaN(o.Delay) || math.IsInf(o.Delay, 0) || !wire.ValidString(o.Dir) || !wire.ValidString(o.Target) {
 		return invalid("run-shell options")
 	}
@@ -123,11 +139,11 @@ func runShellArgs(script string, o RunShellOptions) ([]string, error) {
 		args = append(args, "-b")
 	}
 
-	if o.Cancel {
+	if o.TmuxCommands {
 		args = append(args, "-C")
 	}
 
-	if o.ClearEnvironment {
+	if o.IncludeStderr {
 		args = append(args, "-E")
 	}
 
@@ -274,6 +290,10 @@ func (s *Server) SourceFile(ctx context.Context, path string, o SourceOptions) (
 // Fails with [ErrTransportUnsupported] over control mode because control mode cannot frame standard input.
 // Callers must use [Connection.AuxiliaryServer] explicitly for streaming configuration text.
 func (s *Server) SourceText(ctx context.Context, text string, o SourceOptions) (Result, error) {
+	if s == nil || s.runner == nil {
+		return failedResult(), opError("SourceText", ErrInvalidHandle)
+	}
+
 	if s.conn != nil {
 		return failedResult(), opError("SourceText", unsupportedControl("streaming configuration text over control transport", ErrTransportUnsupported))
 	}

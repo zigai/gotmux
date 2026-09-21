@@ -531,21 +531,34 @@ func splitArgvCommands(args []string) [][]string {
 	}
 
 	var cmds [][]string
+	var current []string
 
-	start := 0
-
-	for i, a := range args {
-		if a == ";" || a == `\;` {
-			if i > start {
-				cmds = append(cmds, args[start:i])
+	for _, a := range args {
+		end := false
+		arg := a
+		if len(arg) > 0 && arg[len(arg)-1] == ';' {
+			arg = arg[:len(arg)-1]
+			if len(arg) > 0 && arg[len(arg)-1] == '\\' {
+				arg = arg[:len(arg)-1] + ";"
+			} else {
+				end = true
 			}
+		}
 
-			start = i + 1
+		if !end || len(arg) > 0 {
+			current = append(current, arg)
+		}
+
+		if end {
+			if len(current) > 0 {
+				cmds = append(cmds, current)
+				current = nil
+			}
 		}
 	}
 
-	if start < len(args) {
-		cmds = append(cmds, args[start:])
+	if len(current) > 0 {
+		cmds = append(cmds, current)
 	}
 
 	return cmds
@@ -727,10 +740,13 @@ func (p plan) argv() ([]string, error) {
 // Raw commands require subprocess execution. On a control-bound server, use
 // [Connection.AuxiliaryServer]; Run otherwise returns [ErrTransportUnsupported] before dispatch.
 func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
+	if s == nil || s.runner == nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
+	}
+
 	if s.conn != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
 	}
-
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
@@ -750,10 +766,13 @@ func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 // if command N fails, changes made by commands 0 through N-1 remain in effect.
 // Stdout and Stderr contain the combined output of all executed commands.
 func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Result, error) {
+	if s == nil || s.runner == nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
+	}
+
 	if s.conn != nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
 	}
-
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
@@ -799,10 +818,13 @@ func (s *Server) rawAllowStart(start StartPolicy) (bool, error) {
 // Start policy is controlled explicitly by o.Start rather than inferred from command names.
 // Fails with [ErrTransportUnsupported] over control mode.
 func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, error) {
+	if s == nil || s.runner == nil {
+		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
+	}
+
 	if s.conn != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
 	}
-
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
@@ -828,10 +850,13 @@ func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, 
 // Start policy is controlled explicitly by o.Start rather than inferred from command names.
 // Fails with [ErrTransportUnsupported] over control mode.
 func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, o RunOptions) (Result, error) {
+	if s == nil || s.runner == nil {
+		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
+	}
+
 	if s.conn != nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
 	}
-
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
