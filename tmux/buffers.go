@@ -65,7 +65,11 @@ type (
 		// RawNewlines is retained for backward compatibility with [Pane.PasteBuffer] (-r flag).
 		RawNewlines bool
 
-		// NoTrailingNewline suppresses the trailing newline by setting the separator to empty string (-s "").
+		// StripNewlines replaces every newline with an empty string when pasting (-s "").
+		StripNewlines bool
+
+		// Deprecated: NoTrailingNewline sets paste-buffer -s "", which in native tmux replaces
+		// every newline (not just the trailing one) with an empty string. Use StripNewlines instead.
 		NoTrailingNewline bool
 
 		// Separator specifies an optional delimiter between lines (-s flag).
@@ -259,6 +263,13 @@ func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, o 
 		return opError("SetBufferWith", invalid("buffer data"))
 	}
 
+	if !o.Append && len(data) == 0 {
+		return opError("SetBufferWith", unsupported("zero-length buffer replacement is not representable in stock tmux"))
+	}
+
+	if o.Append && len(data) == 0 {
+		return nil
+	}
 	var args []string
 
 	if o.Append {
@@ -301,19 +312,19 @@ func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, a
 
 func pasteSeparator(o PasteOptions) (string, bool, error) {
 	replaceEscapes := o.ReplaceEscapes || o.RawNewlines
+	stripNewlines := o.StripNewlines || o.NoTrailingNewline
 
-	if replaceEscapes && (o.NoTrailingNewline || o.Separator != "") {
+	if replaceEscapes && (stripNewlines || o.Separator != "") {
 		return "", false, invalid("separator and raw newlines conflict")
 	}
 
-	if o.NoTrailingNewline && o.Separator != "" {
-		return "", false, invalid("separator and no trailing newline conflict")
+	if stripNewlines && o.Separator != "" {
+		return "", false, invalid("separator and strip newlines conflict")
 	}
 
-	if o.NoTrailingNewline {
+	if stripNewlines {
 		return "", true, nil
 	}
-
 	if o.Separator != "" {
 		if !wire.ValidString(o.Separator) {
 			return "", false, invalid("separator")

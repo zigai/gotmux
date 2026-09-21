@@ -485,18 +485,16 @@ func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureRe
 
 	_, after, ok := bytes.Cut(raw, startMarker)
 	if !ok {
-		return CaptureResult{Output: raw, Title: ""}, nil
+		return CaptureResult{}, afterError("CaptureWithTitle", ErrProtocol)
 	}
 
-	afterStart := after
-
-	before0, after0, ok0 := bytes.Cut(afterStart, endMarker)
-	if !ok0 {
-		return CaptureResult{Output: raw, Title: ""}, nil
+	lastIdx := bytes.LastIndex(after, endMarker)
+	if lastIdx < 0 {
+		return CaptureResult{}, afterError("CaptureWithTitle", ErrProtocol)
 	}
 
-	title := string(before0)
-	output := after0
+	title := string(after[:lastIdx])
+	output := after[lastIdx+len(endMarker):]
 
 	if o.MaxBytes > 0 && int64(len(output)) > o.MaxBytes {
 		output = output[:o.MaxBytes]

@@ -182,7 +182,7 @@ func (s *Server) checkInputLimit(op *operation, p plan, input []byte) (int64, er
 }
 
 func (s *Server) resolveGuard(p plan, g *guard) (*guard, plan) {
-	if s.bound != nil && g == nil && planName(p) != "show-buffer" {
+	if s.bound != nil && g == nil {
 		g = newGuard(*s.bound)
 	}
 
