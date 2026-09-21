@@ -13,6 +13,7 @@ import (
 
 const (
 	dscPreambleLength = 7
+	dscTrailerLength  = 2
 	dscEscapeByte     = 0x1b
 )
 
@@ -62,6 +63,18 @@ func frameHeader(line []byte, kind string) (frameID, error) {
 	return id, nil
 }
 
+func isDSCTrailer(b []byte) bool {
+	return bytes.Equal(bytes.TrimSpace(b), []byte("\x1b\\"))
+}
+
+func sanitizeLineEnding(b []byte) []byte {
+	if len(b) >= 2 && b[len(b)-2] == '\r' {
+		return append(b[:len(b)-2], '\n')
+	}
+
+	return b
+}
+
 func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 	if limit <= 0 {
 		return nil, ErrOutputLimit
@@ -77,10 +90,8 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 
 		out = append(out, part...)
 		if err == nil {
-			if len(out) >= 2 && out[len(out)-2] == '\r' {
-				out = append(out[:len(out)-2], '\n')
-			}
-			if bytes.Equal(bytes.TrimSpace(out), []byte("\x1b\\")) {
+			out = sanitizeLineEnding(out)
+			if isDSCTrailer(out) {
 				return nil, io.EOF
 			}
 
@@ -88,10 +99,8 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 		}
 
 		if !errors.Is(err, bufio.ErrBufferFull) {
-			if errors.Is(err, io.EOF) && len(out) > 0 {
-				if bytes.Equal(bytes.TrimSpace(out), []byte("\x1b\\")) {
-					return nil, io.EOF
-				}
+			if errors.Is(err, io.EOF) && isDSCTrailer(out) {
+				return nil, io.EOF
 			}
 
 			return nil, err //nolint:wrapcheck // bufio.Reader error is propagated directly
@@ -105,8 +114,8 @@ func readControlUnit(r *bufio.Reader, maxBytes int64, publish func(Event)) (cont
 	if b, err := r.Peek(1); err == nil && b[0] == dscEscapeByte {
 		if dsc, err := r.Peek(dscPreambleLength); err == nil && bytes.Equal(dsc, []byte("\x1bP1000p")) {
 			_, _ = r.Discard(dscPreambleLength)
-		} else if trailer, err := r.Peek(2); err == nil && bytes.Equal(trailer, []byte("\x1b\\")) {
-			_, _ = r.Discard(2)
+		} else if trailer, err := r.Peek(dscTrailerLength); err == nil && bytes.Equal(trailer, []byte("\x1b\\")) {
+			_, _ = r.Discard(dscTrailerLength)
 			return controlUnit{frame: nil, event: nil}, io.EOF
 		}
 	}
