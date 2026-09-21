@@ -2,7 +2,6 @@ package tmux
 
 import (
 	"sort"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -12,22 +11,14 @@ import (
 const (
 	execLauncher = `exec "$@"`
 
-	environmentLauncher = `n=$1; shift
-while [ "$n" -gt 0 ]; do
+	environmentLauncher = `while [ "$1" != "--" ]; do
  export "$1" || exit
  shift
- n=$((n - 1))
 done
+shift
 exec "$@"`
 
-	shellEnvironmentLauncher = `tmux_go_shell=$SHELL
-n=$1; shift
-while [ "$n" -gt 0 ]; do
- export "$1" || exit
- shift
- n=$((n - 1))
-done
-exec "$tmux_go_shell" -c "$1"`
+	shellEnvironmentLauncher = `s=$1; shift; exec env "$@" "${SHELL:-/bin/sh}" -c "$s"`
 )
 
 const (
@@ -201,25 +192,22 @@ func wrapProgramEnv(program Program, env map[string]string, keys []string) ([]st
 		assignments = append(assignments, k+"="+env[k])
 	}
 
-	script := environmentLauncher
-
-	var tail []string
-
 	if program.kind == 1 {
 		if strings.HasPrefix(program.name, "-") && !strings.Contains(program.name, "/") {
 			return nil, unsupported("environment launcher requires an explicit path for a leading-dash executable")
 		}
 
-		tail = append([]string{program.name}, program.args...)
-	} else {
-		script = shellEnvironmentLauncher
-		tail = []string{program.name}
+		tail := append([]string{program.name}, program.args...)
+		argv := make([]string, 0, 4+len(assignments)+len(tail))
+		argv = append(argv, "/bin/sh", "-c", environmentLauncher, "gotmux-env")
+		argv = append(argv, assignments...)
+		argv = append(argv, "--")
+		argv = append(argv, tail...)
+		return argv, nil
 	}
 
-	argv := make([]string, 0, 5+len(assignments)+len(tail))
-	argv = append(argv, "/bin/sh", "-c", script, "gotmux-env", strconv.Itoa(len(assignments)))
+	argv := make([]string, 0, 5+len(assignments))
+	argv = append(argv, "/bin/sh", "-c", shellEnvironmentLauncher, "gotmux-env", program.name)
 	argv = append(argv, assignments...)
-	argv = append(argv, tail...)
-
 	return argv, nil
 }

@@ -132,3 +132,30 @@ func TestProgramValidation(t *testing.T) {
 		t.Fatal("env name")
 	}
 }
+
+func TestEnvironmentOverrides(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+		p    Program
+		want string
+	}{
+		{"ordinary", map[string]string{"X": "value"}, Exec("/usr/bin/printf", "ok"), "ok"},
+		{"loop_variable", map[string]string{"n": "0", "z": "value"}, Exec("/usr/bin/printf", "ok"), "ok"},
+		{"saved_shell_variable", map[string]string{"tmux_go_shell": "/definitely/not/a/shell"}, Shell("printf ok"), "ok"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, argv, err := programArgs("", tc.env, tc.p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(argv[0], argv[1:]...)
+			cmd.Env = append(os.Environ(), "SHELL=/bin/sh")
+			out, err := cmd.CombinedOutput()
+			if err != nil || string(out) != tc.want {
+				t.Fatalf("environment changed launcher behavior: output=%q error=%v", out, err)
+			}
+		})
+	}
+}
