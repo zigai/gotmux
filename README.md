@@ -24,7 +24,7 @@ gotmux is a Go library for controlling, inspecting, and automating [tmux](https:
 go get github.com/zigai/gotmux
 ```
 
-Requires Go 1.26+ and tmux 3.2+.
+Requires Go 1.26+ and tmux 3.6+.
 
 ## Examples
 
