@@ -109,7 +109,7 @@ func (scope EnvironmentScope) List(ctx context.Context) ([]EnvironmentEntry, err
 }
 
 // ListWith returns environment variables registered in this scope matching the given listing options.
-func (scope EnvironmentScope) ListWith(ctx context.Context, o ListEnvironmentOptions) ([]EnvironmentEntry, error) {
+func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironmentOptions) ([]EnvironmentEntry, error) {
 	opCtx, op, g, err := scope.target.prepare(ctx)
 	if err != nil {
 		return nil, opError("Environment.List", err)
@@ -117,7 +117,7 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, o ListEnvironmentOpt
 	defer op.close()
 
 	args := scope.base()
-	if o.Hidden {
+	if opts.Hidden {
 		args = append(args, "-h")
 	}
 
@@ -141,7 +141,7 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, o ListEnvironmentOpt
 				Value: EnvironmentValue{
 					Value:  UnavailableValue[string](),
 					Unset:  true,
-					Hidden: o.Hidden,
+					Hidden: opts.Hidden,
 				},
 			})
 
@@ -158,7 +158,7 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, o ListEnvironmentOpt
 			Value: EnvironmentValue{
 				Value:  PresentValue(val),
 				Unset:  false,
-				Hidden: o.Hidden,
+				Hidden: opts.Hidden,
 			},
 		})
 	}

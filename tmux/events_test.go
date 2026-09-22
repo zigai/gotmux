@@ -14,7 +14,7 @@ func eventConnection(t *testing.T) *Connection {
 	t.Helper()
 
 	_, cancel := context.WithCancelCause(context.Background())
-	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, ClientFlags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
+	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, Flags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
 	//nolint:exhaustruct_v5 // test fixture intentionally initializes mock connection fields
 	c := &Connection{cancel: cancel, stopCh: make(chan struct{}), opts: opts, streams: map[*EventStream]struct{}{}, done: make(chan struct{})}
 
@@ -27,9 +27,9 @@ func oneEvent() Event {
 	return PaneOutputEvent{eventBase: eventBase{name: "output", received: time.Now()}, PaneID: "%1", Age: UnavailableValue[time.Duration](), data: []byte("abc")}
 }
 
-func testEventOptions(bytes int64, count int) EventOptions {
+func testEventOptions(byteCount int64, count int) EventOptions {
 	return EventOptions{
-		MaxBytes: bytes,
+		MaxBytes: byteCount,
 		MaxCount: count,
 		Overflow: FailOnOverflow,
 	}

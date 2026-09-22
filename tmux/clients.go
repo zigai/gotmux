@@ -40,6 +40,7 @@ const (
 	ClientActivePane                    = ClientFlagActivePane
 	ClientNoDetachOnDestroy             = ClientFlagNoDetachOnDestroy
 	ClientWaitExit                      = ClientFlagWaitExit
+	ClientNewLayouts                    = ClientFlagNewLayouts
 	PopupBorderSingle       PopupBorder = "single"
 	PopupBorderDouble       PopupBorder = "double"
 	PopupBorderHeavy        PopupBorder = "heavy"
@@ -270,12 +271,15 @@ type (
 		SelectedStyle string
 	}
 
-	// DisplayMessageOptions configures displaying a status line message on a client.
-	DisplayMessageOptions struct {
+	// MessageOptions configures displaying a status line message on a client.
+	MessageOptions struct {
 		// Duration specifies how long the message is displayed in milliseconds (-d flag).
 		// Must be greater than or equal to 0. A zero value uses tmux's default display time.
 		Duration int
 	}
+
+	// DisplayMessageOptions is retained as an alias for [MessageOptions].
+	DisplayMessageOptions = MessageOptions
 
 	// MessagesOptions configures querying server or client log messages (show-messages).
 	MessagesOptions struct {
@@ -381,7 +385,7 @@ func (f ClientFlag) Valid() bool {
 }
 
 // Switch switches this client terminal to display session s.
-func (c Client) Switch(ctx context.Context, s Session, o SwitchOptions) error {
+func (c Client) Switch(ctx context.Context, s Session, opts SwitchOptions) error {
 	opCtx, op, err := beginHandles(ctx, &c.h, &s.h)
 	if err != nil {
 		return opError("SwitchClient", err)
@@ -389,11 +393,11 @@ func (c Client) Switch(ctx context.Context, s Session, o SwitchOptions) error {
 	defer op.close()
 
 	args := []string{"-c", c.h.id, "-t", s.h.id}
-	if o.ToggleReadOnly {
+	if opts.ToggleReadOnly {
 		args = append(args, "-r")
 	}
 
-	if o.PreserveEnvironment {
+	if opts.PreserveEnvironment {
 		args = append(args, "-E")
 	}
 
@@ -533,59 +537,59 @@ func (c Client) refreshSizeArgs(size Size) ([]string, error) {
 	return nil, nil
 }
 
-func (c Client) Refresh(ctx context.Context, o RefreshOptions) error {
-	if !o.Size.valid() {
+func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
+	if !opts.Size.valid() {
 		return opError("RefreshClient", invalid("size"))
 	}
 
 	args := []string{"-t", c.h.id}
-	if o.StatusOnly {
+	if opts.StatusOnly {
 		args = append(args, "-S")
 	}
 
-	if o.ResetCursorTracking {
+	if opts.ResetCursorTracking {
 		args = append(args, "-c")
 	}
 
-	scrollArgs, err := c.refreshScrollArgs(o.Scroll)
+	scrollArgs, err := c.refreshScrollArgs(opts.Scroll)
 	if err != nil {
 		return opError("RefreshClient", err)
 	}
 
 	args = append(args, scrollArgs...)
 
-	clipArgs, err := c.refreshClipboardArgs(o.Clipboard, o.ClipboardPane)
+	clipArgs, err := c.refreshClipboardArgs(opts.Clipboard, opts.ClipboardPane)
 	if err != nil {
 		return opError("RefreshClient", err)
 	}
 
 	args = append(args, clipArgs...)
 
-	szArgs, err := c.refreshSizeArgs(o.Size)
+	szArgs, err := c.refreshSizeArgs(opts.Size)
 	if err != nil {
 		return opError("RefreshClient", err)
 	}
 
 	args = append(args, szArgs...)
 
-	winArgs, err := c.refreshWindowSizeArgs(o.WindowSizes)
+	winArgs, err := c.refreshWindowSizeArgs(opts.WindowSizes)
 	if err != nil {
 		return opError("RefreshClient", err)
 	}
 
 	args = append(args, winArgs...)
 
-	for _, f := range o.Flags {
+	for _, f := range opts.Flags {
 		if !f.Valid() {
 			return opError("RefreshClient", invalid("client flag"))
 		}
 	}
 
-	if len(o.Flags) > 0 {
-		args = append(args, "-f", formatClientFlags(o.Flags))
+	if len(opts.Flags) > 0 {
+		args = append(args, "-f", formatClientFlags(opts.Flags))
 	}
 
-	actArgs, err := c.refreshActionsAndReportsArgs(o.PaneActions, o.PaneReports)
+	actArgs, err := c.refreshActionsAndReportsArgs(opts.PaneActions, opts.PaneReports)
 	if err != nil {
 		return opError("RefreshClient", err)
 	}
@@ -645,24 +649,24 @@ func (c Client) Message(ctx context.Context, text string) error {
 	return c.h.act(ctx, "display-message", "-c", c.h.id, "--", wire.LiteralFormat(text))
 }
 
-// DisplayMessageWith requests a status message on this client with custom display options.
+// MessageWith requests a status message on this client with custom display options.
 // Completion means tmux accepted the display request, not that the user read or dismissed it.
-func (c Client) DisplayMessageWith(ctx context.Context, text string, o DisplayMessageOptions) error {
+func (c Client) MessageWith(ctx context.Context, text string, opts MessageOptions) error {
 	if !wire.ValidString(text) {
-		return opError("DisplayMessageWith", invalid("message"))
+		return opError("MessageWith", invalid("message"))
 	}
 
-	if o.Duration < 0 {
-		return opError("DisplayMessageWith", invalid("duration"))
+	if opts.Duration < 0 {
+		return opError("MessageWith", invalid("duration"))
 	}
 
 	if c.h.server != nil && c.h.server.conn != nil {
-		return opError("DisplayMessageWith", ErrTransportUnsupported)
+		return opError("MessageWith", ErrTransportUnsupported)
 	}
 
-	args := []string{"-t", c.h.id}
-	if o.Duration > 0 {
-		args = append(args, "-d", strconv.Itoa(o.Duration))
+	args := []string{"-c", c.h.id}
+	if opts.Duration > 0 {
+		args = append(args, "-d", strconv.Itoa(opts.Duration))
 	}
 
 	args = append(args, "--", wire.LiteralFormat(text))
@@ -715,7 +719,7 @@ func (s *Server) Message(ctx context.Context, text string) error {
 }
 
 // Messages returns log messages, background jobs, or terminal capabilities from the server (show-messages).
-func (s *Server) Messages(ctx context.Context, o MessagesOptions) ([]string, error) {
+func (s *Server) Messages(ctx context.Context, opts MessagesOptions) ([]string, error) {
 	if s == nil {
 		return nil, opError("Messages", ErrInvalidHandle)
 	}
@@ -732,11 +736,11 @@ func (s *Server) Messages(ctx context.Context, o MessagesOptions) ([]string, err
 	}
 
 	var args []string
-	if o.Jobs {
+	if opts.Jobs {
 		args = append(args, "-J")
 	}
 
-	if o.Terminal {
+	if opts.Terminal {
 		args = append(args, "-T")
 	}
 
@@ -754,7 +758,7 @@ func (s *Server) Messages(ctx context.Context, o MessagesOptions) ([]string, err
 }
 
 // Messages returns log messages or terminal capabilities for this specific client (show-messages -t).
-func (c Client) Messages(ctx context.Context, o MessagesOptions) ([]string, error) {
+func (c Client) Messages(ctx context.Context, opts MessagesOptions) ([]string, error) {
 	if err := c.h.check(); err != nil {
 		return nil, opError("Messages", err)
 	}
@@ -766,11 +770,11 @@ func (c Client) Messages(ctx context.Context, o MessagesOptions) ([]string, erro
 	defer op.close()
 
 	args := []string{"-t", c.h.id}
-	if o.Jobs {
+	if opts.Jobs {
 		args = append(args, "-J")
 	}
 
-	if o.Terminal {
+	if opts.Terminal {
 		args = append(args, "-T")
 	}
 
@@ -790,7 +794,7 @@ func (c Client) Messages(ctx context.Context, o MessagesOptions) ([]string, erro
 // Popup waits for tmux's popup command queue to resume (normally dismissal).
 // Cancellation ends the local waiter, not necessarily the server-side popup.
 // No exit status or user choice is inferred.
-func (c Client) Popup(ctx context.Context, o PopupOptions) error {
+func (c Client) Popup(ctx context.Context, opts PopupOptions) error {
 	if ctx == nil {
 		return opError("Popup", invalid("nil context"))
 	}
@@ -803,7 +807,7 @@ func (c Client) Popup(ctx context.Context, o PopupOptions) error {
 		return opError("Popup", ErrTransportUnsupported)
 	}
 
-	args, err := popupArgs(c.h.id, o)
+	args, err := popupArgs(c.h.id, opts)
 	if err != nil {
 		return opError("Popup", err)
 	}
@@ -823,7 +827,7 @@ func (c Client) ClosePopup(ctx context.Context) error {
 // Popup displays an interactive modal popup overlay targeting this pane (-t flag).
 // Cancellation ends the local waiter, not necessarily the server-side popup.
 // No exit status or user choice is inferred.
-func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
+func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
 	if ctx == nil {
 		return opError("Popup", invalid("nil context"))
 	}
@@ -836,7 +840,7 @@ func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
 		return opError("Popup", ErrTransportUnsupported)
 	}
 
-	args, err := popupArgsWithTarget("-t", p.h.id, o)
+	args, err := popupArgsWithTarget("-t", p.h.id, opts)
 	if err != nil {
 		return opError("Popup", err)
 	}
@@ -848,7 +852,7 @@ func (p Pane) Popup(ctx context.Context, o PopupOptions) error {
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
 // Fails with [ErrTransportUnsupported] over control mode.
-func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
+func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) error {
 	if ctx == nil {
 		return opError("Menu", invalid("nil context"))
 	}
@@ -861,7 +865,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error
 		return opError("Menu", ErrTransportUnsupported)
 	}
 
-	args, err := menuArgs(c.h.id, o)
+	args, err := menuArgs(c.h.id, opts)
 	if err != nil {
 		return opError("Menu", err)
 	}
@@ -892,7 +896,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
 // Fails with [ErrTransportUnsupported] over control mode.
-func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
+func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) error {
 	if ctx == nil {
 		return opError("Menu", invalid("nil context"))
 	}
@@ -905,7 +909,7 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
 		return opError("Menu", ErrTransportUnsupported)
 	}
 
-	args, err := menuArgsWithTarget("-t", p.h.id, o)
+	args, err := menuArgsWithTarget("-t", p.h.id, opts)
 	if err != nil {
 		return opError("Menu", err)
 	}
@@ -935,7 +939,7 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, o MenuOptions) error {
 // Prompt displays an interactive command prompt in this client's status line.
 //
 // Fails with [ErrTransportUnsupported] over control mode.
-func (c Client) Prompt(ctx context.Context, template PromptTemplate, o PromptOptions) error {
+func (c Client) Prompt(ctx context.Context, template PromptTemplate, opts PromptOptions) error {
 	if ctx == nil {
 		return opError("Prompt", invalid("nil context"))
 	}
@@ -948,7 +952,7 @@ func (c Client) Prompt(ctx context.Context, template PromptTemplate, o PromptOpt
 		return opError("Prompt", ErrTransportUnsupported)
 	}
 
-	args, err := promptArgs(c.h.id, template, o)
+	args, err := promptArgs(c.h.id, template, opts)
 	if err != nil {
 		return opError("Prompt", err)
 	}
@@ -1204,7 +1208,7 @@ func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOu
 }
 
 // Refresh applies client refresh operations to this connection's owned client (refresh-client).
-func (c *Connection) Refresh(ctx context.Context, o RefreshOptions) error {
+func (c *Connection) Refresh(ctx context.Context, opts RefreshOptions) error {
 	if c == nil {
 		return opError("Connection.Refresh", ErrInvalidHandle)
 	}
@@ -1214,7 +1218,7 @@ func (c *Connection) Refresh(ctx context.Context, o RefreshOptions) error {
 		return opError("Connection.Refresh", err)
 	}
 
-	return client.Refresh(ctx, o)
+	return client.Refresh(ctx, opts)
 }
 
 // SetWindowSize overrides the dimensions of a specific window on this control connection (-C @win:size).
@@ -1287,39 +1291,39 @@ func (c *Connection) RequestClipboard(ctx context.Context) error {
 	return client.RequestClipboard(ctx)
 }
 
-func popupArgs(clientID string, o PopupOptions) ([]string, error) {
-	return popupArgsWithTarget("-c", clientID, o)
+func popupArgs(clientID string, opts PopupOptions) ([]string, error) {
+	return popupArgsWithTarget("-c", clientID, opts)
 }
 
-func popupArgsWithTarget(targetFlag, targetID string, o PopupOptions) ([]string, error) {
-	if !o.Size.valid() || (o.CloseOnExit && o.CloseOnSuccess) {
+func popupArgsWithTarget(targetFlag, targetID string, opts PopupOptions) ([]string, error) {
+	if !opts.Size.valid() || (opts.CloseOnExit && opts.CloseOnSuccess) {
 		return nil, invalid("popup options")
 	}
 
-	for _, s := range []string{o.Width, o.Height, o.X, o.Y, string(o.Border), o.Style, o.BorderStyle} {
+	for _, s := range []string{opts.Width, opts.Height, opts.X, opts.Y, string(opts.Border), opts.Style, opts.BorderStyle} {
 		if !wire.ValidString(s) {
 			return nil, invalid("popup options")
 		}
 	}
 
-	envArgs, err := popupEnvArgs(o.TmuxEnv)
+	envArgs, err := popupEnvArgs(opts.TmuxEnv)
 	if err != nil {
 		return nil, err
 	}
 
-	extra, argv, err := programArgs(o.Dir, o.Env, o.Program)
+	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
 	if err != nil {
 		return nil, err
 	}
 
 	args := []string{targetFlag, targetID}
-	args = append(args, popupFlagArgs(o)...)
+	args = append(args, popupFlagArgs(opts)...)
 	args = append(args, envArgs...)
-	args = append(args, popupStyleArgs(o)...)
-	args = append(args, popupGeometryArgs(o)...)
+	args = append(args, popupStyleArgs(opts)...)
+	args = append(args, popupGeometryArgs(opts)...)
 
-	if o.Title != "" {
-		v, err := literal(o.Title)
+	if opts.Title != "" {
+		v, err := literal(opts.Title)
 		if err != nil {
 			return nil, err
 		}
@@ -1363,52 +1367,52 @@ func popupEnvArgs(env map[string]string) ([]string, error) {
 	return args, nil
 }
 
-func popupFlagArgs(o PopupOptions) []string {
+func popupFlagArgs(opts PopupOptions) []string {
 	var args []string
 
-	if o.CloseOnExit {
+	if opts.CloseOnExit {
 		args = append(args, "-E")
 	}
 
-	if o.CloseOnSuccess {
+	if opts.CloseOnSuccess {
 		args = append(args, "-E", "-E")
 	}
 
-	if o.CloseOnKey {
+	if opts.CloseOnKey {
 		args = append(args, "-k")
 	}
 
-	if o.DisableDismiss {
+	if opts.DisableDismiss {
 		args = append(args, "-N")
 	}
 
 	return args
 }
 
-func menuArgs(clientID string, o MenuOptions) ([]string, error) {
-	return menuArgsWithTarget("-c", clientID, o)
+func menuArgs(clientID string, opts MenuOptions) ([]string, error) {
+	return menuArgsWithTarget("-c", clientID, opts)
 }
 
-func menuArgsWithTarget(targetFlag, targetID string, o MenuOptions) ([]string, error) {
-	if !wire.ValidString(o.X) || !wire.ValidString(o.Y) || !wire.ValidString(o.Style) || !wire.ValidString(o.SelectedStyle) {
+func menuArgsWithTarget(targetFlag, targetID string, opts MenuOptions) ([]string, error) {
+	if !wire.ValidString(opts.X) || !wire.ValidString(opts.Y) || !wire.ValidString(opts.Style) || !wire.ValidString(opts.SelectedStyle) {
 		return nil, invalid("menu options")
 	}
 
 	args := []string{targetFlag, targetID}
 
-	if o.Mouse {
+	if opts.Mouse {
 		args = append(args, "-M")
 	}
 
-	if o.RequireClick {
+	if opts.RequireClick {
 		args = append(args, "-O")
 	}
 
-	args = append(args, menuPositionArgs(o)...)
-	args = append(args, menuStyleArgs(o)...)
+	args = append(args, menuPositionArgs(opts)...)
+	args = append(args, menuStyleArgs(opts)...)
 
-	if o.Title != "" {
-		title, err := literal(o.Title)
+	if opts.Title != "" {
+		title, err := literal(opts.Title)
 		if err != nil {
 			return nil, err
 		}
@@ -1419,29 +1423,29 @@ func menuArgsWithTarget(targetFlag, targetID string, o MenuOptions) ([]string, e
 	return args, nil
 }
 
-func menuPositionArgs(o MenuOptions) []string {
+func menuPositionArgs(opts MenuOptions) []string {
 	var args []string
 
-	if o.X != "" {
-		args = append(args, "-x", o.X)
+	if opts.X != "" {
+		args = append(args, "-x", opts.X)
 	}
 
-	if o.Y != "" {
-		args = append(args, "-y", o.Y)
+	if opts.Y != "" {
+		args = append(args, "-y", opts.Y)
 	}
 
 	return args
 }
 
-func menuStyleArgs(o MenuOptions) []string {
+func menuStyleArgs(opts MenuOptions) []string {
 	var args []string
 
-	if o.Style != "" {
-		args = append(args, "-s", o.Style)
+	if opts.Style != "" {
+		args = append(args, "-s", opts.Style)
 	}
 
-	if o.SelectedStyle != "" {
-		args = append(args, "-S", o.SelectedStyle)
+	if opts.SelectedStyle != "" {
+		args = append(args, "-S", opts.SelectedStyle)
 	}
 
 	return args
@@ -1512,25 +1516,25 @@ func formatMenuLabel(item MenuItem) (string, error) {
 	return label, nil
 }
 
-func promptArgs(clientID string, template PromptTemplate, o PromptOptions) ([]string, error) {
-	if template == "" || !wire.ValidString(string(template)) || !wire.ValidString(o.Label) || !wire.ValidString(o.Initial) || (o.Numeric && o.SingleCharacter) {
+func promptArgs(clientID string, template PromptTemplate, opts PromptOptions) ([]string, error) {
+	if template == "" || !wire.ValidString(string(template)) || !wire.ValidString(opts.Label) || !wire.ValidString(opts.Initial) || (opts.Numeric && opts.SingleCharacter) {
 		return nil, invalid("prompt")
 	}
 
 	args := []string{"-t", clientID}
-	if o.Label != "" {
-		args = append(args, "-p", wire.LiteralFormat(o.Label))
+	if opts.Label != "" {
+		args = append(args, "-p", wire.LiteralFormat(opts.Label))
 	}
 
-	if o.Initial != "" {
-		args = append(args, "-I", wire.LiteralFormat(o.Initial))
+	if opts.Initial != "" {
+		args = append(args, "-I", wire.LiteralFormat(opts.Initial))
 	}
 
-	if o.SingleCharacter {
+	if opts.SingleCharacter {
 		args = append(args, "-1")
 	}
 
-	if o.Numeric {
+	if opts.Numeric {
 		args = append(args, "-N")
 	}
 
@@ -1539,47 +1543,47 @@ func promptArgs(clientID string, template PromptTemplate, o PromptOptions) ([]st
 	return args, nil
 }
 
-func popupGeometryArgs(o PopupOptions) []string {
+func popupGeometryArgs(opts PopupOptions) []string {
 	var args []string
-	if o.Width != "" {
-		args = append(args, "-w", o.Width)
-	} else if o.Size.Width > 0 {
-		args = append(args, "-w", strconv.Itoa(o.Size.Width))
+	if opts.Width != "" {
+		args = append(args, "-w", opts.Width)
+	} else if opts.Size.Width > 0 {
+		args = append(args, "-w", strconv.Itoa(opts.Size.Width))
 	}
 
-	if o.Height != "" {
-		args = append(args, "-h", o.Height)
-	} else if o.Size.Height > 0 {
-		args = append(args, "-h", strconv.Itoa(o.Size.Height))
+	if opts.Height != "" {
+		args = append(args, "-h", opts.Height)
+	} else if opts.Size.Height > 0 {
+		args = append(args, "-h", strconv.Itoa(opts.Size.Height))
 	}
 
-	if o.X != "" {
-		args = append(args, "-x", o.X)
+	if opts.X != "" {
+		args = append(args, "-x", opts.X)
 	}
 
-	if o.Y != "" {
-		args = append(args, "-y", o.Y)
+	if opts.Y != "" {
+		args = append(args, "-y", opts.Y)
 	}
 
 	return args
 }
 
-func popupStyleArgs(o PopupOptions) []string {
+func popupStyleArgs(opts PopupOptions) []string {
 	var args []string
-	if o.Borderless {
+	if opts.Borderless {
 		args = append(args, "-B")
 	}
 
-	if o.Border != "" {
-		args = append(args, "-b", string(o.Border))
+	if opts.Border != "" {
+		args = append(args, "-b", string(opts.Border))
 	}
 
-	if o.Style != "" {
-		args = append(args, "-s", o.Style)
+	if opts.Style != "" {
+		args = append(args, "-s", opts.Style)
 	}
 
-	if o.BorderStyle != "" {
-		args = append(args, "-S", o.BorderStyle)
+	if opts.BorderStyle != "" {
+		args = append(args, "-S", opts.BorderStyle)
 	}
 
 	return args

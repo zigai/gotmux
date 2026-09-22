@@ -271,17 +271,17 @@ func (p Pane) Submit(ctx context.Context, text string) error {
 }
 
 // SendKeysWith transmits key symbols into the target pane using the provided options.
-func (p Pane) SendKeysWith(ctx context.Context, o SendKeysOptions, keys ...Key) error {
+func (p Pane) SendKeysWith(ctx context.Context, opts SendKeysOptions, keys ...Key) error {
 	if err := p.h.check(); err != nil {
 		return opError("SendKeysWith", err)
 	}
 
-	flagArgs, err := sendKeysFlagArgs(o)
+	flagArgs, err := sendKeysFlagArgs(opts)
 	if err != nil {
 		return opError("SendKeysWith", err)
 	}
 
-	if len(keys) == 0 && !o.Reset && !o.MouseForward {
+	if len(keys) == 0 && !opts.Reset && !opts.MouseForward {
 		if ctx == nil {
 			return opError("SendKeysWith", invalid("nil context"))
 		}
@@ -292,7 +292,7 @@ func (p Pane) SendKeysWith(ctx context.Context, o SendKeysOptions, keys ...Key) 
 	args := append([]string{"-t", p.h.id}, flagArgs...)
 
 	if len(keys) > 0 {
-		if err := validateKeyList(keys, o.Hex); err != nil {
+		if err := validateKeyList(keys, opts.Hex); err != nil {
 			return opError("SendKeysWith", err)
 		}
 
@@ -308,7 +308,7 @@ func (p Pane) SendKeysWith(ctx context.Context, o SendKeysOptions, keys ...Key) 
 // SendTextWith transmits text into the target pane using the provided options.
 // Text is sent with -l to bypass key name translation unless Hex or ExpandFormat is set.
 // Cannot contain embedded NUL bytes.
-func (p Pane) SendTextWith(ctx context.Context, o SendKeysOptions, text string) error {
+func (p Pane) SendTextWith(ctx context.Context, opts SendKeysOptions, text string) error {
 	if err := p.h.check(); err != nil {
 		return opError("SendTextWith", err)
 	}
@@ -317,12 +317,12 @@ func (p Pane) SendTextWith(ctx context.Context, o SendKeysOptions, text string) 
 		return opError("SendTextWith", invalid("text contains NUL; use a binary buffer"))
 	}
 
-	flagArgs, err := sendKeysFlagArgs(o)
+	flagArgs, err := sendKeysFlagArgs(opts)
 	if err != nil {
 		return opError("SendTextWith", err)
 	}
 
-	if text == "" && !o.Reset && !o.MouseForward {
+	if text == "" && !opts.Reset && !opts.MouseForward {
 		if ctx == nil {
 			return opError("SendTextWith", invalid("nil context"))
 		}
@@ -330,13 +330,13 @@ func (p Pane) SendTextWith(ctx context.Context, o SendKeysOptions, text string) 
 		return opError("SendTextWith", ctx.Err())
 	}
 
-	textArgs, err := sendTextArgs(text, o.Hex)
+	textArgs, err := sendTextArgs(text, opts.Hex)
 	if err != nil {
 		return opError("SendTextWith", err)
 	}
 
 	args := append([]string{"-t", p.h.id}, flagArgs...)
-	if !o.Hex && !o.ExpandFormat {
+	if !opts.Hex && !opts.ExpandFormat {
 		args = append(args, "-l")
 	}
 
@@ -406,17 +406,17 @@ func sendTextArgs(text string, hex bool) ([]string, error) {
 // Capture returns owned bytes without trimming or decoding. Control mode cannot
 // unambiguously frame arbitrary captured terminal output; explicitly select
 // p.UsingSubprocess() for that operation on a control-bound pane.
-func (p Pane) Capture(ctx context.Context, o CaptureOptions) ([]byte, error) {
+func (p Pane) Capture(ctx context.Context, opts CaptureOptions) ([]byte, error) {
 	if err := p.h.check(); err != nil {
 		return nil, opError("Capture", err)
 	}
 
-	args, err := captureArgs(p.h.id, o)
+	args, err := captureArgs(p.h.id, opts)
 	if err != nil {
 		return nil, opError("Capture", err)
 	}
 
-	if o.MaxBytes > p.h.server.config.Limits.OutputBytes {
+	if opts.MaxBytes > p.h.server.config.Limits.OutputBytes {
 		return nil, opError("Capture", invalid("MaxBytes may only tighten the configured limit"))
 	}
 
@@ -426,13 +426,13 @@ func (p Pane) Capture(ctx context.Context, o CaptureOptions) ([]byte, error) {
 	}
 	defer op.close()
 
-	if o.MaxBytes > 0 {
-		op.output = min(op.output, o.MaxBytes+int64(len(guardOK)))
+	if opts.MaxBytes > 0 {
+		op.output = min(op.output, opts.MaxBytes+int64(len(guardOK)))
 	}
 
 	r, err := p.h.server.execute(opCtx, op, plainPlan(command("capture-pane", args...)), p.h.guard(), nil)
-	if o.MaxBytes > 0 && int64(len(r.Stdout)) > o.MaxBytes {
-		r.Stdout = r.Stdout[:o.MaxBytes]
+	if opts.MaxBytes > 0 && int64(len(r.Stdout)) > opts.MaxBytes {
+		r.Stdout = r.Stdout[:opts.MaxBytes]
 
 		if err == nil {
 			err = afterError("Capture", ErrOutputLimit)
@@ -443,17 +443,17 @@ func (p Pane) Capture(ctx context.Context, o CaptureOptions) ([]byte, error) {
 }
 
 // CaptureWithTitle captures the pane's visible text or scrollback and returns its title in a single round-trip.
-func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureResult, error) {
+func (p Pane) CaptureWithTitle(ctx context.Context, opts CaptureOptions) (CaptureResult, error) {
 	if err := p.h.check(); err != nil {
 		return CaptureResult{}, opError("CaptureWithTitle", err)
 	}
 
-	capArgs, err := captureArgs(p.h.id, o)
+	capArgs, err := captureArgs(p.h.id, opts)
 	if err != nil {
 		return CaptureResult{}, opError("CaptureWithTitle", err)
 	}
 
-	if o.MaxBytes > p.h.server.config.Limits.OutputBytes {
+	if opts.MaxBytes > p.h.server.config.Limits.OutputBytes {
 		return CaptureResult{}, opError("CaptureWithTitle", invalid("MaxBytes may only tighten the configured limit"))
 	}
 
@@ -496,8 +496,8 @@ func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureRe
 	title := string(after[:lastIdx])
 	output := after[lastIdx+len(endMarker):]
 
-	if o.MaxBytes > 0 && int64(len(output)) > o.MaxBytes {
-		output = output[:o.MaxBytes]
+	if opts.MaxBytes > 0 && int64(len(output)) > opts.MaxBytes {
+		output = output[:opts.MaxBytes]
 		err = afterError("CaptureWithTitle", ErrOutputLimit)
 	}
 
@@ -509,16 +509,16 @@ func (p Pane) CaptureWithTitle(ctx context.Context, o CaptureOptions) (CaptureRe
 
 // CaptureToBuffer captures the pane's visible text or scrollback directly into a tmux paste buffer.
 // The target buffer name must be specified via [CaptureOptions.Buffer].
-func (p Pane) CaptureToBuffer(ctx context.Context, o CaptureOptions) error {
+func (p Pane) CaptureToBuffer(ctx context.Context, opts CaptureOptions) error {
 	if err := p.h.check(); err != nil {
 		return opError("CaptureToBuffer", err)
 	}
 
-	if o.Buffer == "" {
+	if opts.Buffer == "" {
 		return opError("CaptureToBuffer", invalid("buffer name"))
 	}
 
-	args, err := captureArgs(p.h.id, o)
+	args, err := captureArgs(p.h.id, opts)
 	if err != nil {
 		return opError("CaptureToBuffer", err)
 	}
@@ -527,17 +527,17 @@ func (p Pane) CaptureToBuffer(ctx context.Context, o CaptureOptions) error {
 }
 
 // CopyMode enters or exits copy mode on this pane according to opts.
-func (p Pane) CopyMode(ctx context.Context, o CopyModeOptions) error {
+func (p Pane) CopyMode(ctx context.Context, opts CopyModeOptions) error {
 	args := []string{"-t", p.h.id}
-	if o.Exit {
+	if opts.Exit {
 		args = append(args, "-q")
 	}
 
-	if o.PageUp {
+	if opts.PageUp {
 		args = append(args, "-u")
 	}
 
-	if o.Mouse {
+	if opts.Mouse {
 		args = append(args, "-M")
 	}
 
@@ -658,147 +658,147 @@ func isFunctionKey(s string) bool {
 	return e == nil && n >= 1 && n <= 63
 }
 
-func captureArgs(id string, o CaptureOptions) ([]string, error) {
-	if o.Screen > ModeScreen || o.MaxBytes < 0 || (o.EntireHistory && o.Start != nil) || (o.ScrollbackEnd && o.End != nil) {
+func captureArgs(id string, opts CaptureOptions) ([]string, error) {
+	if opts.Screen > ModeScreen || opts.MaxBytes < 0 || (opts.EntireHistory && opts.Start != nil) || (opts.ScrollbackEnd && opts.End != nil) {
 		return nil, invalid("capture options")
 	}
 
-	if o.Buffer != "" && !wire.ValidString(o.Buffer) {
+	if opts.Buffer != "" && !wire.ValidString(opts.Buffer) {
 		return nil, invalid("buffer name")
 	}
 
-	rangeArgs, err := captureRangeArgs(o)
+	rangeArgs, err := captureRangeArgs(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	var args []string
-	if o.Buffer == "" {
+	if opts.Buffer == "" {
 		args = append(args, "-p")
 	}
 
 	args = append(args, "-t", id)
 	args = append(args, rangeArgs...)
-	args = append(args, captureFlagArgs(o)...)
+	args = append(args, captureFlagArgs(opts)...)
 
 	return args, nil
 }
 
-func captureRangeArgs(o CaptureOptions) ([]string, error) {
+func captureRangeArgs(opts CaptureOptions) ([]string, error) {
 	var args []string
 
-	if o.EntireHistory {
+	if opts.EntireHistory {
 		args = append(args, "-S", "-")
-	} else if o.Start != nil {
-		if *o.Start < math.MinInt32 || *o.Start > math.MaxInt32 {
+	} else if opts.Start != nil {
+		if *opts.Start < math.MinInt32 || *opts.Start > math.MaxInt32 {
 			return nil, invalid("capture start")
 		}
 
-		args = append(args, "-S", strconv.Itoa(*o.Start))
+		args = append(args, "-S", strconv.Itoa(*opts.Start))
 	}
 
-	if o.ScrollbackEnd && o.End != nil {
+	if opts.ScrollbackEnd && opts.End != nil {
 		return nil, invalid("capture options")
 	}
 
-	if o.ScrollbackEnd {
+	if opts.ScrollbackEnd {
 		args = append(args, "-E", "-")
-	} else if o.End != nil {
-		if *o.End < math.MinInt32 || *o.End > math.MaxInt32 {
+	} else if opts.End != nil {
+		if *opts.End < math.MinInt32 || *opts.End > math.MaxInt32 {
 			return nil, invalid("capture end")
 		}
 
-		args = append(args, "-E", strconv.Itoa(*o.End))
+		args = append(args, "-E", strconv.Itoa(*opts.End))
 	}
 
 	return args, nil
 }
 
-func captureFlagArgs(o CaptureOptions) []string {
+func captureFlagArgs(opts CaptureOptions) []string {
 	var args []string
-	if o.JoinWrapped {
+	if opts.JoinWrapped {
 		args = append(args, "-J")
 	}
 
-	if o.IncludeEscapes {
+	if opts.IncludeEscapes {
 		args = append(args, "-e")
 	}
 
-	if o.PreserveSpaces {
+	if opts.PreserveSpaces {
 		args = append(args, "-N")
 	}
 
-	if o.PaneState {
+	if opts.PaneState {
 		args = append(args, "-P")
 	}
 
-	if o.Quiet {
+	if opts.Quiet {
 		args = append(args, "-q")
 	}
 
-	if o.Hyperlinks {
+	if opts.Hyperlinks {
 		args = append(args, "-T")
 	}
 
-	if o.Screen == AlternateScreen {
+	if opts.Screen == AlternateScreen {
 		args = append(args, "-a")
 	}
 
-	if o.Screen == ModeScreen {
+	if opts.Screen == ModeScreen {
 		args = append(args, "-M")
 	}
 
-	if o.Buffer != "" {
-		args = append(args, "-b", o.Buffer)
+	if opts.Buffer != "" {
+		args = append(args, "-b", opts.Buffer)
 	}
 
-	if o.EscapeNonPrintable {
+	if opts.EscapeNonPrintable {
 		args = append(args, "-C")
 	}
 
-	if o.AlternateScreenOnly {
+	if opts.AlternateScreenOnly {
 		args = append(args, "-F")
 	}
 
 	return args
 }
 
-func sendKeysFlagArgs(o SendKeysOptions) ([]string, error) {
-	if o.RepeatCount < 0 {
+func sendKeysFlagArgs(opts SendKeysOptions) ([]string, error) {
+	if opts.RepeatCount < 0 {
 		return nil, invalid("repeat count")
 	}
 
-	if o.Client != "" && !wire.ValidString(o.Client) {
+	if opts.Client != "" && !wire.ValidString(opts.Client) {
 		return nil, invalid("client")
 	}
 
 	var args []string
-	if o.ExpandFormat {
+	if opts.ExpandFormat {
 		args = append(args, "-F")
 	}
 
-	if o.Hex {
+	if opts.Hex {
 		args = append(args, "-H")
 	}
 
-	if o.KeyName {
+	if opts.KeyName {
 		args = append(args, "-K")
 	}
 
-	if o.Reset {
+	if opts.Reset {
 		args = append(args, "-R")
 	}
 
-	if o.MouseForward {
+	if opts.MouseForward {
 		args = append(args, "-M")
 	}
 
-	if o.RepeatCount > 0 {
-		args = append(args, "-N", strconv.Itoa(o.RepeatCount))
+	if opts.RepeatCount > 0 {
+		args = append(args, "-N", strconv.Itoa(opts.RepeatCount))
 	}
 
-	if o.Client != "" {
-		args = append(args, "-c", o.Client)
+	if opts.Client != "" {
+		args = append(args, "-c", opts.Client)
 	}
 
 	return args, nil

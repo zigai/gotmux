@@ -111,16 +111,16 @@ func (s *Server) Unlock(ctx context.Context, channel string) error {
 	return s.endpointAction(ctx, "wait-for", "-U", "--", channel)
 }
 
-func validateRunShell(script string, o RunShellOptions) error {
-	if o.Cancel {
+func validateRunShell(script string, opts RunShellOptions) error {
+	if opts.Cancel {
 		return unsupported("RunShellOptions.Cancel is unsupported; cancellation requires explicit job tracking")
 	}
 
-	if o.ClearEnvironment {
+	if opts.ClearEnvironment {
 		return unsupported("RunShellOptions.ClearEnvironment is unsupported; native -E enables stderr output, not environment clearing")
 	}
 
-	if !wire.ValidString(script) || o.Delay < 0 || math.IsNaN(o.Delay) || math.IsInf(o.Delay, 0) || !wire.ValidString(o.Dir) || !wire.ValidString(o.Target) {
+	if !wire.ValidString(script) || opts.Delay < 0 || math.IsNaN(opts.Delay) || math.IsInf(opts.Delay, 0) || !wire.ValidString(opts.Dir) || !wire.ValidString(opts.Target) {
 		return invalid("run-shell options")
 	}
 
@@ -128,35 +128,35 @@ func validateRunShell(script string, o RunShellOptions) error {
 }
 
 // runShellArgs builds and validates the command-line arguments for run-shell.
-func runShellArgs(script string, o RunShellOptions) ([]string, error) {
-	if err := validateRunShell(script, o); err != nil {
+func runShellArgs(script string, opts RunShellOptions) ([]string, error) {
+	if err := validateRunShell(script, opts); err != nil {
 		return nil, err
 	}
 
 	var args []string
 
-	if o.Background {
+	if opts.Background {
 		args = append(args, "-b")
 	}
 
-	if o.TmuxCommands {
+	if opts.TmuxCommands {
 		args = append(args, "-C")
 	}
 
-	if o.IncludeStderr {
+	if opts.IncludeStderr {
 		args = append(args, "-E")
 	}
 
-	if o.Delay > 0 {
-		args = append(args, "-d", strconv.FormatFloat(o.Delay, 'f', -1, 64))
+	if opts.Delay > 0 {
+		args = append(args, "-d", strconv.FormatFloat(opts.Delay, 'f', -1, 64))
 	}
 
-	if o.Dir != "" {
-		args = append(args, "-c", o.Dir)
+	if opts.Dir != "" {
+		args = append(args, "-c", opts.Dir)
 	}
 
-	if o.Target != "" {
-		args = append(args, "-t", o.Target)
+	if opts.Target != "" {
+		args = append(args, "-t", opts.Target)
 	}
 
 	args = append(args, "--", script)
@@ -168,8 +168,8 @@ func runShellArgs(script string, o RunShellOptions) ([]string, error) {
 //
 // When o.Background is true, it returns immediately after scheduling; foreground execution
 // blocks until completion and captures standard output and standard error.
-func (s *Server) RunShell(ctx context.Context, script string, o RunShellOptions) (Result, error) {
-	args, err := runShellArgs(script, o)
+func (s *Server) RunShell(ctx context.Context, script string, opts RunShellOptions) (Result, error) {
+	args, err := runShellArgs(script, opts)
 	if err != nil {
 		return failedResult(), opError("RunShell", err)
 	}
@@ -186,7 +186,7 @@ func (s *Server) RunShell(ctx context.Context, script string, o RunShellOptions)
 	}
 
 	p := plainPlan(command("run-shell", args...))
-	if o.Background {
+	if opts.Background {
 		p.mode = replyEmpty
 	}
 
@@ -251,7 +251,7 @@ func (o SourceOptions) flags() []string {
 	return args
 }
 
-func (s *Server) source(ctx context.Context, opName, target string, input []byte, o SourceOptions) (Result, error) {
+func (s *Server) source(ctx context.Context, opName, target string, input []byte, opts SourceOptions) (Result, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), opError(opName, err)
@@ -267,29 +267,25 @@ func (s *Server) source(ctx context.Context, opName, target string, input []byte
 		return failedResult(), opError(opName, err)
 	}
 
-	args := append(o.flags(), "--", target)
+	args := append(opts.flags(), "--", target)
 	r, err := s.execute(opCtx, op, plainPlan(command("source-file", args...)), newGuard(info.Identity), input)
 
 	return r, opError(opName, err)
 }
 
 // SourceFile loads and executes tmux configuration commands from the specified path (source-file).
-func (s *Server) SourceFile(ctx context.Context, path string, o SourceOptions) (Result, error) {
+func (s *Server) SourceFile(ctx context.Context, path string, opts SourceOptions) (Result, error) {
 	if !wire.ValidString(path) || path == "" || path == "-" {
 		return failedResult(), opError("SourceFile", invalid("config path"))
 	}
 
-	return s.source(ctx, "SourceFile", path, nil, o)
+	return s.source(ctx, "SourceFile", path, nil, opts)
 }
 
 // SourceText loads and executes tmux configuration commands from a string via stdin (source-file -).
-//
-// Like [Server.SourceFile], tmux evaluates the configuration directly, supporting multiline commands,
-// %if/%elif/%else/%endif conditionals, braces, and escaped literals without Go-side reparsing.
-//
-// Fails with [ErrTransportUnsupported] over control mode because control mode cannot frame standard input.
-// Callers must use [Connection.AuxiliaryServer] explicitly for streaming configuration text.
-func (s *Server) SourceText(ctx context.Context, text string, o SourceOptions) (Result, error) {
+// Direct evaluation supports multiline commands, conditionals, braces, and escaped literals.
+// Fails with [ErrTransportUnsupported] over control mode; use [Connection.AuxiliaryServer] instead.
+func (s *Server) SourceText(ctx context.Context, text string, opts SourceOptions) (Result, error) {
 	if s == nil || s.runner == nil {
 		return failedResult(), opError("SourceText", ErrInvalidHandle)
 	}
@@ -302,7 +298,7 @@ func (s *Server) SourceText(ctx context.Context, text string, o SourceOptions) (
 		return failedResult(), opError("SourceText", invalid("config text"))
 	}
 
-	return s.source(ctx, "SourceText", "-", []byte(text), o)
+	return s.source(ctx, "SourceText", "-", []byte(text), opts)
 }
 
 // IfFormat uses tmux's synchronous format condition, not shell truthiness. The

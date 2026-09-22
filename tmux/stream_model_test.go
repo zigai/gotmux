@@ -53,7 +53,7 @@ type rapidEventStreamModel struct {
 
 func newRapidEventStreamModel(rt *rapid.T) *rapidEventStreamModel {
 	_, cancel := context.WithCancelCause(context.Background())
-	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, ClientFlags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
+	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, Flags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
 
 	//nolint:exhaustruct_v5 // mock Connection test fixture intentionally omits unneeded fields
 	c := &Connection{cancel: cancel, stopCh: make(chan struct{}), opts: opts, streams: map[*EventStream]struct{}{}, done: make(chan struct{})}

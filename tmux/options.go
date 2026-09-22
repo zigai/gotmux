@@ -286,12 +286,12 @@ func (t optionTarget) read(ctx context.Context, name string) (OptionValue[string
 	return result, nil
 }
 
-func (t optionTarget) setWith(ctx context.Context, name string, o SetOptionOptions) error {
+func (t optionTarget) setWith(ctx context.Context, name string, opts SetOptionOptions) error {
 	if !validOptionName(name) {
 		return opError("SetOption", invalid("option name"))
 	}
 
-	val, hasValue := o.Value.Get()
+	val, hasValue := opts.Value.Get()
 	if hasValue && !wire.ValidString(val) {
 		return opError("SetOption", invalid("option value"))
 	}
@@ -304,15 +304,15 @@ func (t optionTarget) setWith(ctx context.Context, name string, o SetOptionOptio
 
 	args := t.args()
 
-	if o.Append {
+	if opts.Append {
 		args = append(args, "-a")
 	}
 
-	if o.ExpandFormat {
+	if opts.ExpandFormat {
 		args = append(args, "-F")
 	}
 
-	if o.OnlyIfUnset {
+	if opts.OnlyIfUnset {
 		args = append(args, "-o")
 	}
 
@@ -326,7 +326,7 @@ func (t optionTarget) setWith(ctx context.Context, name string, o SetOptionOptio
 	return opError("SetOption", err)
 }
 
-func (t optionTarget) unsetWith(ctx context.Context, name string, u UnsetOptionOptions) error {
+func (t optionTarget) unsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
 	if !validOptionName(name) {
 		return opError("SetOption", invalid("option name"))
 	}
@@ -338,7 +338,7 @@ func (t optionTarget) unsetWith(ctx context.Context, name string, u UnsetOptionO
 	defer op.close()
 
 	args := t.args()
-	if u.Cascade {
+	if opts.Cascade {
 		args = append(args, "-U")
 	} else {
 		args = append(args, "-u")
@@ -421,20 +421,20 @@ func (t optionTarget) list(ctx context.Context, opts ListOptionOptions) ([]Optio
 	return out, nil
 }
 
-func userSetWith(ctx context.Context, t optionTarget, name string, o SetOptionOptions) error {
+func userSetWith(ctx context.Context, t optionTarget, name string, opts SetOptionOptions) error {
 	if !userOptionName(name) {
 		return opError("UserOption", invalid("user option name"))
 	}
 
-	return t.setWith(ctx, name, o)
+	return t.setWith(ctx, name, opts)
 }
 
-func userUnsetWith(ctx context.Context, t optionTarget, name string, u UnsetOptionOptions) error {
+func userUnsetWith(ctx context.Context, t optionTarget, name string, opts UnsetOptionOptions) error {
 	if !userOptionName(name) {
 		return opError("UserOption", invalid("user option name"))
 	}
 
-	return t.unsetWith(ctx, name, u)
+	return t.unsetWith(ctx, name, opts)
 }
 
 func userGet(ctx context.Context, t optionTarget, name string) (OptionValue[string], error) {

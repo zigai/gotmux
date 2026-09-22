@@ -66,7 +66,7 @@ type (
 		// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
 		Direction Direction
 
-		// Size specifies the size for the joined pane.
+		// Size specifies dimensions in character cells or percentage.
 		Size SplitSize
 
 		// Before places the pane before (above or left of) the target pane (-b flag).
@@ -229,6 +229,11 @@ func (p Pane) ClearHistory(ctx context.Context) error {
 	return p.h.act(ctx, "clear-history", "-t", p.h.id)
 }
 
+// Select switches the active window in its session to this window using default options.
+func (w Window) Select(ctx context.Context) error {
+	return w.SelectWith(ctx, SelectWindowOptions{}) //nolint:exhaustruct_v5 // convenience wrapper uses defaults
+}
+
 // Select switches the active/focused window in this session to this link slot.
 func (l WindowLink) Select(ctx context.Context) error {
 	return l.act(ctx, "select-window", "-t", l.target())
@@ -242,9 +247,9 @@ func (l WindowLink) Unlink(ctx context.Context) error {
 }
 
 // UnlinkWith removes this window link from its session slot using explicit options.
-func (l WindowLink) UnlinkWith(ctx context.Context, o UnlinkOptions) error {
+func (l WindowLink) UnlinkWith(ctx context.Context, opts UnlinkOptions) error {
 	args := []string{"-t", l.target()}
-	if o.Force {
+	if opts.Force {
 		args = append(args, "-k")
 	}
 
@@ -346,22 +351,22 @@ func tmuxEnvFlags(env map[string]string) ([]string, error) {
 	return args, nil
 }
 
-func respawn(h handle, ctx context.Context, name string, o RespawnOptions) error {
-	extra, argv, err := programArgs(o.Dir, o.Env, o.Program)
+func respawn(ctx context.Context, h handle, name string, opts RespawnOptions) error {
+	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
 	if err != nil {
 		return opError(name, err)
 	}
 
 	args := []string{"-t", h.id}
-	if o.KillRunning {
+	if opts.KillRunning {
 		args = append(args, "-k")
 	}
 
-	if o.PreserveEnvironment {
+	if opts.PreserveEnvironment {
 		args = append(args, "-E")
 	}
 
-	tmuxEnvArgs, err := tmuxEnvFlags(o.TmuxEnv)
+	tmuxEnvArgs, err := tmuxEnvFlags(opts.TmuxEnv)
 	if err != nil {
 		return opError(name, err)
 	}
@@ -380,13 +385,13 @@ func respawn(h handle, ctx context.Context, name string, o RespawnOptions) error
 // Respawn re-executes the command in this pane, replacing the existing or dead process.
 // Unlike pane creation where a zero Program executes the default shell, Respawn with
 // a zero Program requests tmux's previously stored respawn command.
-func (p Pane) Respawn(ctx context.Context, o RespawnOptions) error {
-	return respawn(p.h, ctx, "respawn-pane", o)
+func (p Pane) Respawn(ctx context.Context, opts RespawnOptions) error {
+	return respawn(ctx, p.h, "respawn-pane", opts)
 }
 
 // Respawn re-executes the command in the window's initial pane.
-func (w Window) Respawn(ctx context.Context, o RespawnOptions) error {
-	return respawn(w.h, ctx, "respawn-window", o)
+func (w Window) Respawn(ctx context.Context, opts RespawnOptions) error {
+	return respawn(ctx, w.h, "respawn-window", opts)
 }
 
 func linkTarget(s Session, index *int) (string, error) {
@@ -409,22 +414,22 @@ func linkTarget(s Session, index *int) (string, error) {
 
 // Link creates a new link to this window in session s at the specified slot index.
 // A nil Index chooses a free slot. Returns a handle for the confirmed destination slot.
-func (w Window) Link(ctx context.Context, s Session, o LinkOptions) (WindowLink, error) {
-	target, err := linkTarget(s, o.Index)
+func (w Window) Link(ctx context.Context, s Session, opts LinkOptions) (WindowLink, error) {
+	target, err := linkTarget(s, opts.Index)
 	if err != nil {
 		return WindowLink{}, opError("LinkWindow", err)
 	}
 
-	if o.Index == nil && o.Replace {
+	if opts.Index == nil && opts.Replace {
 		return WindowLink{}, opError("LinkWindow", invalid("Replace requires an explicit index"))
 	}
 
 	args := []string{"-s", w.h.id, "-t", target}
-	if !o.Select {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
-	if o.Replace {
+	if opts.Replace {
 		args = append(args, "-k")
 	}
 
@@ -488,26 +493,26 @@ func parseLinkedWindow(h handle, name, target string, data []byte) (WindowLink, 
 
 // Move moves this window link to another session s at the specified slot index.
 // A nil Index chooses a free slot. Returns a handle for the confirmed destination slot.
-func (l WindowLink) Move(ctx context.Context, s Session, o LinkOptions) (WindowLink, error) {
+func (l WindowLink) Move(ctx context.Context, s Session, opts LinkOptions) (WindowLink, error) {
 	if err := l.check(); err != nil {
 		return WindowLink{}, opError("MoveWindow", err)
 	}
 
-	target, err := linkTarget(s, o.Index)
+	target, err := linkTarget(s, opts.Index)
 	if err != nil {
 		return WindowLink{}, opError("MoveWindow", err)
 	}
 
-	if o.Index == nil && o.Replace {
+	if opts.Index == nil && opts.Replace {
 		return WindowLink{}, opError("MoveWindow", invalid("Replace requires an explicit index"))
 	}
 
 	args := []string{"-s", l.target(), "-t", target}
-	if !o.Select {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
-	if o.Replace {
+	if opts.Replace {
 		args = append(args, "-k")
 	}
 
@@ -550,30 +555,30 @@ func (l WindowLink) Swap(ctx context.Context, other WindowLink, selectWindow boo
 }
 
 // Join moves this pane from its current window into target's window as a split.
-func (p Pane) Join(ctx context.Context, target Pane, o JoinOptions) error {
-	if o.Direction > Horizontal {
+func (p Pane) Join(ctx context.Context, target Pane, opts JoinOptions) error {
+	if opts.Direction > Horizontal {
 		return opError("JoinPane", invalid("direction"))
 	}
 
-	size, err := o.Size.args()
+	size, err := opts.Size.args()
 	if err != nil {
 		return opError("JoinPane", err)
 	}
 
 	args := []string{"-s", p.h.id, "-t", target.h.id}
-	if !o.Select {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
-	if o.Before {
+	if opts.Before {
 		args = append(args, "-b")
 	}
 
-	if o.FullSize {
+	if opts.FullSize {
 		args = append(args, "-f")
 	}
 
-	if o.Direction == Horizontal {
+	if opts.Direction == Horizontal {
 		args = append(args, "-h")
 	} else {
 		args = append(args, "-v")
@@ -593,8 +598,8 @@ func (p Pane) Join(ctx context.Context, target Pane, o JoinOptions) error {
 }
 
 // Move is an alias for [Pane.Join], moving this pane beside target pane.
-func (p Pane) Move(ctx context.Context, target Pane, o JoinOptions) error {
-	return p.Join(ctx, target, o)
+func (p Pane) Move(ctx context.Context, target Pane, opts JoinOptions) error {
+	return p.Join(ctx, target, opts)
 }
 
 // Swap exchanges the positions and dimensions of this pane and another pane.
@@ -617,13 +622,13 @@ func (p Pane) Swap(ctx context.Context, other Pane, selectPane bool) error {
 
 // Break removes this pane from its current window and creates a new window containing only
 // this pane in session s. Returns a [WindowLink] handle for the new window.
-func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink, error) {
-	target, err := linkTarget(s, o.Index)
+func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLink, error) {
+	target, err := linkTarget(s, opts.Index)
 	if err != nil {
 		return WindowLink{}, opError("BreakPane", err)
 	}
 
-	name, err := literal(o.Name)
+	name, err := literal(opts.Name)
 	if err != nil {
 		return WindowLink{}, opError("BreakPane", err)
 	}
@@ -634,7 +639,7 @@ func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink,
 	}
 	defer op.close()
 
-	args := breakArgs(p.h.id, target, name, o)
+	args := breakArgs(p.h.id, target, name, opts)
 
 	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("break-pane", args...)), p.h.guard(), nil)
 	if err != nil {
@@ -662,13 +667,13 @@ func (p Pane) Break(ctx context.Context, s Session, o BreakOptions) (WindowLink,
 	return link.Handle(), nil
 }
 
-func breakArgs(paneID, target, name string, o BreakOptions) []string {
+func breakArgs(paneID, target, name string, opts BreakOptions) []string {
 	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(WindowKind))}
-	if !o.Select {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
-	if o.Name != "" {
+	if opts.Name != "" {
 		args = append(args, "-n", name)
 	}
 
@@ -677,21 +682,21 @@ func breakArgs(paneID, target, name string, o BreakOptions) []string {
 
 // Pipe deliberately starts a background shell command on the server and pipes pane I/O into it.
 // To stop piping, callers must explicitly invoke [Pane.StopPipe].
-func (p Pane) Pipe(ctx context.Context, script string, o PipeOptions) error {
+func (p Pane) Pipe(ctx context.Context, script string, opts PipeOptions) error {
 	if !wire.ValidString(script) || script == "" {
 		return opError("Pipe", invalid("pipe script"))
 	}
 
 	args := []string{"-t", p.h.id}
-	if o.OnlyIfNotPiped {
+	if opts.OnlyIfNotPiped {
 		args = append(args, "-o")
 	}
 
-	if o.Input {
+	if opts.Input {
 		args = append(args, "-I")
 	}
 
-	if o.Output {
+	if opts.Output {
 		args = append(args, "-O")
 	}
 

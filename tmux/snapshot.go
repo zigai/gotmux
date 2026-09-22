@@ -20,20 +20,11 @@ type Consistency uint8
 
 // MissingReference describes a dangling reference detected during snapshot validation.
 type MissingReference struct {
-	// Kind is the type of object holding the dangling reference (e.g. PaneKind).
-	Kind ObjectKind
-
-	// ID is the identifier of the object holding the dangling reference.
-	ID string
-
-	// ReferencedKind is the expected target object type that was not found.
+	Kind           ObjectKind
+	ID             string
 	ReferencedKind ObjectKind
-
-	// ReferencedID is the identifier of the missing target object.
-	ReferencedID string
-
-	// Reason explains why resolution failed.
-	Reason string
+	ReferencedID   string
+	Reason         string
 }
 
 // Snapshot represents a point-in-time observation of all entities on a tmux server.
@@ -222,11 +213,11 @@ func (v *Snapshot) checkLinkReferences(sessions map[SessionID]bool, windows map[
 	for _, l := range v.links {
 		counts[l.SessionID]++
 		if !sessions[l.SessionID] {
-			add(MissingReference{Kind: LinkKind, ID: l.Handle().target(), ReferencedKind: SessionKind, ReferencedID: string(l.SessionID), Reason: "missing session"})
+			add(MissingReference{Kind: WindowLinkKind, ID: l.Handle().target(), ReferencedKind: SessionKind, ReferencedID: string(l.SessionID), Reason: "missing session"})
 		}
 
 		if !windows[l.WindowID] {
-			add(MissingReference{Kind: LinkKind, ID: l.Handle().target(), ReferencedKind: WindowKind, ReferencedID: string(l.WindowID), Reason: "missing window"})
+			add(MissingReference{Kind: WindowLinkKind, ID: l.Handle().target(), ReferencedKind: WindowKind, ReferencedID: string(l.WindowID), Reason: "missing window"})
 		}
 	}
 }

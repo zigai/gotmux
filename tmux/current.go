@@ -163,7 +163,7 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 		return CurrentInfo{}, opError("Current", ErrServerChanged)
 	}
 
-	pid, ok := hints.PaneID.Get()
+	paneID, ok := hints.PaneID.Get()
 	if !ok {
 		info, err := resolveActiveContext(snap, hints)
 		if err != nil {
@@ -173,7 +173,7 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 		return info, nil
 	}
 
-	info, err := resolvePaneContext(snap, pid)
+	info, err := resolvePaneContext(snap, paneID)
 	if err != nil {
 		return CurrentInfo{}, opError("Current", err)
 	}
@@ -231,8 +231,8 @@ func parseTmux2Part(raw string, start, end int) (string, int, error) {
 	return sock, p, nil
 }
 
-func resolvePaneContext(snap Snapshot, pid PaneID) (CurrentInfo, error) {
-	p, ok := snap.Pane(pid)
+func resolvePaneContext(snap Snapshot, paneID PaneID) (CurrentInfo, error) {
+	p, ok := snap.Pane(paneID)
 	if !ok {
 		return CurrentInfo{}, ErrNotFound
 	}

@@ -79,23 +79,9 @@ type (
 		// Bound auxiliary servers ([Connection.AuxiliaryServer]) always forbid daemon auto-spawn regardless of this setting.
 		Start StartPolicy
 
-		// Input supplies bounded standard input bytes for the tmux command or sequence execution.
-		//
-		// Ownership: The caller retains ownership of the slice. The library does not modify or retain
-		// the slice after execution completes. Callers should snapshot or clone the slice before concurrent
-		// or asynchronous reuse.
-		//
-		// Absence vs. zero value:
-		// A nil slice means no standard input is connected (stdin is nil/detached).
-		// An empty non-nil slice ([]byte{}) connects standard input and immediately sends EOF.
-		//
-		// Accounting: Input bytes count against the operation's [Limits.InputBytes] limit alongside
-		// command arguments. If the combined size of command arguments and input exceeds the limit,
-		// execution fails with [ErrInputLimit].
-		//
-		// Sequences: Native stdin is a single shared stream delivered to the tmux process; it is not
-		// duplicated per command in a sequence. Typically, only the first command in the sequence that
-		// reads stdin will consume these bytes.
+		// Input supplies standard input bytes for execution. A nil slice leaves stdin detached;
+		// an empty non-nil slice ([]byte{}) connects stdin and immediately sends EOF.
+		// Input bytes count toward [Limits.InputBytes].
 		Input []byte
 	}
 
@@ -736,12 +722,8 @@ func (p plan) argv() ([]string, error) {
 }
 
 // Run executes one raw tmux command against the server and returns its captured output.
-//
-// Unlike typed handle methods, Run is endpoint-relative: it does not assert daemon identity
-// or window link guards, and targets are resolved by tmux according to its standard rules.
-//
-// Raw commands require subprocess execution. On a control-bound server, use
-// [Connection.AuxiliaryServer]; Run otherwise returns [ErrTransportUnsupported] before dispatch.
+// Unlike typed handle methods, Run is endpoint-relative and omits daemon identity guards.
+// Over control mode, use [Connection.AuxiliaryServer] instead (returns [ErrTransportUnsupported]).
 func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 	if s == nil || s.runner == nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
@@ -822,7 +804,7 @@ func (s *Server) rawAllowStart(start StartPolicy) (bool, error) {
 //
 // Start policy is controlled explicitly by o.Start rather than inferred from command names.
 // Fails with [ErrTransportUnsupported] over control mode.
-func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, error) {
+func (s *Server) RunWith(ctx context.Context, c Command, opts RunOptions) (Result, error) {
 	if s == nil || s.runner == nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
 	}
@@ -841,21 +823,21 @@ func (s *Server) RunWith(ctx context.Context, c Command, o RunOptions) (Result, 
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: invalid("command")}
 	}
 
-	allowStart, err := s.rawAllowStart(o.Start)
+	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
 		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
 	}
 
 	p := plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: allowStart}
 
-	return s.execute(opCtx, op, p, nil, o.Input)
+	return s.execute(opCtx, op, p, nil, opts.Input)
 }
 
 // RunSequenceWith executes an ordered list of commands in a single round-trip with custom execution options.
 //
 // Start policy is controlled explicitly by o.Start rather than inferred from command names.
 // Fails with [ErrTransportUnsupported] over control mode.
-func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, o RunOptions) (Result, error) {
+func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, opts RunOptions) (Result, error) {
 	if s == nil || s.runner == nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: ErrInvalidHandle}
 	}
@@ -875,7 +857,7 @@ func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, 
 		return Result{Stdout: []byte{}, Stderr: []byte{}, ExitCode: -1}, nil
 	}
 
-	allowStart, err := s.rawAllowStart(o.Start)
+	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
 		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: err}
 	}
@@ -890,7 +872,7 @@ func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, 
 		p.nodes = append(p.nodes, leaf(c))
 	}
 
-	return s.execute(opCtx, op, p, nil, o.Input)
+	return s.execute(opCtx, op, p, nil, opts.Input)
 }
 
 // cloneResult never aliases retained connection state.

@@ -20,11 +20,14 @@ const (
 )
 
 const (
-	SessionKind ObjectKind = "session"
-	WindowKind  ObjectKind = "window"
-	PaneKind    ObjectKind = "pane"
-	ClientKind  ObjectKind = "client"
-	LinkKind    ObjectKind = "window-link"
+	SessionKind    ObjectKind = "session"
+	WindowKind     ObjectKind = "window"
+	PaneKind       ObjectKind = "pane"
+	ClientKind     ObjectKind = "client"
+	WindowLinkKind ObjectKind = "window-link"
+
+	// LinkKind is retained as an alias for [WindowLinkKind].
+	LinkKind = WindowLinkKind
 )
 
 const (

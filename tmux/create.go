@@ -44,13 +44,12 @@ type (
 		// using Env with the zero Program{} returns [ErrUnsupported] to prevent ambient PATH corruption.
 		Env map[string]string
 
-		// SessionEnv specifies native tmux session environment variables (-e KEY=VAL).
+		// TmuxEnv specifies native tmux session environment variables (-e KEY=VAL).
 		// Each entry is emitted as a native -e flag on new-session.
 		// Unlike [Env], which wraps program execution and requires explicit [Exec] or [Shell],
-		// SessionEnv sets environment variables directly in tmux and can be used when Program
+		// TmuxEnv sets environment variables directly in tmux and can be used when Program
 		// is the zero value (running the default shell with native session environment).
-		SessionEnv map[string]string
-
+		TmuxEnv map[string]string
 		// Size specifies initial window dimensions in character cells.
 		Size Size
 
@@ -373,7 +372,7 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 	return v.Handle(), nil
 }
 
-func createNewPane(h handle, opName string, targetID string, opts NewPaneOptions, ctx context.Context) (Pane, error) {
+func createNewPane(ctx context.Context, h handle, opName string, targetID string, opts NewPaneOptions) (Pane, error) {
 	if err := h.check(); err != nil {
 		return Pane{}, opError(opName, err)
 	}
@@ -417,12 +416,12 @@ func createNewPane(h handle, opName string, targetID string, opts NewPaneOptions
 
 // NewPane creates a new (potentially floating or modal) pane targeting this window (new-pane).
 func (w Window) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
-	return createNewPane(w.h, "NewPane", w.h.id, opts, ctx)
+	return createNewPane(ctx, w.h, "NewPane", w.h.id, opts)
 }
 
 // NewPane creates a new (potentially floating or modal) pane targeting this pane (new-pane).
 func (p Pane) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
-	return createNewPane(p.h, "NewPane", p.h.id, opts, ctx)
+	return createNewPane(ctx, p.h, "NewPane", p.h.id, opts)
 }
 
 func creationError(name string, err error, data []byte, kind ObjectKind) error {
@@ -438,7 +437,7 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 		return nil, err
 	}
 
-	envArgs, err := tmuxEnvArgs(opts.SessionEnv)
+	envArgs, err := tmuxEnvArgs(opts.TmuxEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -769,7 +768,7 @@ func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
 		field = "window_id"
 	case PaneKind:
 		field = "pane_id"
-	case ClientKind, LinkKind:
+	case ClientKind, WindowLinkKind:
 		return nil
 	default:
 		return nil

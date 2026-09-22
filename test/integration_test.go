@@ -1842,13 +1842,13 @@ func TestIntegrationControlExitLifecycle(t *testing.T) {
 func TestIntegrationDedicatedCommands(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	// 1. NewSession with SessionEnv and zero Program{} (default shell with native session environment)
+	// 1. NewSession with TmuxEnv and zero Program{} (default shell with native session environment)
 	sess2, err := server.NewSession(ctx, tmux.NewSessionOptions{
-		Name:       "custom-sess-env",
-		SessionEnv: map[string]string{"CUSTOM_SESSION_VAR": "session_native_val"},
+		Name:    "custom-sess-env",
+		TmuxEnv: map[string]string{"CUSTOM_SESSION_VAR": "session_native_val"},
 	})
 	if err != nil {
-		t.Fatalf("NewSession with SessionEnv failed: %v", err)
+		t.Fatalf("NewSession with TmuxEnv failed: %v", err)
 	}
 	t.Cleanup(func() { _ = sess2.Kill(ctx) })
 

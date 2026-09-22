@@ -50,27 +50,14 @@ type (
 		// Delete deletes the buffer immediately after pasting (-d flag).
 		Delete bool
 
-		// DeleteAfter is retained for backward compatibility with [Pane.PasteBuffer] (-d flag).
-		DeleteAfter bool
-
 		// BracketedPaste wraps pasted text in bracketed paste escape sequences (-p flag).
 		BracketedPaste bool
-
-		// Bracketed is retained for backward compatibility with [Pane.PasteBuffer] (-p flag).
-		Bracketed bool
 
 		// ReplaceEscapes prevents replacing LF with CR when pasting (-r flag).
 		ReplaceEscapes bool
 
-		// RawNewlines is retained for backward compatibility with [Pane.PasteBuffer] (-r flag).
-		RawNewlines bool
-
 		// StripNewlines replaces every newline with an empty string when pasting (-s "").
 		StripNewlines bool
-
-		// Deprecated: NoTrailingNewline sets paste-buffer -s "", which in native tmux replaces
-		// every newline (not just the trailing one) with an empty string. Use StripNewlines instead.
-		NoTrailingNewline bool
 
 		// Separator specifies an optional delimiter between lines (-s flag).
 		Separator string
@@ -210,14 +197,8 @@ func (s *Server) bufferOperation(ctx context.Context, name string, b BufferRef, 
 }
 
 // WriteBuffer loads binary data into the target paste buffer via stdin.
-//
-// Why zero-length is rejected:
-// Stock tmux treats empty stdin as a no-op rather than clearing or replacing the buffer.
-// Returning success would leave stale content silently, so we reject zero-length data with [ErrUnsupported].
-//
-// Over control mode:
-// Binary stdin cannot be framed safely inside control mode command text.
-// Callers must use [Connection.AuxiliaryServer] explicitly for binary buffer writes.
+// Rejects zero-length data with [ErrUnsupported] because tmux treats empty stdin as a no-op.
+// Over control mode, binary writes must use [Connection.AuxiliaryServer].
 func (s *Server) WriteBuffer(ctx context.Context, b BufferRef, data []byte) error {
 	if len(data) == 0 {
 		return opError("WriteBuffer", unsupported("zero-length buffer replacement is not representable in stock tmux"))
@@ -253,8 +234,13 @@ func (s *Server) RenameBuffer(ctx context.Context, oldName, newName string) erro
 	return s.endpointAction(ctx, "set-buffer", "-b", oldName, "-n", newName)
 }
 
+// SetBuffer sets the contents of the named paste buffer to data, overwriting any existing buffer.
+func (s *Server) SetBuffer(ctx context.Context, name string, data []byte) error {
+	return s.SetBufferWith(ctx, name, data, SetBufferOptions{Append: false})
+}
+
 // SetBufferWith sets the contents of the named paste buffer to data according to opts.
-func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, o SetBufferOptions) error {
+func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, opts SetBufferOptions) error {
 	if name == "" || !wire.ValidString(name) {
 		return opError("SetBufferWith", invalid("buffer name"))
 	}
@@ -263,17 +249,17 @@ func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, o 
 		return opError("SetBufferWith", invalid("buffer data"))
 	}
 
-	if !o.Append && len(data) == 0 {
+	if !opts.Append && len(data) == 0 {
 		return opError("SetBufferWith", unsupported("zero-length buffer replacement is not representable in stock tmux"))
 	}
 
-	if o.Append && len(data) == 0 {
+	if opts.Append && len(data) == 0 {
 		return nil
 	}
 
 	var args []string
 
-	if o.Append {
+	if opts.Append {
 		args = append(args, "-a")
 	}
 
@@ -311,50 +297,47 @@ func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, a
 	return err
 }
 
-func pasteSeparator(o PasteOptions) (string, bool, error) {
-	replaceEscapes := o.ReplaceEscapes || o.RawNewlines
-	stripNewlines := o.StripNewlines || o.NoTrailingNewline
-
-	if replaceEscapes && (stripNewlines || o.Separator != "") {
+func pasteSeparator(opts PasteOptions) (string, bool, error) {
+	if opts.ReplaceEscapes && (opts.StripNewlines || opts.Separator != "") {
 		return "", false, invalid("separator and raw newlines conflict")
 	}
 
-	if stripNewlines && o.Separator != "" {
+	if opts.StripNewlines && opts.Separator != "" {
 		return "", false, invalid("separator and strip newlines conflict")
 	}
 
-	if stripNewlines {
+	if opts.StripNewlines {
 		return "", true, nil
 	}
 
-	if o.Separator != "" {
-		if !wire.ValidString(o.Separator) {
+	if opts.Separator != "" {
+		if !wire.ValidString(opts.Separator) {
 			return "", false, invalid("separator")
 		}
 
-		return o.Separator, true, nil
+		return opts.Separator, true, nil
 	}
 
 	return "", false, nil
 }
 
-func pasteFlags(o PasteOptions) ([]string, error) {
-	sep, hasSep, err := pasteSeparator(o)
+func pasteFlags(opts PasteOptions) ([]string, error) {
+	sep, hasSep, err := pasteSeparator(opts)
 	if err != nil {
 		return nil, err
 	}
 
 	var flags []string
 
-	if o.ReplaceEscapes || o.RawNewlines {
+	if opts.ReplaceEscapes {
 		flags = append(flags, "-r")
 	}
 
-	if o.BracketedPaste || o.Bracketed {
+	if opts.BracketedPaste {
 		flags = append(flags, "-p")
 	}
 
-	if o.Delete || o.DeleteAfter {
+	if opts.Delete {
 		flags = append(flags, "-d")
 	}
 
@@ -366,13 +349,13 @@ func pasteFlags(o PasteOptions) ([]string, error) {
 }
 
 // PasteBuffer pastes the contents of the target buffer into this pane according to opts.
-func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, o PasteOptions) error {
+func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, opts PasteOptions) error {
 	args, err := b.args()
 	if err != nil {
 		return opError("PasteBuffer", err)
 	}
 
-	flags, err := pasteFlags(o)
+	flags, err := pasteFlags(opts)
 	if err != nil {
 		return opError("PasteBuffer", err)
 	}
@@ -383,13 +366,18 @@ func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, o PasteOptions) erro
 	return p.h.act(ctx, "paste-buffer", args...)
 }
 
+// Paste pastes the contents of the most recently created or modified buffer into this pane using default options.
+func (p Pane) Paste(ctx context.Context) error {
+	return p.PasteWith(ctx, PasteOptions{}) //nolint:exhaustruct_v5 // convenience wrapper uses defaults
+}
+
 // PasteWith pastes buffer contents into this pane according to opts.
-func (p Pane) PasteWith(ctx context.Context, o PasteOptions) error {
-	if o.Buffer != "" && !wire.ValidString(o.Buffer) {
+func (p Pane) PasteWith(ctx context.Context, opts PasteOptions) error {
+	if opts.Buffer != "" && !wire.ValidString(opts.Buffer) {
 		return opError("PasteWith", invalid("buffer name"))
 	}
 
-	flags, err := pasteFlags(o)
+	flags, err := pasteFlags(opts)
 	if err != nil {
 		return opError("PasteWith", err)
 	}
@@ -397,8 +385,8 @@ func (p Pane) PasteWith(ctx context.Context, o PasteOptions) error {
 	args := []string{"-t", p.h.id}
 	args = append(args, flags...)
 
-	if o.Buffer != "" {
-		args = append(args, "-b", o.Buffer)
+	if opts.Buffer != "" {
+		args = append(args, "-b", opts.Buffer)
 	}
 
 	return p.h.act(ctx, "paste-buffer", args...)

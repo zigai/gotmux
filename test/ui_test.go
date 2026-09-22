@@ -457,9 +457,9 @@ func TestIntegrationUIControls(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 
-	// 1. Client.DisplayMessageWith with Duration
-	if err := client.DisplayMessageWith(ctx, "hello from ui controls test", tmux.DisplayMessageOptions{Duration: 200}); err != nil {
-		t.Fatalf("DisplayMessageWith failed: %v", err)
+	// 1. Client.MessageWith with Duration
+	if err := client.MessageWith(ctx, "hello from ui controls test", tmux.MessageOptions{Duration: 200}); err != nil {
+		t.Fatalf("MessageWith failed: %v", err)
 	}
 
 	// 2. Client.ClosePopup when popup is active or closed

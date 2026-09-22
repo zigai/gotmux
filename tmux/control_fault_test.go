@@ -36,7 +36,7 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		QueuedBytes:      65536,
 		PaneOutput:       false,
 		NoEcho:           false,
-		ClientFlags:      nil,
+		Flags:            nil,
 		UTF8:             UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
@@ -446,7 +446,7 @@ func TestControlStartFailureClosesPipes(t *testing.T) {
 	for range 12 {
 		ctx, cancel := context.WithCancelCause(context.Background())
 		c := testConnection(s, cancel)
-		err := s.setupControlProcess(c, ctx, nil, cancel)
+		err := s.setupControlProcess(ctx, c, nil, cancel)
 		cancel(nil)
 
 		if err == nil {
@@ -464,7 +464,7 @@ func testConnection(s *Server, cancel context.CancelCauseFunc) *Connection {
 	opts, _ := normalizeControlOptions(ControlOptions{
 		PaneOutput:       false,
 		NoEcho:           false,
-		ClientFlags:      nil,
+		Flags:            nil,
 		UTF8:             UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,

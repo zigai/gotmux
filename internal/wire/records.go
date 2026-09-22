@@ -83,8 +83,8 @@ func ReadRecord(r Reader, maxBytes int64) ([]byte, []string, error) {
 
 // ReadRecordWire scans and verifies one complete record, returning only its wire bytes.
 func ReadRecordWire(r Reader, maxBytes int64) ([]byte, error) {
-	wire, _, err := scanRecord(r, maxBytes, wantWire)
-	return wire, err
+	wireBytes, _, err := scanRecord(r, maxBytes, wantWire)
+	return wireBytes, err
 }
 
 // ReadRecordFields scans and verifies one complete record, returning only its decoded fields.

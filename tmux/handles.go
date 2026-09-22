@@ -135,7 +135,7 @@ func (h handle) valid() bool {
 		return PaneID(h.id).Valid()
 	case ClientKind:
 		return ClientName(h.id).Valid()
-	case LinkKind:
+	case WindowLinkKind:
 		return false
 	default:
 		return false
@@ -470,14 +470,14 @@ func (c Client) UsingSubprocess() (Client, error) {
 }
 
 // SelectWith switches the active window to this window using the specified options.
-func (w Window) SelectWith(ctx context.Context, o SelectWindowOptions) error {
+func (w Window) SelectWith(ctx context.Context, opts SelectWindowOptions) error {
 	args := []string{"-t", w.h.id}
 
-	if o.PreserveZoom {
+	if opts.PreserveZoom {
 		args = append(args, "-Z")
 	}
 
-	if o.Last {
+	if opts.Last {
 		args = append(args, "-l")
 	}
 
@@ -485,14 +485,14 @@ func (w Window) SelectWith(ctx context.Context, o SelectWindowOptions) error {
 }
 
 // SelectWith gives user focus to this pane within its window using the specified options.
-func (p Pane) SelectWith(ctx context.Context, o SelectPaneOptions) error {
+func (p Pane) SelectWith(ctx context.Context, opts SelectPaneOptions) error {
 	args := []string{"-t", p.h.id}
 
-	if o.PreserveZoom {
+	if opts.PreserveZoom {
 		args = append(args, "-Z")
 	}
 
-	if o.Last {
+	if opts.Last {
 		args = append(args, "-l")
 	}
 

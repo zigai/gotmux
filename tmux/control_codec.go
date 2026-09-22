@@ -290,14 +290,14 @@ func trackFrameBytes(line []byte, used, maxBytes int64) (int64, error) {
 }
 
 func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (int64, error) {
-	wire, wireErr := readRecordWireChunk(r, maxBytes-used)
+	wireChunk, wireErr := readRecordWireChunk(r, maxBytes-used)
 	if wireErr != nil {
 		return 0, wireErr
 	}
 
-	f.data = append(f.data, wire...)
+	f.data = append(f.data, wireChunk...)
 
-	return int64(len(wire)), nil
+	return int64(len(wireChunk)), nil
 }
 
 func newControlStreamReader(r io.Reader) io.Reader {

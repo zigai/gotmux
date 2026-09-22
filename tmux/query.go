@@ -88,6 +88,13 @@ func (s *Server) Probe(ctx context.Context) (ServerInfo, error) {
 	return v, opError("Probe", err)
 }
 
+// Info queries the tmux daemon on this server's endpoint and returns point-in-time
+// metadata ([ServerInfo]), matching the Info accessor contract across all handles.
+// It is equivalent to [Server.Probe].
+func (s *Server) Info(ctx context.Context) (ServerInfo, error) {
+	return s.Probe(ctx)
+}
+
 func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 	wrapErr := func(err error) (ServerInfo, error) {
 		return ServerInfo{}, &discoveryError{Err: err}
@@ -143,7 +150,7 @@ func listCommandAndArgs(kind ObjectKind, target string) (string, []string, error
 		return "list-panes", nil, nil
 	case ClientKind:
 		return "list-clients", nil, nil
-	case LinkKind:
+	case WindowLinkKind:
 		return "", nil, invalid("object kind")
 	default:
 		return "", nil, invalid("object kind")
@@ -584,13 +591,23 @@ func (s *Server) WindowHandle(id WindowID) (Window, error) {
 	return Window{h: s.unprobedHandle(string(id), WindowKind)}, nil
 }
 
-// FindSession locates a session by its exact human-readable name.
-//
-// tmux's native command targets perform prefix matching (e.g. target "dev" will match
-// a session named "development"), which easily causes accidental mutations.
-// FindSession avoids this danger by listing all sessions and requiring an exact match.
-// Returns [ErrNotFound] if no match is found, or [ErrAmbiguousTarget] if multiple sessions
-// share the exact same name.
+// ClientHandle constructs a [Client] handle for a known client terminal name without performing a server round-trip.
+// Syntax is validated, while daemon provenance is deferred until an operation executes.
+func (s *Server) ClientHandle(name ClientName) (Client, error) {
+	if s == nil || s.runner == nil {
+		return Client{}, opError("ClientHandle", ErrInvalidHandle)
+	}
+
+	if !name.Valid() {
+		return Client{}, opError("ClientHandle", invalid("client name"))
+	}
+
+	return Client{h: s.unprobedHandle(string(name), ClientKind)}, nil
+}
+
+// FindSession locates a session by its exact human-readable name, avoiding tmux's
+// native prefix matching (e.g. "dev" matching "development").
+// Returns [ErrNotFound] if missing, or [ErrAmbiguousTarget] if multiple sessions share the name.
 func (s *Server) FindSession(ctx context.Context, exactName string) (Session, error) {
 	if exactName == "" || !wire.ValidString(exactName) {
 		return Session{}, opError("FindSession", invalid("name"))
@@ -799,6 +816,11 @@ func (p Pane) Window(ctx context.Context) (Window, error) {
 }
 
 // Windows returns all [WindowLink] handles linked into this session, ordered by slot index.
+//
+// Unlike [Server.Windows] which returns point-in-time snapshot metadata ([WindowInfo]),
+// Session.Windows returns live operational [WindowLink] handles representing each slot.
+// To retrieve point-in-time metadata snapshots for all windows and slots in this session,
+// use [Session.WindowInfos].
 func (s Session) Windows(ctx context.Context) ([]WindowLink, error) {
 	if err := s.h.check(); err != nil {
 		return nil, opError("Session.Windows", err)

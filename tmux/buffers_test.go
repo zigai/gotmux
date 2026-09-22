@@ -12,16 +12,12 @@ import (
 
 func TestPasteOptions(t *testing.T) {
 	flags, err := pasteFlags(PasteOptions{
-		Buffer:            "",
-		Delete:            false,
-		DeleteAfter:       false,
-		BracketedPaste:    false,
-		Bracketed:         false,
-		ReplaceEscapes:    false,
-		RawNewlines:       false,
-		StripNewlines:     true,
-		NoTrailingNewline: false,
-		Separator:         "",
+		Buffer:         "",
+		Delete:         false,
+		BracketedPaste: false,
+		ReplaceEscapes: false,
+		StripNewlines:  true,
+		Separator:      "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -31,24 +27,27 @@ func TestPasteOptions(t *testing.T) {
 		t.Fatalf("expected [-s \"\"], got %v", flags)
 	}
 
-	flagsLegacy, err := pasteFlags(PasteOptions{
-		Buffer:            "",
-		Delete:            false,
-		DeleteAfter:       false,
-		BracketedPaste:    false,
-		Bracketed:         false,
-		ReplaceEscapes:    false,
-		RawNewlines:       false,
-		StripNewlines:     false,
-		NoTrailingNewline: true,
-		Separator:         "",
+	flagsAll, err := pasteFlags(PasteOptions{
+		Buffer:         "b0",
+		Delete:         true,
+		BracketedPaste: true,
+		ReplaceEscapes: true,
+		StripNewlines:  false,
+		Separator:      "",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if len(flagsLegacy) != 2 || flagsLegacy[0] != "-s" || flagsLegacy[1] != "" {
-		t.Fatalf("expected [-s \"\"], got %v", flagsLegacy)
+	expectedFlags := []string{"-r", "-p", "-d"}
+	if len(flagsAll) != len(expectedFlags) {
+		t.Fatalf("expected %v, got %v", expectedFlags, flagsAll)
+	}
+
+	for i, f := range expectedFlags {
+		if flagsAll[i] != f {
+			t.Fatalf("expected flag %d to be %q, got %q", i, f, flagsAll[i])
+		}
 	}
 }
 

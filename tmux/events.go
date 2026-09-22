@@ -198,7 +198,6 @@ type PaneModeChangedEvent struct {
 type PasteBufferChangedEvent struct {
 	eventBase
 
-	// Name is the name of the modified paste buffer.
 	Name string
 }
 
@@ -206,7 +205,6 @@ type PasteBufferChangedEvent struct {
 type PasteBufferDeletedEvent struct {
 	eventBase
 
-	// Name is the name of the deleted paste buffer.
 	Name string
 }
 
@@ -223,7 +221,7 @@ type WindowPaneChangedEvent struct {
 
 func (e eventBase) RawName() string     { return e.name }
 func (e eventBase) Received() time.Time { return e.received }
-func (eventBase) event()                {}
+func (e eventBase) event()              {}
 
 // Data returns a defensive copy of the raw terminal output bytes emitted by the pane.
 func (e PaneOutputEvent) Data() []byte { return bytes.Clone(e.data) }
@@ -428,15 +426,15 @@ func decodeTargetEvent(base eventBase, name, rest string) (Event, bool, error) {
 
 		return PaneModeChangedEvent{eventBase: base, PaneID: PaneID(rest)}, true, nil
 	case "window-pane-changed":
-		wid, pid, _ := strings.Cut(rest, " ")
-		if !WindowID(wid).Valid() || !PaneID(pid).Valid() {
+		wid, paneID, _ := strings.Cut(rest, " ")
+		if !WindowID(wid).Valid() || !PaneID(paneID).Valid() {
 			return nil, true, ErrProtocol
 		}
 
 		return WindowPaneChangedEvent{
 			eventBase: base,
 			WindowID:  WindowID(wid),
-			PaneID:    PaneID(pid),
+			PaneID:    PaneID(paneID),
 		}, true, nil
 	default:
 		return nil, false, nil
@@ -646,7 +644,7 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 
 	sid := UnavailableValue[SessionID]()
 	wid := UnavailableValue[WindowID]()
-	pid := UnavailableValue[PaneID]()
+	paneID := UnavailableValue[PaneID]()
 
 	for _, x := range parts[1:] {
 		if SessionID(x).Valid() {
@@ -658,7 +656,7 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		}
 
 		if PaneID(x).Valid() {
-			pid = PresentValue(PaneID(x))
+			paneID = PresentValue(PaneID(x))
 		}
 	}
 
@@ -676,7 +674,7 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		RawHeader:   header,
 		SessionID:   sid,
 		WindowID:    wid,
-		PaneID:      pid,
+		PaneID:      paneID,
 		WindowIndex: widx,
 		data:        []byte(data),
 	}, nil

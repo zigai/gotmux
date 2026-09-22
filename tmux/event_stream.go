@@ -53,7 +53,7 @@ type EventStream struct {
 // Events creates a new [EventStream] with upfront reserved byte capacity.
 // Its context owns the stream's lifetime; canceling ctx closes the stream with ctx.Err().
 // Closing an individual stream releases its reservation and never affects other streams or the connection.
-func (c *Connection) Events(ctx context.Context, o EventOptions) (*EventStream, error) {
+func (c *Connection) Events(ctx context.Context, opts EventOptions) (*EventStream, error) {
 	if ctx == nil {
 		return nil, opError("Events", invalid("nil context"))
 	}
@@ -62,7 +62,7 @@ func (c *Connection) Events(ctx context.Context, o EventOptions) (*EventStream, 
 		return nil, opError("Events", err)
 	}
 
-	o, err := normalizeEventOptions(o)
+	opts, err := normalizeEventOptions(opts)
 	if err != nil {
 		return nil, opError("Events", err)
 	}
@@ -79,14 +79,14 @@ func (c *Connection) Events(ctx context.Context, o EventOptions) (*EventStream, 
 		return nil, opError("Events", errors.Join(ErrClosed, err))
 	}
 
-	if err := c.checkStreamCapacity(o.MaxBytes); err != nil {
+	if err := c.checkStreamCapacity(opts.MaxBytes); err != nil {
 		c.mu.Unlock()
 		return nil, opError("Events", err)
 	}
 
-	s := newEventStream(c, o.MaxBytes, o.MaxCount)
+	s := newEventStream(c, opts.MaxBytes, opts.MaxCount)
 	c.streams[s] = struct{}{}
-	c.eventReserved += o.MaxBytes
+	c.eventReserved += opts.MaxBytes
 
 	go func() {
 		select {
@@ -192,24 +192,24 @@ func newEventStream(conn *Connection, maxBytes int64, maxCount int) *EventStream
 	}
 }
 
-func normalizeEventOptions(o EventOptions) (EventOptions, error) {
-	if o.MaxBytes < 0 || o.MaxCount < 0 || o.Overflow != FailOnOverflow {
-		return o, invalid("event options")
+func normalizeEventOptions(opts EventOptions) (EventOptions, error) {
+	if opts.MaxBytes < 0 || opts.MaxCount < 0 || opts.Overflow != FailOnOverflow {
+		return opts, invalid("event options")
 	}
 
-	if o.MaxBytes == 0 {
-		o.MaxBytes = defaultMaxEventBytes
+	if opts.MaxBytes == 0 {
+		opts.MaxBytes = defaultMaxEventBytes
 	}
 
-	if o.MaxCount == 0 {
-		o.MaxCount = defaultMaxEventCount
+	if opts.MaxCount == 0 {
+		opts.MaxCount = defaultMaxEventCount
 	}
 
-	if o.MaxBytes > 1<<40 || o.MaxCount > 1<<20 {
-		return o, invalid("event limits")
+	if opts.MaxBytes > 1<<40 || opts.MaxCount > 1<<20 {
+		return opts, invalid("event limits")
 	}
 
-	return o, nil
+	return opts, nil
 }
 
 func (s *EventStream) release() {

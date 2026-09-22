@@ -43,9 +43,9 @@ type ControlOptions struct {
 	// When enabled, terminal echo is disabled and framing differences are handled natively.
 	NoEcho bool
 
-	// ClientFlags configures client startup flags (-f flag), such as [ClientFlagReadOnly]
+	// Flags configures client startup flags (-f flag), such as [ClientFlagReadOnly]
 	// or [ClientFlagWaitExit].
-	ClientFlags []ClientFlag
+	Flags []ClientFlag
 
 	// UTF8 specifies forced or disabled UTF-8 client mode (-u flag).
 	UTF8 UTF8Mode
@@ -90,8 +90,8 @@ type ControlNewSessionOptions struct {
 	// Program is the command executed in the initial window.
 	Program Program
 
-	// Env specifies environment variable overrides for the new session (-e flag).
-	Env map[string]string
+	// TmuxEnv specifies native tmux environment variables for the new session (-e flag).
+	TmuxEnv map[string]string
 
 	// Size optionally sets initial session dimensions (-x, -y).
 	Size Size
@@ -105,14 +105,8 @@ type ControlNewSessionOptions struct {
 }
 
 // Connection manages an active, bidirectional tmux -C control mode client.
-//
-// Concurrency model:
-// A Connection owns exactly one reader goroutine, one writer/dispatcher goroutine, and
-// an event distribution hub. Requests are dispatched sequentially over the wire.
-//
-// Generation safety:
-// Handles created from this connection carry a unique [ServerIdentity.Generation]
-// token so they cannot be accidentally reused if the connection terminates and restarts.
+// Requests are dispatched sequentially over the wire. Handles created from this
+// connection carry a unique [ServerIdentity.Generation] token to prevent reuse across restarts.
 type Connection struct {
 	server        *Server
 	original      *Server
@@ -148,12 +142,12 @@ type Connection struct {
 // OpenControl starts one owned control client attached to session. It does not
 // create a scratch session, detach any other client, or reconnect. ctx owns the
 // entire lifetime. The original Server continues to use subprocess execution.
-func (s *Server) OpenControl(ctx context.Context, session Session, o ControlOptions) (*Connection, error) {
+func (s *Server) OpenControl(ctx context.Context, session Session, opts ControlOptions) (*Connection, error) {
 	if err := s.validateOpenControl(ctx, session); err != nil {
 		return nil, opError("OpenControl", err)
 	}
 
-	o, err := normalizeControlOptions(o)
+	opts, err := normalizeControlOptions(opts)
 	if err != nil {
 		return nil, opError("OpenControl", err)
 	}
@@ -163,19 +157,19 @@ func (s *Server) OpenControl(ctx context.Context, session Session, o ControlOpti
 		return nil, opError("OpenControl", err)
 	}
 
-	args, err := s.controlAttachArgs(session, o, nonce)
+	args, err := s.controlAttachArgs(session, opts, nonce)
 	if err != nil {
 		return nil, opError("OpenControl", err)
 	}
 
-	cctx, cancel := context.WithCancelCause(ctx)
-	c := newConnection(s, session, o, cancel)
+	connCtx, cancel := context.WithCancelCause(ctx)
+	c := newConnection(s, session, opts, cancel)
 
-	if err = s.setupControlProcess(c, cctx, args, cancel); err != nil {
+	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
 		return nil, opError("OpenControl", err)
 	}
 
-	c.startWorkers(cctx, nonce, session.h.guard())
+	c.startWorkers(connCtx, nonce, session.h.guard())
 
 	if err = c.awaitReady(ctx); err != nil {
 		return nil, opError("OpenControl", err)
@@ -187,27 +181,27 @@ func (s *Server) OpenControl(ctx context.Context, session Session, o ControlOpti
 // OpenControlNewSession starts one owned control client by creating and attaching to a new session.
 // It does not create a scratch session, and ctx owns the entire lifetime.
 // The newly created [Session] is returned alongside the active [*Connection].
-func validateControlNewSessionStrings(o ControlNewSessionOptions) error {
-	if o.Name != "" && !wire.ValidString(o.Name) {
+func validateControlNewSessionStrings(opts ControlNewSessionOptions) error {
+	if opts.Name != "" && !wire.ValidString(opts.Name) {
 		return invalid("session name")
 	}
 
-	if o.Window != "" && !wire.ValidString(o.Window) {
+	if opts.Window != "" && !wire.ValidString(opts.Window) {
 		return invalid("window name")
 	}
 
-	if o.Dir != "" && !wire.ValidString(o.Dir) {
+	if opts.Dir != "" && !wire.ValidString(opts.Dir) {
 		return invalid("dir")
 	}
 
-	if o.Group != "" && !wire.ValidString(o.Group) {
+	if opts.Group != "" && !wire.ValidString(opts.Group) {
 		return invalid("group")
 	}
 
 	return nil
 }
 
-func (s *Server) validateOpenControlNewSession(ctx context.Context, o ControlNewSessionOptions) error {
+func (s *Server) validateOpenControlNewSession(ctx context.Context, opts ControlNewSessionOptions) error {
 	if s == nil || s.runner == nil {
 		return ErrInvalidHandle
 	}
@@ -220,11 +214,11 @@ func (s *Server) validateOpenControlNewSession(ctx context.Context, o ControlNew
 		return invalid("context")
 	}
 
-	if err := validateControlNewSessionStrings(o); err != nil {
+	if err := validateControlNewSessionStrings(opts); err != nil {
 		return err
 	}
 
-	if !o.Size.valid() {
+	if !opts.Size.valid() {
 		return invalid("size")
 	}
 
@@ -234,24 +228,24 @@ func (s *Server) validateOpenControlNewSession(ctx context.Context, o ControlNew
 // OpenControlNewSession starts one owned control client by creating and attaching to a new session.
 // It does not create a scratch session, and ctx owns the entire lifetime.
 // The newly created [Session] is returned alongside the active [*Connection].
-func (s *Server) OpenControlNewSession(ctx context.Context, o ControlNewSessionOptions) (*Connection, Session, error) {
-	if err := s.validateOpenControlNewSession(ctx, o); err != nil {
+func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessionOptions) (*Connection, Session, error) {
+	if err := s.validateOpenControlNewSession(ctx, opts); err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
 
-	ctrlOpts, err := normalizeControlOptions(o.Control)
+	ctrlOpts, err := normalizeControlOptions(opts.Control)
 	if err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
 
-	o.Control = ctrlOpts
+	opts.Control = ctrlOpts
 
 	nonce, err := token("TGO-READY:")
 	if err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
 
-	args, err := s.controlNewSessionArgs(o, nonce)
+	args, err := s.controlNewSessionArgs(opts, nonce)
 	if err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
@@ -261,15 +255,15 @@ func (s *Server) OpenControlNewSession(ctx context.Context, o ControlNewSessionO
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
 
-	cctx, cancel := context.WithCancelCause(ctx)
+	connCtx, cancel := context.WithCancelCause(ctx)
 	dummySession := Session{h: handle{server: nil, origin: info.Identity, id: "", kind: SessionKind, client: clientCheck{name: "", pid: 0, created: 0}}}
 
-	c := newConnection(s, dummySession, o.Control, cancel)
-	if err = s.setupControlProcess(c, cctx, args, cancel); err != nil {
+	c := newConnection(s, dummySession, opts.Control, cancel)
+	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
 	}
 
-	c.startWorkers(cctx, nonce, nil)
+	c.startWorkers(connCtx, nonce, nil)
 
 	if err = c.awaitReady(ctx); err != nil {
 		return nil, Session{}, opError("OpenControlNewSession", err)
@@ -283,14 +277,9 @@ func (s *Server) OpenControlNewSession(ctx context.Context, o ControlNewSessionO
 	return c, session, nil
 }
 
-// Client discovers and returns the exact [Client] handle representing this control mode connection.
-//
-// The client is identified uniquely by matching the process ID of the owned control process
-// against the tmux daemon's client list, preventing misidentification even under multiple
-// concurrent control clients.
-//
-// If the connection is closed or terminating, Client returns [ErrClosed].
-// If the client has detached or exited, Client returns [ErrNotFound].
+// Client discovers and returns the exact [Client] handle for this control mode connection,
+// matching the control process PID against the daemon's client list.
+// Returns [ErrClosed] if terminating or [ErrNotFound] if detached.
 func (c *Connection) Client(ctx context.Context) (Client, error) {
 	if c == nil {
 		return Client{}, opError("Connection.Client", ErrInvalidHandle)
@@ -508,54 +497,54 @@ func (c *Connection) stop(err error, normal bool) {
 	})
 }
 
-func validateControlLimits(o ControlOptions) bool {
-	if o.QueueDepth < 0 || o.QueuedBytes < 0 || o.FrameBytes < 0 || o.EventBytes < 0 || o.MaxStreams < 0 {
+func validateControlLimits(opts ControlOptions) bool {
+	if opts.QueueDepth < 0 || opts.QueuedBytes < 0 || opts.FrameBytes < 0 || opts.EventBytes < 0 || opts.MaxStreams < 0 {
 		return false
 	}
 
-	if o.QueueDepth > 1<<20 || o.QueuedBytes > 1<<40 || o.FrameBytes > 1<<40 || o.EventBytes > 1<<40 || o.MaxStreams > 1<<16 {
+	if opts.QueueDepth > 1<<20 || opts.QueuedBytes > 1<<40 || opts.FrameBytes > 1<<40 || opts.EventBytes > 1<<40 || opts.MaxStreams > 1<<16 {
 		return false
 	}
 
 	return true
 }
 
-func defaultControlOptions(o ControlOptions) ControlOptions {
-	if o.QueueDepth == 0 {
-		o.QueueDepth = defaultQueueDepth
+func defaultControlOptions(opts ControlOptions) ControlOptions {
+	if opts.QueueDepth == 0 {
+		opts.QueueDepth = defaultQueueDepth
 	}
 
-	if o.QueuedBytes == 0 {
-		o.QueuedBytes = defaultQueuedBytes
+	if opts.QueuedBytes == 0 {
+		opts.QueuedBytes = defaultQueuedBytes
 	}
 
-	if o.FrameBytes == 0 {
-		o.FrameBytes = defaultFrameBytes
+	if opts.FrameBytes == 0 {
+		opts.FrameBytes = defaultFrameBytes
 	}
 
-	if o.EventBytes == 0 {
-		o.EventBytes = defaultEventBytes
+	if opts.EventBytes == 0 {
+		opts.EventBytes = defaultEventBytes
 	}
 
-	if o.MaxStreams == 0 {
-		o.MaxStreams = defaultMaxStreams
+	if opts.MaxStreams == 0 {
+		opts.MaxStreams = defaultMaxStreams
 	}
 
-	return o
+	return opts
 }
 
-func normalizeControlOptions(o ControlOptions) (ControlOptions, error) {
-	if !validateControlLimits(o) {
-		return o, invalid("control limits")
+func normalizeControlOptions(opts ControlOptions) (ControlOptions, error) {
+	if !validateControlLimits(opts) {
+		return opts, invalid("control limits")
 	}
 
-	o = defaultControlOptions(o)
+	opts = defaultControlOptions(opts)
 
-	if !validateControlLimits(o) {
-		return o, invalid("control limits")
+	if !validateControlLimits(opts) {
+		return opts, invalid("control limits")
 	}
 
-	return o, nil
+	return opts, nil
 }
 
 func token(prefix string) (string, error) {
@@ -567,7 +556,7 @@ func token(prefix string) (string, error) {
 	return prefix + hex.EncodeToString(b[:]) + "\n", nil
 }
 
-func newConnection(s *Server, session Session, o ControlOptions, cancel context.CancelCauseFunc) *Connection {
+func newConnection(s *Server, session Session, opts ControlOptions, cancel context.CancelCauseFunc) *Connection {
 	gen := connectionGeneration.Add(1)
 	id := session.h.origin
 	id.Generation = gen
@@ -577,7 +566,7 @@ func newConnection(s *Server, session Session, o ControlOptions, cancel context.
 		original:      s,
 		identity:      id,
 		generation:    gen,
-		opts:          o,
+		opts:          opts,
 		cancel:        cancel,
 		stopCh:        make(chan struct{}),
 		mu:            sync.Mutex{},
@@ -586,9 +575,9 @@ func newConnection(s *Server, session Session, o ControlOptions, cancel context.
 		normal:        false,
 		streams:       map[*EventStream]struct{}{},
 		eventReserved: 0,
-		count:         semaphore.NewWeighted(int64(o.QueueDepth)),
-		bytes:         semaphore.NewWeighted(o.QueuedBytes),
-		requests:      make(chan *controlRequest, o.QueueDepth),
+		count:         semaphore.NewWeighted(int64(opts.QueueDepth)),
+		bytes:         semaphore.NewWeighted(opts.QueuedBytes),
+		requests:      make(chan *controlRequest, opts.QueueDepth),
 		frames:        make(chan controlFrame, 1),
 		ready:         make(chan error, 1),
 		done:          make(chan struct{}),
@@ -612,18 +601,18 @@ func newConnection(s *Server, session Session, o ControlOptions, cancel context.
 	return c
 }
 
-func (s *Server) controlRootArgs(o ControlOptions) []string {
+func (s *Server) controlRootArgs(opts ControlOptions) []string {
 	cfg := s.config
-	if o.UTF8 != UTF8Default {
-		cfg.UTF8 = o.UTF8
+	if opts.UTF8 != UTF8Default {
+		cfg.UTF8 = opts.UTF8
 	}
 
-	if o.Colors256 {
+	if opts.Colors256 {
 		cfg.Colors256 = true
 	}
 
-	if len(o.TerminalFeatures) > 0 {
-		cfg.TerminalFeatures = o.TerminalFeatures
+	if len(opts.TerminalFeatures) > 0 {
+		cfg.TerminalFeatures = opts.TerminalFeatures
 	}
 
 	sOverride := *s
@@ -631,20 +620,20 @@ func (s *Server) controlRootArgs(o ControlOptions) []string {
 	rootArgs := sOverride.baseArgs(false)
 
 	controlFlag := "-C"
-	if o.NoEcho {
+	if opts.NoEcho {
 		controlFlag = "-CC"
 	}
 
 	return append(rootArgs, controlFlag)
 }
 
-func (s *Server) controlFlags(o ControlOptions) (string, error) {
+func (s *Server) controlFlags(opts ControlOptions) (string, error) {
 	flags := []ClientFlag{ClientFlagIgnoreSize}
-	if !o.PaneOutput {
+	if !opts.PaneOutput {
 		flags = append(flags, ClientFlagNoOutput)
 	}
 
-	for _, f := range o.ClientFlags {
+	for _, f := range opts.Flags {
 		if !f.Valid() {
 			return "", invalid("client flag")
 		}
@@ -655,8 +644,8 @@ func (s *Server) controlFlags(o ControlOptions) (string, error) {
 	return formatClientFlags(flags), nil
 }
 
-func (s *Server) controlAttachArgs(session Session, o ControlOptions, nonce string) ([]string, error) {
-	flagsStr, err := s.controlFlags(o)
+func (s *Server) controlAttachArgs(session Session, opts ControlOptions, nonce string) ([]string, error) {
+	flagsStr, err := s.controlFlags(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -669,37 +658,37 @@ func (s *Server) controlAttachArgs(session Session, o ControlOptions, nonce stri
 		return nil, err
 	}
 
-	return append(s.controlRootArgs(o), args...), nil
+	return append(s.controlRootArgs(opts), args...), nil
 }
 
-func newSessionFlags(o ControlNewSessionOptions) []string {
+func newSessionFlags(opts ControlNewSessionOptions) []string {
 	var args []string
-	if o.AttachIfExists {
+	if opts.AttachIfExists {
 		args = append(args, "-A")
 	}
 
-	if o.Name != "" {
-		args = append(args, "-s", o.Name)
+	if opts.Name != "" {
+		args = append(args, "-s", opts.Name)
 	}
 
-	if o.Window != "" {
-		args = append(args, "-n", o.Window)
+	if opts.Window != "" {
+		args = append(args, "-n", opts.Window)
 	}
 
-	if o.Dir != "" {
-		args = append(args, "-c", o.Dir)
+	if opts.Dir != "" {
+		args = append(args, "-c", opts.Dir)
 	}
 
-	if o.Group != "" {
-		args = append(args, "-t", o.Group)
+	if opts.Group != "" {
+		args = append(args, "-t", opts.Group)
 	}
 
-	if o.Size.Width > 0 {
-		args = append(args, "-x", strconv.Itoa(o.Size.Width))
+	if opts.Size.Width > 0 {
+		args = append(args, "-x", strconv.Itoa(opts.Size.Width))
 	}
 
-	if o.Size.Height > 0 {
-		args = append(args, "-y", strconv.Itoa(o.Size.Height))
+	if opts.Size.Height > 0 {
+		args = append(args, "-y", strconv.Itoa(opts.Size.Height))
 	}
 
 	return args
@@ -725,17 +714,17 @@ func newSessionEnv(env map[string]string) []string {
 	return args
 }
 
-func (s *Server) controlNewSessionArgs(o ControlNewSessionOptions, nonce string) ([]string, error) {
-	flagsStr, err := s.controlFlags(o.Control)
+func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce string) ([]string, error) {
+	flagsStr, err := s.controlFlags(opts.Control)
 	if err != nil {
 		return nil, err
 	}
 
-	cmdArgs := append([]string{"new-session", "-f", flagsStr}, newSessionFlags(o)...)
+	cmdArgs := append([]string{"new-session", "-f", flagsStr}, newSessionFlags(opts)...)
 
-	cmdArgs = append(cmdArgs, newSessionEnv(o.Env)...)
+	cmdArgs = append(cmdArgs, newSessionEnv(opts.TmuxEnv)...)
 
-	progArgs, err := o.Program.argv()
+	progArgs, err := opts.Program.argv()
 	if err != nil {
 		return nil, err
 	}
@@ -750,11 +739,11 @@ func (s *Server) controlNewSessionArgs(o ControlNewSessionOptions, nonce string)
 		return nil, err
 	}
 
-	return append(s.controlRootArgs(o.Control), args...), nil
+	return append(s.controlRootArgs(opts.Control), args...), nil
 }
 
-func (s *Server) setupControlProcess(c *Connection, cctx context.Context, args []string, cancel context.CancelCauseFunc) error {
-	c.cmd = s.runner.command(cctx, args)
+func (s *Server) setupControlProcess(connCtx context.Context, c *Connection, args []string, cancel context.CancelCauseFunc) error {
+	c.cmd = s.runner.command(connCtx, args)
 
 	if c.opts.NoEcho {
 		master, slave, err := openPTY()
@@ -880,7 +869,7 @@ func (s *Server) validateOpenControl(ctx context.Context, session Session) error
 	return nil
 }
 
-func (c *Connection) startWorkers(cctx context.Context, nonce string, guard *guard) {
+func (c *Connection) startWorkers(connCtx context.Context, nonce string, guard *guard) {
 	c.work.Go(c.reader)
 	c.work.Go(func() {
 		_, copyErr := io.Copy(c.diagnostics, c.stderr)
@@ -894,13 +883,13 @@ func (c *Connection) startWorkers(cctx context.Context, nonce string, guard *gua
 			c.stop(errors.Join(ErrClosed, waitErr), false)
 		}
 	})
-	c.work.Go(func() { c.dispatch(cctx, nonce, guard) })
+	c.work.Go(func() { c.dispatch(connCtx, nonce, guard) })
 
 	c.work.Go(func() {
-		<-cctx.Done()
+		<-connCtx.Done()
 
 		if c.closedError() == nil {
-			c.stop(context.Cause(cctx), false)
+			c.stop(context.Cause(connCtx), false)
 		}
 	})
 	go func() { c.work.Wait(); close(c.done) }()

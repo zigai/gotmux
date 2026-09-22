@@ -102,15 +102,15 @@ func NewServer(tb testing.TB) *tmux.Server {
 	defer cancel()
 
 	session, err := server.NewSession(ctx, tmux.NewSessionOptions{
-		Name:       "fixture",
-		Dir:        "",
-		Window:     "",
-		Program:    tmux.Exec("/bin/sh"),
-		Env:        nil,
-		SessionEnv: nil,
-		Size:       tmux.Size{Width: defaultWidth, Height: defaultHeight},
-		Start:      tmux.AllowStart,
-		Group:      "",
+		Name:    "fixture",
+		Dir:     "",
+		Window:  "",
+		Program: tmux.Exec("/bin/sh"),
+		Env:     nil,
+		TmuxEnv: nil,
+		Size:    tmux.Size{Width: defaultWidth, Height: defaultHeight},
+		Start:   tmux.AllowStart,
+		Group:   "",
 	})
 	if session.Valid() {
 		identity = tmux.PresentValue(session.Identity())

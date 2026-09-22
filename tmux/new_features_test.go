@@ -513,7 +513,7 @@ func TestRespawnPreserveEnvironment(t *testing.T) {
 		PreserveEnvironment: true,
 	}
 
-	err := respawn(zeroHandle, t.Context(), "respawn-pane", opts)
+	err := respawn(t.Context(), zeroHandle, "respawn-pane", opts)
 	if err == nil {
 		t.Fatal("expected error on invalid dir")
 	}

@@ -223,8 +223,8 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (PaneInfo, error) {
 	d, id := s.decoder(m, "pane", expected)
 
-	pid := PaneID(d.str("pane_id"))
-	if !pid.Valid() {
+	paneID := PaneID(d.str("pane_id"))
+	if !paneID.Valid() {
 		d.fail("pane_id", wire.ErrRecord)
 	}
 
@@ -252,7 +252,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 
 	v := PaneInfo{
 		rawRecord:      rawRecord{raw: m},
-		ID:             pid,
+		ID:             paneID,
 		WindowID:       wid,
 		SessionID:      pCtx.sessionID,
 		SessionName:    pCtx.sessionName,
@@ -277,7 +277,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		Selection:      selectionVal,
 		CursorX:        d.nonnegative("cursor_x"),
 		CursorY:        d.nonnegative("cursor_y"),
-		h:              s.newHandle(string(pid), PaneKind, id),
+		h:              s.newHandle(string(paneID), PaneKind, id),
 	}
 
 	if d.err != nil {
@@ -400,7 +400,7 @@ func fieldsFor(kind ObjectKind) []string {
 	switch kind {
 	case SessionKind:
 		return schema.WithIdentity(schema.Session)
-	case WindowKind, LinkKind:
+	case WindowKind, WindowLinkKind:
 		return schema.WithIdentity(schema.Window)
 	case PaneKind:
 		return schema.WithIdentity(schema.Pane)

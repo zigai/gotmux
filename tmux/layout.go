@@ -20,11 +20,17 @@ const (
 )
 
 const (
-	// Vertical splits the pane vertically (-v flag), placing the new pane below the current one.
-	Vertical Direction = iota
+	// DirectionVertical splits the pane vertically (-v flag), placing the new pane below the current one.
+	DirectionVertical Direction = iota
 
-	// Horizontal splits the pane horizontally (-h flag), placing the new pane beside the current one.
-	Horizontal
+	// DirectionHorizontal splits the pane horizontally (-h flag), placing the new pane beside the current one.
+	DirectionHorizontal
+)
+
+const (
+	// Vertical and Horizontal are retained as shorthand aliases for DirectionVertical and DirectionHorizontal.
+	Vertical   = DirectionVertical
+	Horizontal = DirectionHorizontal
 )
 
 const (
@@ -97,7 +103,7 @@ func (s SplitSize) args() ([]string, error) {
 }
 
 // SwapWith exchanges this pane with another pane according to opts.
-func (p Pane) SwapWith(ctx context.Context, other Pane, o SwapPaneOptions) error {
+func (p Pane) SwapWith(ctx context.Context, other Pane, opts SwapPaneOptions) error {
 	if err := p.h.check(); err != nil {
 		return opError("SwapWith", err)
 	}
@@ -107,11 +113,11 @@ func (p Pane) SwapWith(ctx context.Context, other Pane, o SwapPaneOptions) error
 	}
 
 	args := []string{"-s", p.h.id, "-t", other.h.id}
-	if o.Up {
+	if opts.Up {
 		args = append(args, "-U")
 	}
 
-	if o.Down {
+	if opts.Down {
 		args = append(args, "-D")
 	}
 

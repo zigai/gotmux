@@ -27,10 +27,7 @@ type (
 		// Raw is the original unparsed version string (e.g. "tmux 3.6a").
 		Raw string
 
-		// Major is the major version integer (e.g. 3).
 		Major int
-
-		// Minor is the minor version integer (e.g. 6).
 		Minor int
 
 		// Patch is the single-letter release suffix if present (e.g. "a").

@@ -128,7 +128,7 @@ func parseAccessLine(line string) (AccessEntry, bool) {
 }
 
 // GrantAccess grants or modifies socket access for a user or group (server-access -a).
-func (s *Server) GrantAccess(ctx context.Context, name string, o AccessOptions) error {
+func (s *Server) GrantAccess(ctx context.Context, name string, opts AccessOptions) error {
 	if s == nil {
 		return opError("GrantAccess", ErrInvalidHandle)
 	}
@@ -138,11 +138,11 @@ func (s *Server) GrantAccess(ctx context.Context, name string, o AccessOptions) 
 	}
 
 	var args []string
-	if o.Group {
+	if opts.Group {
 		args = append(args, "-g")
 	}
 
-	if o.ReadOnly {
+	if opts.ReadOnly {
 		args = append(args, "-r")
 	} else {
 		args = append(args, "-w")

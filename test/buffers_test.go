@@ -108,7 +108,7 @@ IFS= read -r hold`
 
 	var options tmux.PasteOptions
 
-	options.DeleteAfter = true
+	options.Delete = true
 	if err := pane.PasteBuffer(ctx, buffer, options); err != nil {
 		t.Fatal(err)
 	}
@@ -395,14 +395,11 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 	}
 
 	if err := pane.Handle().PasteWith(ctx, tmux.PasteOptions{
-		Buffer:            bufPaste,
-		Delete:            true,
-		BracketedPaste:    false,
-		NoTrailingNewline: false,
-		Separator:         "",
-		DeleteAfter:       false,
-		Bracketed:         false,
-		RawNewlines:       false,
+		Buffer:         bufPaste,
+		Delete:         true,
+		BracketedPaste: false,
+		StripNewlines:  false,
+		Separator:      "",
 	}); err != nil {
 		t.Fatalf("PasteWith failed: %v", err)
 	}

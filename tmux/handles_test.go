@@ -165,3 +165,77 @@ func TestUnprobedHandleSplit(t *testing.T) {
 		t.Fatalf("child=%q", child.ID())
 	}
 }
+
+func TestClientHandle(t *testing.T) {
+	s, _, _ := mockScriptServer(t)
+
+	c, err := s.ClientHandle("/dev/pts/1")
+	if err != nil {
+		t.Fatalf("expected valid ClientHandle, got: %v", err)
+	}
+
+	if c.Name() != "/dev/pts/1" {
+		t.Fatalf("expected /dev/pts/1, got %q", c.Name())
+	}
+
+	if _, err := s.ClientHandle(""); err == nil {
+		t.Fatal("expected error on empty client name")
+	}
+
+	if _, err := s.ClientHandle("/dev/pts/\x00"); err == nil {
+		t.Fatal("expected error on client name with NUL")
+	}
+
+	var nilServer *Server
+	if _, err := nilServer.ClientHandle("/dev/pts/1"); !errors.Is(err, ErrInvalidHandle) {
+		t.Fatalf("expected ErrInvalidHandle for nil server, got: %v", err)
+	}
+}
+
+func TestWindowSelect(t *testing.T) {
+	s, response, log := mockScriptServer(t)
+
+	w, err := s.WindowHandle("@1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeMockResponse(t, response, []byte("\n"))
+
+	if err := w.Select(context.Background()); err != nil {
+		t.Fatalf("Window.Select failed: %v", err)
+	}
+
+	args, _ := os.ReadFile(log)
+	if !bytes.Contains(args, []byte("select-window")) {
+		t.Fatalf("expected select-window in dispatched args: %q", args)
+	}
+}
+
+func TestBufferHelpers(t *testing.T) {
+	s, response, log := mockScriptServer(t)
+
+	if err := s.SetBuffer(context.Background(), "", []byte("hello")); err == nil {
+		t.Fatal("expected error on empty buffer name")
+	}
+
+	if err := s.SetBuffer(context.Background(), "b1", nil); !errors.Is(err, ErrUnsupported) {
+		t.Fatalf("expected ErrUnsupported on zero-length replacement, got: %v", err)
+	}
+
+	p, err := s.PaneHandle("%1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeMockResponse(t, response, []byte("\n"))
+
+	if err := p.Paste(context.Background()); err != nil {
+		t.Fatalf("Pane.Paste failed: %v", err)
+	}
+
+	args, _ := os.ReadFile(log)
+	if !bytes.Contains(args, []byte("paste-buffer")) {
+		t.Fatalf("expected paste-buffer in dispatched args: %q", args)
+	}
+}
