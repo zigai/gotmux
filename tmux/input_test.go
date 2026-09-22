@@ -2,8 +2,30 @@ package tmux
 
 import (
 	"context"
+	"slices"
 	"testing"
 )
+
+func TestCaptureFlagsDistinguishEscapesFromEmptyCellTrimming(t *testing.T) {
+	var opts CaptureOptions
+
+	opts.IncludeEscapes = true
+
+	flags := captureFlagArgs(opts)
+
+	if !slices.Contains(flags, "-e") || slices.Contains(flags, "-T") {
+		t.Fatalf("IncludeEscapes flags = %v", flags)
+	}
+
+	opts.IncludeEscapes = false
+	opts.TrimEmptyCells = true
+
+	flags = captureFlagArgs(opts)
+
+	if !slices.Contains(flags, "-T") || slices.Contains(flags, "-e") {
+		t.Fatalf("TrimEmptyCells flags = %v", flags)
+	}
+}
 
 func TestCaptureTitleDelimiter(t *testing.T) {
 	s, response, _ := mockScriptServer(t)
@@ -26,7 +48,7 @@ func TestCaptureTitleDelimiter(t *testing.T) {
 		PreserveSpaces:      false,
 		PaneState:           false,
 		Quiet:               false,
-		Hyperlinks:          false,
+		TrimEmptyCells:      false,
 		Screen:              0,
 		Buffer:              "",
 		MaxBytes:            0,

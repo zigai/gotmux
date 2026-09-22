@@ -3,6 +3,7 @@
 package tmux_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"testing"
@@ -569,6 +570,31 @@ func TestMissingObjectEffect(t *testing.T) {
 		if opErr.Outcome.Effect == tmux.Confirmed {
 			t.Errorf("read-only missing session lookup reported Effect: Confirmed! Must not be Confirmed.")
 		}
+	}
+}
+
+func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	pane := firstPane(t, server, ctx)
+	if err := pane.Submit(ctx, `printf '\033]8;;https://example.invalid\033\\LINK\033]8;;\033\\\n'`); err != nil {
+		t.Fatal(err)
+	}
+
+	var opts tmux.CaptureOptions
+	opts.IncludeEscapes = true
+	var captured []byte
+	awaitObservation(t, ctx, "OSC 8 capture", func() bool {
+		var err error
+		captured, err = pane.Capture(ctx, opts)
+		return err == nil && bytes.Contains(captured, []byte("\x1b]8;;https://example.invalid"))
+	})
+	if !bytes.Contains(captured, []byte("LINK")) {
+		t.Fatalf("linked text missing from capture: %q", captured)
+	}
+
+	plain, err := pane.Capture(ctx, tmux.CaptureOptions{})
+	if err != nil || bytes.Contains(plain, []byte("\x1b]8;;https://example.invalid")) {
+		t.Fatalf("plain capture = %q, %v", plain, err)
 	}
 }
 

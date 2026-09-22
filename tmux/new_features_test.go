@@ -485,7 +485,7 @@ func TestCaptureFlagArgsEnhanced(t *testing.T) {
 		PreserveSpaces:      false,
 		PaneState:           false,
 		Quiet:               false,
-		Hyperlinks:          false,
+		TrimEmptyCells:      false,
 		Screen:              0,
 		Buffer:              "",
 		MaxBytes:            0,

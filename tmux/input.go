@@ -95,7 +95,7 @@ type (
 		// JoinWrapped joins lines that were soft-wrapped by terminal dimensions (-J flag).
 		JoinWrapped bool
 
-		// IncludeEscapes retains ANSI formatting and color escape sequences (-e flag).
+		// IncludeEscapes retains escape sequences for text attributes, colors, and OSC 8 hyperlinks (-e flag).
 		IncludeEscapes bool
 
 		// PreserveSpaces preserves trailing spaces on each line (-N flag).
@@ -107,8 +107,8 @@ type (
 		// Quiet suppresses errors if the target pane cannot be captured (-q flag).
 		Quiet bool
 
-		// Hyperlinks retains terminal hyperlinks in the captured output (-T flag).
-		Hyperlinks bool
+		// TrimEmptyCells omits trailing cells without characters (-T flag).
+		TrimEmptyCells bool
 
 		// Screen selects which terminal screen buffer to capture.
 		Screen CaptureScreen
@@ -736,7 +736,7 @@ func captureFlagArgs(opts CaptureOptions) []string {
 		args = append(args, "-q")
 	}
 
-	if opts.Hyperlinks {
+	if opts.TrimEmptyCells {
 		args = append(args, "-T")
 	}
 
