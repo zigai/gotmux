@@ -573,6 +573,40 @@ func TestMissingObjectEffect(t *testing.T) {
 	}
 }
 
+func TestDuplicateSessionCreationReportsRejection(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	var opts tmux.NewSessionOptions
+	opts.Name = "fixture"
+
+	_, err := server.NewSession(ctx, opts)
+	opErr, ok := errors.AsType[*tmux.OperationError](err)
+	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) || opErr.Outcome.Effect != tmux.Rejected || len(opErr.Outcome.Created) != 0 {
+		t.Fatalf("duplicate session = %#v, %v", opErr, err)
+	}
+
+	if _, err := session.Info(ctx); err != nil {
+		t.Fatalf("original session was lost: %v", err)
+	}
+}
+
+func TestStaleSessionEnvironmentReportsNotFound(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	var opts tmux.NewSessionOptions
+	opts.Name = "stale"
+	stale, err := server.NewSession(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stale.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = stale.Environment().Get(ctx, "HOME", false)
+	if !errors.Is(err, tmux.ErrNotFound) || errors.Is(err, tmux.ErrServerChanged) {
+		t.Fatalf("stale session environment = %v", err)
+	}
+}
+
 func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	pane := firstPane(t, server, ctx)

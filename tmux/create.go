@@ -426,9 +426,22 @@ func (p Pane) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
 
 func creationError(name string, err error, data []byte, kind ObjectKind) error {
 	outcome := outcomeOf(err)
+
 	outcome.Created = append(outcome.Created, recoverCreated(data, kind)...)
+	if name == "NewSession" && errors.Is(err, ErrAlreadyExists) && len(data) == 0 && len(outcome.Created) == 0 && rejectionComplete(err) {
+		outcome.Effect = Rejected
+	}
 
 	return &OperationError{Operation: name, Outcome: outcome, Err: err}
+}
+
+func rejectionComplete(err error) bool {
+	cmd, ok := errors.AsType[*CommandError](err)
+
+	return ok && cmd.Timeout == NoTimeout && !errors.Is(err, context.Canceled) &&
+		!errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrOutputLimit) &&
+		!errors.Is(err, ErrProtocol) && !errors.Is(err, ErrClosed) &&
+		!errors.Is(err, ErrServerChanged) && !errors.Is(err, ErrNoServer)
 }
 
 func newSessionArgs(opts NewSessionOptions) ([]string, error) {

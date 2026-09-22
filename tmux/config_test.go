@@ -266,6 +266,23 @@ func TestErrorRedactionAndEffects(t *testing.T) {
 	}
 }
 
+func TestStderrClassifiesMissingAndDuplicateSessions(t *testing.T) {
+	for _, tc := range []struct {
+		stderr string
+		want   error
+	}{
+		{stderr: "no such session: $9\n", want: ErrNotFound},
+		{stderr: "duplicate session: fixture\n", want: ErrAlreadyExists},
+		{stderr: "no such session", want: nil},
+		{stderr: "duplicate session", want: nil},
+	} {
+		got := classifyStderr([]byte(tc.stderr))
+		if !errors.Is(got, tc.want) {
+			t.Errorf("stderr %q classified as %v, want %v", tc.stderr, got, tc.want)
+		}
+	}
+}
+
 func TestStartupVersionPatternMatchesStableGate(t *testing.T) {
 	re := regexp.MustCompile(supportedStablePattern)
 	for _, version := range []string{"3.5", "3.6", "3.6a", "3.7c", "3.10", "4.0", "10.1b", "3.7-vendor", "03.6", "3.06"} {

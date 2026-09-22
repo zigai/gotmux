@@ -17,6 +17,8 @@ const (
 	Unknown
 	// Confirmed indicates tmux processed the command, but subsequent inspection failed.
 	Confirmed
+	// Rejected indicates tmux refused the mutation and did not create the requested object.
+	Rejected
 )
 
 const (
@@ -45,6 +47,9 @@ var (
 
 	// ErrNotFound indicates the target session, window, pane, client, or buffer does not exist.
 	ErrNotFound = errors.New("tmux: object not found")
+
+	// ErrAlreadyExists indicates tmux refused to create an object because its name is in use.
+	ErrAlreadyExists = errors.New("tmux: object already exists")
 
 	// ErrAmbiguousTarget indicates an unqualified target matched multiple objects.
 	ErrAmbiguousTarget = errors.New("tmux: ambiguous target")
@@ -98,7 +103,7 @@ var (
 	ErrInconsistent = errors.New("tmux: inconsistent observation")
 )
 
-// Effect describes whether a mutation was dispatched or acknowledged.
+// Effect describes what is known about a requested mutation.
 type (
 	Effect uint8
 
@@ -175,6 +180,8 @@ func (e Effect) String() string {
 		return "unknown"
 	case Confirmed:
 		return "confirmed"
+	case Rejected:
+		return "rejected"
 	}
 
 	return "invalid"

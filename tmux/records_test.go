@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"strings"
@@ -369,6 +370,37 @@ func TestProbeFailureDoesNotDispatchRequestedMutation(t *testing.T) {
 	e := opError("NewSession", &discoveryError{Err: &CommandError{Command: "", Result: failedResult(), Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrNoServer}})
 	if outcomeOf(e).Effect != NotSent || !errors.Is(e, ErrNoServer) {
 		t.Fatal(e)
+	}
+}
+
+func TestDuplicateSessionRejectionHasNoCreatedObject(t *testing.T) {
+	commandErr := &CommandError{Command: "new-session", Result: Result{Stdout: nil, Stderr: []byte("duplicate session: fixture\n"), ExitCode: 1}, Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrAlreadyExists}
+	err := creationError("NewSession", commandErr, nil, SessionKind)
+
+	got, ok := errors.AsType[*OperationError](err)
+	if !ok || !errors.Is(err, ErrAlreadyExists) || got.Outcome.Effect != Rejected || len(got.Outcome.Created) != 0 {
+		t.Fatalf("duplicate creation = %#v, %v", got, err)
+	}
+
+	commandErr.Err = errors.Join(ErrAlreadyExists, context.Canceled)
+	err = creationError("NewSession", commandErr, nil, SessionKind)
+
+	got, ok = errors.AsType[*OperationError](err)
+	if !ok || got.Outcome.Effect != Unknown {
+		t.Fatalf("canceled duplicate creation = %#v, %v", got, err)
+	}
+
+	var prior CreatedObject
+
+	prior.Kind = SessionKind
+	prior.RawID = "$99"
+	commandErr.Err = ErrAlreadyExists
+	commandErr.Outcome.Created = []CreatedObject{prior}
+	err = creationError("NewSession", commandErr, nil, SessionKind)
+
+	got, ok = errors.AsType[*OperationError](err)
+	if !ok || got.Outcome.Effect != Unknown || len(got.Outcome.Created) != 1 || got.Outcome.Created[0].RawID != prior.RawID {
+		t.Fatalf("duplicate with prior creation = %#v, %v", got, err)
 	}
 }
 

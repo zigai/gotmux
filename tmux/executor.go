@@ -68,7 +68,7 @@ func (s *Server) executeProcess(ctx context.Context, op *operation, args []strin
 }
 
 func isNotFoundStderr(s string) bool {
-	for _, prefix := range []string{"can't find pane:", "can't find window:", "can't find session:", "can't find client:", "no such buffer:", "no buffer "} {
+	for _, prefix := range []string{"can't find pane:", "can't find window:", "can't find session:", "can't find client:", "no such session:", "no such buffer:", "no buffer "} {
 		if strings.HasPrefix(s, prefix) {
 			return true
 		}
@@ -95,6 +95,10 @@ func classifyStderr(data []byte) error {
 
 	if isNotFoundStderr(s) {
 		return ErrNotFound
+	}
+
+	if strings.HasPrefix(s, "duplicate session: ") {
+		return ErrAlreadyExists
 	}
 
 	if strings.HasPrefix(s, "multiple sessions:") || strings.HasPrefix(s, "ambiguous ") {
