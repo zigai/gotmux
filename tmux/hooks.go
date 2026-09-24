@@ -755,7 +755,7 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 		Payload: CommandPayload{raw: raw, sequence: CommandSequence{commands: nil}, parsed: false},
 	}
 
-	parts, err := wire.SplitSequence(raw)
+	parts, err := wire.SplitBindingSequence(raw)
 	if err != nil || len(parts) == 0 {
 		return b
 	}

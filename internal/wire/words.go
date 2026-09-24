@@ -27,6 +27,10 @@ func ParseWords(text string) ([]string, error) {
 			continue
 		}
 
+		if isWordComment(c, quote, started) {
+			break
+		}
+
 		if quote == 0 && isWordSeparator(c) {
 			return nil, ErrCommandText
 		}
@@ -68,14 +72,28 @@ func ParseWords(text string) ([]string, error) {
 }
 
 func SplitSequence(text string) ([]string, error) {
+	return splitSequence(text, false)
+}
+
+func SplitBindingSequence(text string) ([]string, error) {
+	return splitSequence(text, true)
+}
+
+func splitSequence(text string, escapedSeparator bool) ([]string, error) {
 	out := []string{}
 	start := 0
 	quote := byte(0)
+	wordStarted := false
 
 	for i := 0; i < len(text); i++ {
 		c := text[i]
+		if isWordComment(c, quote, wordStarted) {
+			text = text[:i]
+			break
+		}
+
 		if quote == 0 {
-			nextI, nextStart, handled, err := handleUnquotedSequenceChar(text, start, i, c, &out)
+			nextI, nextStart, handled, err := handleUnquotedSequenceChar(text, start, i, c, escapedSeparator, &out)
 			if err != nil {
 				return nil, err
 			}
@@ -83,6 +101,7 @@ func SplitSequence(text string) ([]string, error) {
 			if handled {
 				i = nextI
 				start = nextStart
+				wordStarted = false
 
 				continue
 			}
@@ -95,13 +114,13 @@ func SplitSequence(text string) ([]string, error) {
 			}
 
 			i = next
+			wordStarted = true
 
 			continue
 		}
 
-		if nextQuote, changed := toggleQuote(c, quote); changed {
-			quote = nextQuote
-		}
+		quote, _ = toggleQuote(c, quote)
+		wordStarted = quote != 0 || !isSpace(c)
 	}
 
 	if quote != 0 {
@@ -116,41 +135,38 @@ func SplitSequence(text string) ([]string, error) {
 	return out, nil
 }
 
-func isSequenceSeparator(text string, i int) (int, bool) {
-	if text[i] == ';' {
-		return 0, true
-	}
-
-	if text[i] == '\\' && i+1 < len(text) && text[i+1] == ';' {
-		return 1, true
-	}
-
-	return 0, false
+func isWordComment(c, quote byte, started bool) bool {
+	return c == '#' && quote == 0 && !started
 }
 
-func handleUnquotedSequenceChar(text string, start, i int, c byte, out *[]string) (int, int, bool, error) {
+func handleUnquotedSequenceChar(text string, start, i int, c byte, escapedSeparator bool, out *[]string) (int, int, bool, error) {
 	if isSequenceInvalid(c) {
 		return 0, 0, false, ErrCommandText
 	}
 
-	if adv, isSep := isSequenceSeparator(text, i); isSep {
-		nextI, nextStart, err := parseSequencePart(text, start, i, adv, out)
+	if c == ';' || (escapedSeparator && c == '\\' && i+1 < len(text) && text[i+1] == ';') {
+		advance := 0
+		if c == '\\' {
+			advance = 1
+		}
+
+		nextI, nextStart, err := parseSequencePart(text, start, i, advance, out)
+
 		return nextI, nextStart, true, err
 	}
 
 	return i, start, false, nil
 }
 
-func parseSequencePart(text string, start, i, adv int, out *[]string) (int, int, error) {
+func parseSequencePart(text string, start, i, advance int, out *[]string) (int, int, error) {
 	part, err := extractPart(text, start, i)
 	if err != nil {
 		return 0, 0, err
 	}
 
 	*out = append(*out, part)
-	nextI := i + adv
 
-	return nextI, nextI + 1, nil
+	return i + advance, i + advance + 1, nil
 }
 
 func isSpace(c byte) bool {
@@ -277,6 +293,10 @@ func mapEscapeChar(c byte) (byte, bool) {
 		return '\v', true
 	case 'a':
 		return '\a', true
+	case 'e':
+		return '\x1b', true
+	case 's':
+		return ' ', true
 	case '\n':
 		return 0, false
 	default:

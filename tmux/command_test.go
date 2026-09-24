@@ -251,6 +251,24 @@ func TestParseSequence(t *testing.T) {
 	if cmds[1].Name() != "display-message" || !reflect.DeepEqual(cmds[1].Args(), []string{"-p", "ready"}) {
 		t.Errorf("cmd 1 unexpected: %+v", cmds[1])
 	}
+
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{`display-message -p a\;b`, []string{"-p", "a;b"}},
+		{`display-message -p x # comment ; ignored`, []string{"-p", "x"}},
+	} {
+		seq, err := ParseSequence(tc.input)
+		if err != nil {
+			t.Fatalf("ParseSequence(%q): %v", tc.input, err)
+		}
+
+		cmds := seq.Commands()
+		if len(cmds) != 1 || cmds[0].Name() != "display-message" || !reflect.DeepEqual(cmds[0].Args(), tc.want) {
+			t.Errorf("ParseSequence(%q) = %+v; want one display-message with %v", tc.input, cmds, tc.want)
+		}
+	}
 }
 
 func TestSequenceCopies(t *testing.T) {

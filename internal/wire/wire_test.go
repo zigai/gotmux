@@ -61,7 +61,7 @@ func TestMalformedRecords(t *testing.T) {
 }
 
 func TestQuotedWords(t *testing.T) {
-	for _, text := range []string{"", "a b", "a\tb\n", `;'"\$#{}[]`, "\\;", "--", "\xff\xfe", "${HOME}", "$(touch never)", "`date`"} {
+	for _, text := range []string{"", "a b", "a\tb\n", `;'"\$#{}[]`, "\\;", "--", "\xff\xfe", "${HOME}", "$(touch never)", "`date`", "~", "~/file", "~root"} {
 		var b strings.Builder
 		if err := Quoted(&b, text); err != nil {
 			t.Fatal(err)
@@ -76,6 +76,25 @@ func TestQuotedWords(t *testing.T) {
 	var b strings.Builder
 	if err := Quoted(&b, "x\x00y"); err == nil {
 		t.Fatal("NUL accepted")
+	}
+}
+
+func TestParseWordsEscapesAndComments(t *testing.T) {
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{`\e`, []string{"\x1b"}},
+		{`\s`, []string{" "}},
+		{`\q`, []string{"q"}},
+		{`x # comment`, []string{"x"}},
+		{`x#literal`, []string{"x#literal"}},
+		{`"#literal"`, []string{"#literal"}},
+	} {
+		got, err := ParseWords(tc.input)
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("ParseWords(%q) = %#v, %v; want %#v", tc.input, got, err, tc.want)
+		}
 	}
 }
 
@@ -124,6 +143,24 @@ func TestSequenceParsing(t *testing.T) {
 	parts, err := SplitSequence(`send-keys "a;b" ; display-message 'c;d'`)
 	if err != nil || len(parts) != 2 {
 		t.Fatalf("%#v %v", parts, err)
+	}
+
+	parts, err = SplitBindingSequence(`bind-key x display-message one \; display-message two`)
+	if err != nil || len(parts) != 2 {
+		t.Fatalf("SplitBindingSequence = %#v, %v; want two commands", parts, err)
+	}
+
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{`display -p a\;b`, []string{`display -p a\;b`}},
+		{`display -p x # comment ; ignored`, []string{`display -p x`}},
+	} {
+		got, err := SplitSequence(tc.input)
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("SplitSequence(%q) = %#v, %v; want %#v", tc.input, got, err, tc.want)
+		}
 	}
 
 	for _, s := range []string{`{display}`, `x ; ; y`, `x "unterminated`, "x\ny"} {

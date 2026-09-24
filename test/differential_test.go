@@ -72,6 +72,9 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 				"$(touch /tmp/bad)",
 				"`date`",
 				"$1",
+				"~",
+				"~/file",
+				"~root",
 			},
 		},
 		{

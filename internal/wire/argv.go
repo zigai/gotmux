@@ -130,7 +130,7 @@ func isSafeQuoteByte(b byte) bool {
 	}
 
 	switch b {
-	case '"', '\\', '$', '`':
+	case '"', '\\', '$', '`', '~':
 		return false
 	default:
 		return true
