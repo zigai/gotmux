@@ -176,6 +176,15 @@ func TestControlCommandErrorStartingWithPercent(t *testing.T) {
 	}
 }
 
+func TestControlPercentPrefixedFrameDataCountsTowardLimit(t *testing.T) {
+	wire := "%begin 1 4 1\n%: " + strings.Repeat("x", 35) + "\n%error 1 4 1\n"
+
+	_, err := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 45, func(Event) {})
+	if !errors.Is(err, ErrOutputLimit) {
+		t.Fatalf("readControlUnit error = %v, want ErrOutputLimit", err)
+	}
+}
+
 func TestControlInterleavedEventsDoNotExhaustFrameBytes(t *testing.T) {
 	var events []Event
 

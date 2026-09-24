@@ -259,6 +259,8 @@ func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(E
 			return nil, lineErr
 		}
 
+		before := len(f.data)
+
 		done, lineProcessErr := processFrameLine(line, id, maxBytes, f, &ordinary, publish)
 		if lineProcessErr != nil {
 			return nil, lineProcessErr
@@ -268,25 +270,11 @@ func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(E
 			return f, nil
 		}
 
-		nextUsed, trackErr := trackFrameBytes(line, used, maxBytes)
-		if trackErr != nil {
-			return nil, trackErr
+		used += int64(len(f.data) - before)
+		if used > maxBytes {
+			return nil, ErrOutputLimit
 		}
-
-		used = nextUsed
 	}
-}
-
-func trackFrameBytes(line []byte, used, maxBytes int64) (int64, error) {
-	if len(line) == 0 || line[0] != '%' {
-		if used+int64(len(line)) > maxBytes {
-			return 0, ErrOutputLimit
-		}
-
-		return used + int64(len(line)), nil
-	}
-
-	return used, nil
 }
 
 func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (int64, error) {
