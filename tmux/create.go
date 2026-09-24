@@ -256,6 +256,11 @@ func (s *Server) NewSession(ctx context.Context, opts NewSessionOptions) (Sessio
 		return Session{}, opError("NewSession", err)
 	}
 
+	args, err = s.exactGroupArgs(opCtx, op, sg, args, opts.Group)
+	if err != nil {
+		return Session{}, opError("NewSession", err)
+	}
+
 	p := newSessionPlan(args, sg)
 
 	r, err := s.execute(opCtx, op, p, sg.guard, nil)
@@ -277,6 +282,55 @@ func (s *Server) NewSession(ctx context.Context, opts NewSessionOptions) (Sessio
 	}
 
 	return sess, nil
+}
+
+func (s *Server) exactGroupArgs(ctx context.Context, op *operation, sg startGuard, args []string, name string) ([]string, error) {
+	if name == "" {
+		return args, nil
+	}
+
+	if sg.guard == nil {
+		return nil, ErrNotFound
+	}
+
+	target, err := s.exactGroupTarget(ctx, op, sg.guard.identity, name)
+	if err != nil {
+		return nil, err
+	}
+
+	i := slices.Index(args, "-t")
+	if i < 0 || i+1 >= len(args) {
+		return nil, ErrProtocol
+	}
+
+	args[i+1] = target
+
+	return args, nil
+}
+
+func (s *Server) exactGroupTarget(ctx context.Context, op *operation, id ServerIdentity, name string) (string, error) {
+	sessions, err := s.sessions(ctx, op, id, QueryOptions{Filter: "", ExtraFields: nil})
+	if err != nil {
+		return "", err
+	}
+
+	var sessionTarget string
+
+	for _, session := range sessions {
+		if group, ok := session.Group.Get(); ok && group == name {
+			return string(session.ID), nil
+		}
+
+		if session.Name == name {
+			sessionTarget = string(session.ID)
+		}
+	}
+
+	if sessionTarget == "" {
+		return "", ErrNotFound
+	}
+
+	return sessionTarget, nil
 }
 
 // NewWindow creates a new window in this session and returns a [WindowLink] handle for the slot.

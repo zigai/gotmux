@@ -68,6 +68,57 @@ func graphWindow(t *testing.T, ctx context.Context, session tmux.Session) (tmux.
 	return link, pane
 }
 
+func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	development, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "development"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "joined", Group: "dev"}); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("Group dev matched development: %v", err)
+	}
+
+	dev, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "joined", Group: "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range []tmux.Session{dev, joined} {
+		info, err := target.Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if group, ok := info.Group.Get(); !ok || group != "dev" {
+			t.Errorf("session %s group = %q, %t; want dev", target.ID(), group, ok)
+		}
+	}
+	if err := dev.Rename(ctx, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	third, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "third", Group: "dev"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	thirdInfo, err := third.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group, ok := thirdInfo.Group.Get(); !ok || group != "dev" {
+		t.Errorf("third group = %q, %t; want dev", group, ok)
+	}
+
+	info, err := development.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if group, ok := info.Group.Get(); ok {
+		t.Errorf("development joined group %q", group)
+	}
+}
+
 func TestIntegrationGraphUnlink(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	original, pane := graphWindow(t, ctx, session)
