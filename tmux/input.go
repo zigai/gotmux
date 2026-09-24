@@ -457,9 +457,7 @@ func (p Pane) CaptureWithTitle(ctx context.Context, opts CaptureOptions) (Captur
 		return CaptureResult{}, opError("CaptureWithTitle", invalid("MaxBytes may only tighten the configured limit"))
 	}
 
-	const marker = "___GOTMUX_CAPTURE_TITLE___"
-
-	titleCmd := command("display-message", "-p", "-t", p.h.id, marker+"\n#{pane_title}\n"+marker)
+	titleCmd := command("display-message", "-p", "-t", p.h.id, wire.RecordFormat([]string{"pane_title"}))
 	capCmd := command("capture-pane", capArgs...)
 
 	opCtx, op, err := p.h.server.begin(ctx)
@@ -479,22 +477,15 @@ func (p Pane) CaptureWithTitle(ctx context.Context, opts CaptureOptions) (Captur
 		return CaptureResult{}, opError("CaptureWithTitle", err)
 	}
 
-	raw := r.Stdout
-	startMarker := []byte(marker + "\n")
-	endMarker := []byte("\n" + marker + "\n")
+	reader := bytes.NewReader(r.Stdout)
 
-	_, after, ok := bytes.Cut(raw, startMarker)
-	if !ok {
+	fields, err := wire.ReadRecordFields(reader, int64(reader.Len()))
+	if err != nil || len(fields) != 1 {
 		return CaptureResult{}, afterError("CaptureWithTitle", ErrProtocol)
 	}
 
-	lastIdx := bytes.LastIndex(after, endMarker)
-	if lastIdx < 0 {
-		return CaptureResult{}, afterError("CaptureWithTitle", ErrProtocol)
-	}
-
-	title := string(after[:lastIdx])
-	output := after[lastIdx+len(endMarker):]
+	title := fields[0]
+	output := r.Stdout[len(r.Stdout)-reader.Len():]
 
 	if opts.MaxBytes > 0 && int64(len(output)) > opts.MaxBytes {
 		output = output[:opts.MaxBytes]

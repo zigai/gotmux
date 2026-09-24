@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"testing"
+
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 func TestCaptureFlagsDistinguishEscapesFromEmptyCellTrimming(t *testing.T) {
@@ -34,9 +36,11 @@ func TestCaptureTitleDelimiter(t *testing.T) {
 	const marker = "___GOTMUX_CAPTURE_TITLE___"
 
 	title := "first\n" + marker + "\nsecond"
-	content := "actual pane contents\n"
-	raw := guardOK + marker + "\n" + title + "\n" + marker + "\n" + content
-	writeMockResponse(t, response, []byte(raw))
+	content := "actual pane contents\n" + marker + "\nmore pane contents\n"
+
+	raw := append([]byte(guardOK), wire.EncodeRecord([]string{title})...)
+	raw = append(raw, content...)
+	writeMockResponse(t, response, raw)
 
 	got, err := p.CaptureWithTitle(context.Background(), CaptureOptions{
 		Start:               nil,
