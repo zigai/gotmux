@@ -815,13 +815,8 @@ func (c Client) Popup(ctx context.Context, opts PopupOptions) error {
 	return c.h.act(ctx, "display-popup", args...)
 }
 
-// ClosePopup closes any active popup on this client (display-popup -C -t).
 func (c Client) ClosePopup(ctx context.Context) error {
-	if err := c.h.check(); err != nil {
-		return opError("ClosePopup", err)
-	}
-
-	return c.h.server.endpointAction(ctx, "display-popup", "-C", "-t", c.h.id)
+	return c.h.act(ctx, "display-popup", "-C", "-c", c.h.id)
 }
 
 // Popup displays an interactive modal popup overlay targeting this pane (-t flag).

@@ -1,8 +1,10 @@
 package tmux
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"testing"
 )
@@ -144,6 +146,33 @@ func TestPopupArgsOptions(t *testing.T) {
 		if !found {
 			t.Errorf("flag %s %s not found in args: %v", flag, val, args)
 		}
+	}
+}
+
+func TestClosePopupTargetsAndGuardsClient(t *testing.T) {
+	s, response, log := mockScriptServer(t)
+	c := Client{h: s.newHandle("/dev/pts/7", ClientKind, mockServerIdentity(s))}
+	c.h.client = clientCheck{name: "/dev/pts/7", pid: 77, created: 100}
+
+	writeMockResponse(t, response, []byte(guardClientChanged))
+
+	if err := c.ClosePopup(context.Background()); !errors.Is(err, ErrClientChanged) {
+		t.Fatalf("ClosePopup stale client = %v, want ErrClientChanged", err)
+	}
+
+	writeMockResponse(t, response, []byte(guardOK))
+
+	if err := c.ClosePopup(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	args, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Contains(args, []byte(`display-popup \042-C\042 \042-c\042 \042/dev/pts/7\042`)) {
+		t.Fatalf("ClosePopup target flags: %q", args)
 	}
 }
 
