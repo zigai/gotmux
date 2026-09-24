@@ -551,7 +551,7 @@ func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
 
 	args := []string{"-s", "-t", s.h.id, "-F", wire.RecordFormat(fields)}
 	p := recordsPlan(command("list-panes", args...))
-	g := newGuard(s.h.origin)
+	g := s.h.guard()
 
 	r, err := s.h.server.execute(opCtx, op, p, g, nil)
 	if err != nil {

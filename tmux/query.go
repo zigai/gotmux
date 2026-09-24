@@ -203,7 +203,11 @@ func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, ex
 
 	args = append(args, "-F", wire.RecordFormat(fields))
 	p := recordsPlan(command(name, args...))
-	g := newGuard(expected)
+
+	var g *guard
+	if expected.valid() {
+		g = newGuard(expected)
+	}
 
 	r, err := s.execute(ctx, op, p, g, nil)
 	if err != nil {

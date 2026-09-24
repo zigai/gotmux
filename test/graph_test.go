@@ -68,6 +68,39 @@ func graphWindow(t *testing.T, ctx context.Context, session tmux.Session) (tmux.
 	return link, pane
 }
 
+func TestIntegrationUnprobedHandleLists(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	unprobedSession, err := server.SessionHandle(session.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	links, err := unprobedSession.Windows(ctx)
+	if err != nil || len(links) == 0 {
+		t.Fatalf("Session.Windows: %v, links=%d", err, len(links))
+	}
+	if windows, slots, err := unprobedSession.WindowInfos(ctx); err != nil || len(windows) == 0 || len(slots) == 0 {
+		t.Fatalf("Session.WindowInfos: %v, windows=%d, slots=%d", err, len(windows), len(slots))
+	}
+	if panes, err := unprobedSession.Panes(ctx); err != nil || len(panes) == 0 {
+		t.Fatalf("Session.Panes: %v, panes=%d", err, len(panes))
+	}
+	if _, err := unprobedSession.Clients(ctx); err != nil {
+		t.Fatalf("Session.Clients: %v", err)
+	}
+
+	unprobedWindow, err := server.WindowHandle(links[0].Window().ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slots, err := unprobedWindow.Links(ctx); err != nil || len(slots) == 0 {
+		t.Fatalf("Window.Links: %v, slots=%d", err, len(slots))
+	}
+	if panes, err := unprobedWindow.Panes(ctx); err != nil || len(panes) == 0 {
+		t.Fatalf("Window.Panes: %v, panes=%d", err, len(panes))
+	}
+}
+
 func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	development, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "development"})
