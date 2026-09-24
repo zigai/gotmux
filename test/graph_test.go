@@ -101,6 +101,44 @@ func TestIntegrationUnprobedHandleLists(t *testing.T) {
 	}
 }
 
+func TestIntegrationRenumberWindowsTargetsSession(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	index := 5
+	for _, target := range []tmux.Session{session, other} {
+		if _, err := target.NewWindow(ctx, tmux.NewWindowOptions{Index: &index}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := session.RenumberWindows(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		session tmux.Session
+		want    []int
+	}{
+		{session, []int{0, 1}},
+		{other, []int{0, 5}},
+	} {
+		links, err := tc.session.Windows(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := make([]int, len(links))
+		for i, link := range links {
+			got[i] = link.Index()
+		}
+		if diff := cmp.Diff(tc.want, got); diff != "" {
+			t.Errorf("session %s indices (-want +got):\n%s", tc.session.ID(), diff)
+		}
+	}
+}
+
 func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	development, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "development"})

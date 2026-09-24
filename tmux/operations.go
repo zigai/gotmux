@@ -158,7 +158,7 @@ func (s Session) LockScreen(ctx context.Context) error {
 // RenumberWindows renumbers all windows in this session in sequential order,
 // respecting the base-index option (-r flag).
 func (s Session) RenumberWindows(ctx context.Context) error {
-	return s.h.act(ctx, "move-window", "-r", "-s", s.h.id+":")
+	return s.h.act(ctx, "move-window", "-r", "-t", s.h.id+":")
 }
 
 // KillOtherWindows terminates all windows in this session except the currently active window.
