@@ -250,6 +250,53 @@ func TestIntegrationOptionsList(t *testing.T) {
 	}
 }
 
+func TestIntegrationEnvironmentListPreservesMultilineValues(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	value := "\n    --color=hl:red\nGOTMUX_TEST_FORGED=1\n-GOTMUX_TEST_FORGED_REMOVAL\nquote \" dollar $ tick ` slash \\ end"
+	if err := session.Environment().Set(ctx, "GOTMUX_TEST_MULTILINE", value); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := server.Environment().SetHidden(ctx, "GOTMUX_TEST_HIDDEN_MULTILINE", value); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, listing := range []struct {
+		name   string
+		scope  tmux.EnvironmentScope
+		hidden bool
+		entry  string
+	}{
+		{name: "session", scope: session.Environment(), hidden: false, entry: "GOTMUX_TEST_MULTILINE"},
+		{name: "global hidden", scope: server.Environment(), hidden: true, entry: "GOTMUX_TEST_HIDDEN_MULTILINE"},
+	} {
+		entries, err := listing.scope.ListWith(ctx, tmux.ListEnvironmentOptions{Hidden: listing.hidden})
+		if err != nil {
+			t.Fatalf("%s Environment.ListWith: %v", listing.name, err)
+		}
+
+		found := false
+
+		for _, entry := range entries {
+			switch entry.Name {
+			case listing.entry:
+				found = true
+
+				if v, ok := entry.Value.Value.Get(); !ok || v != value || entry.Value.Unset || entry.Value.Hidden != listing.hidden {
+					t.Fatalf("%s multiline entry = %+v, want value %q", listing.name, entry, value)
+				}
+			case "GOTMUX_TEST_FORGED", "GOTMUX_TEST_FORGED_REMOVAL", "", "    --color":
+				t.Fatalf("%s listing parsed value continuation as entry %q", listing.name, entry.Name)
+			}
+		}
+
+		if !found {
+			t.Fatalf("%s listing is missing %s", listing.name, listing.entry)
+		}
+	}
+}
+
 func TestIntegrationEnvironmentList(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 

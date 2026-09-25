@@ -121,49 +121,87 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironment
 		args = append(args, "-h")
 	}
 
+	// Plain output cannot distinguish embedded newlines from entries; -s quotes values unambiguously.
+	args = append(args, "-s")
+
 	r, err := scope.target.server.execute(opCtx, op, plainPlan(command("show-environment", args...)), g, nil)
 	if err != nil {
 		return nil, opError("Environment.List", err)
 	}
 
-	var out []EnvironmentEntry
-
-	for line := range bytes.SplitSeq(bytes.TrimSuffix(r.Stdout, []byte{'\n'}), []byte{'\n'}) {
-		if len(line) == 0 {
-			continue
-		}
-
-		s := string(line)
-		if strings.HasPrefix(s, "-") {
-			name := s[1:]
-			out = append(out, EnvironmentEntry{
-				Name: name,
-				Value: EnvironmentValue{
-					Value:  UnavailableValue[string](),
-					Unset:  true,
-					Hidden: opts.Hidden,
-				},
-			})
-
-			continue
-		}
-
-		name, val, ok := strings.Cut(s, "=")
-		if !ok {
-			continue
-		}
-
-		out = append(out, EnvironmentEntry{
-			Name: name,
-			Value: EnvironmentValue{
-				Value:  PresentValue(val),
-				Unset:  false,
-				Hidden: opts.Hidden,
-			},
-		})
+	out, err := parseShellEnvironment(r.Stdout, opts.Hidden)
+	if err != nil {
+		return nil, afterError("Environment.List", err)
 	}
 
 	return out, nil
+}
+
+// parseShellEnvironment decodes show-environment -s records: NAME="escaped"; export NAME; or unset NAME;.
+func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error) {
+	var out []EnvironmentEntry
+
+	rest := string(data)
+	for rest != "" {
+		if after, ok := strings.CutPrefix(rest, "unset "); ok {
+			name, tail, found := strings.Cut(after, ";\n")
+			if !found || !envName(name) {
+				return nil, ErrProtocol
+			}
+
+			out = append(out, EnvironmentEntry{
+				Name:  name,
+				Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: hidden},
+			})
+			rest = tail
+
+			continue
+		}
+
+		name, after, found := strings.Cut(rest, "=\"")
+		if !found || !envName(name) {
+			return nil, ErrProtocol
+		}
+
+		value, tail, err := unescapeShellValue(after)
+		if err != nil {
+			return nil, err
+		}
+
+		tail, found = strings.CutPrefix(tail, "; export "+name+";\n")
+		if !found {
+			return nil, ErrProtocol
+		}
+
+		out = append(out, EnvironmentEntry{
+			Name:  name,
+			Value: EnvironmentValue{Value: PresentValue(value), Unset: false, Hidden: hidden},
+		})
+		rest = tail
+	}
+
+	return out, nil
+}
+
+// unescapeShellValue reads a double-quoted value up to its closing quote, reversing tmux's backslash escapes.
+func unescapeShellValue(s string) (string, string, error) {
+	var b strings.Builder
+
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			return b.String(), s[i+1:], nil
+		case '\\':
+			i++
+			if i == len(s) {
+				return "", "", ErrProtocol
+			}
+		}
+
+		b.WriteByte(s[i])
+	}
+
+	return "", "", ErrProtocol
 }
 
 // Set assigns a value to an environment variable in this scope.
