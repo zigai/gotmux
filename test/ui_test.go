@@ -495,3 +495,49 @@ func TestIntegrationUIControls(t *testing.T) {
 		t.Fatalf("Client.LockScreen failed: %v", err)
 	}
 }
+
+func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
+	server, displayed, ctx := apiFixture(t)
+	client, _, _ := uiClient(t, ctx, server, displayed)
+
+	// The newest session becomes tmux's default command target, which must not leak into client metadata.
+	if _, err := server.NewSession(ctx, tmux.NewSessionOptions{Window: "newer", Program: tmux.Shell("sleep 60")}); err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := client.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if id, ok := info.SessionID.Get(); !ok || id != displayed.ID() {
+		t.Fatalf("Client.Info session = %q (present %v), want %q", id, ok, displayed.ID())
+	}
+
+	unprobed, err := server.ClientHandle(info.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	extended, err := unprobed.InfoWith(ctx, tmux.QueryOptions{Filter: "", ExtraFields: []string{"session_name"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if id, ok := extended.SessionID.Get(); !ok || id != displayed.ID() {
+		t.Fatalf("unprobed Client.InfoWith session = %q (present %v), want %q", id, ok, displayed.ID())
+	}
+
+	if name, ok := extended.Raw("session_name"); !ok || string(name) != "fixture" {
+		t.Fatalf("unprobed Client.InfoWith session_name = %q (present %v), want fixture", name, ok)
+	}
+
+	values, err := client.FormatMulti(ctx, "#{session_id}", "#{client_name}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(values[0]) != string(displayed.ID()) || string(values[1]) != string(info.Name) {
+		t.Fatalf("Client.FormatMulti = %q, want [%q %q]", values, displayed.ID(), info.Name)
+	}
+}

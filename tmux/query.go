@@ -463,16 +463,11 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 		return nil, err
 	}
 
-	args := []string{"-p"}
+	p := recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat(fields)))
 	if kind == ClientKind {
-		args = append(args, "-c", target)
-	} else {
-		args = append(args, "-t", target)
+		// display-message -c expands session fields from the default target, not the client's session.
+		p = recordsPlan(command("list-clients", "-f", clientFilter(target), "-F", wire.RecordFormat(fields)))
 	}
-
-	args = append(args, wire.RecordFormat(fields))
-
-	p := recordsPlan(command("display-message", args...))
 
 	r, err := s.execute(ctx, op, p, g, nil)
 	if err != nil {
@@ -482,6 +477,10 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
 	if err != nil {
 		return nil, afterError("Info", err)
+	}
+
+	if kind == ClientKind && len(rows) == 0 {
+		return nil, opError("Info", ErrNotFound)
 	}
 
 	if len(rows) != 1 {
@@ -994,6 +993,29 @@ func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
 	return results[0], nil
 }
 
+// formatPlan expands format in this object's own context. display-message -c would expand
+// session fields from the default target rather than the client's session, so clients use list-clients.
+func (h handle) formatPlan(format string) plan {
+	if h.kind == ClientKind {
+		return recordsPlan(command("list-clients", "-f", clientFilter(h.id), "-F", format))
+	}
+
+	return recordsPlan(command("display-message", "-p", "-t", h.id, format))
+}
+
+func rawFormats(exprs []Format) ([]string, error) {
+	raw := make([]string, len(exprs))
+	for i, expr := range exprs {
+		if !wire.ValidString(string(expr)) {
+			return nil, invalid("format")
+		}
+
+		raw[i] = string(expr)
+	}
+
+	return raw, nil
+}
+
 func (h handle) formatMulti(ctx context.Context, exprs []Format) ([][]byte, error) {
 	if len(exprs) == 0 {
 		return [][]byte{}, nil
@@ -1003,13 +1025,9 @@ func (h handle) formatMulti(ctx context.Context, exprs []Format) ([][]byte, erro
 		return nil, opError("Format", err)
 	}
 
-	rawExprs := make([]string, len(exprs))
-	for i, expr := range exprs {
-		if !wire.ValidString(string(expr)) {
-			return nil, opError("Format", invalid("format"))
-		}
-
-		rawExprs[i] = string(expr)
+	rawExprs, err := rawFormats(exprs)
+	if err != nil {
+		return nil, opError("Format", err)
 	}
 
 	opCtx, op, err := h.server.begin(ctx)
@@ -1018,17 +1036,16 @@ func (h handle) formatMulti(ctx context.Context, exprs []Format) ([][]byte, erro
 	}
 	defer op.close()
 
-	targetFlag := "-t"
-	if h.kind == ClientKind {
-		targetFlag = "-c"
-	}
-
-	r, err := h.server.execute(opCtx, op, recordsPlan(command("display-message", "-p", targetFlag, h.id, wire.ExpressionsFormat(rawExprs))), h.guard(), nil)
+	r, err := h.server.execute(opCtx, op, h.formatPlan(wire.ExpressionsFormat(rawExprs)), h.guard(), nil)
 	if err != nil {
 		return nil, opError("Format", err)
 	}
 
 	records, err := wire.ParseRecords(r.Stdout, len(exprs))
+	if err == nil && h.kind == ClientKind && len(records) == 0 {
+		return nil, opError("Format", ErrNotFound)
+	}
+
 	if err != nil || len(records) != 1 {
 		return nil, afterError("Format", errors.Join(err, wire.ErrRecord))
 	}

@@ -101,6 +101,10 @@ func eqFormat(variable, value string) string {
 	return "#{==:#{" + variable + "}," + formatBytes(value) + "}"
 }
 func andFormat(a, b string) string { return "#{&&:" + a + "," + b + "}" }
+
+// clientFilter selects one client by exact name in list-clients, whose format context is that client's own session.
+func clientFilter(name string) string { return eqFormat("client_name", name) }
+
 func (i ServerIdentity) condition() string {
 	return andFormat(andFormat(eqFormat("pid", strconv.Itoa(i.PID)), eqFormat("start_time", strconv.FormatInt(i.Started.Unix(), 10))), eqFormat("socket_path", i.ReportedSocket))
 }
