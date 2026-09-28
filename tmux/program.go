@@ -125,6 +125,21 @@ func sessionName(name string, optional bool) error {
 	return nil
 }
 
+// windowName rejects names tmux would not store byte for byte.
+func windowName(name string) error {
+	if !utf8.ValidString(name) || strings.ContainsRune(name, '\\') {
+		return invalid("window name would be normalized")
+	}
+
+	for _, r := range name {
+		if r < 32 || r == 127 {
+			return invalid("window name would be normalized")
+		}
+	}
+
+	return nil
+}
+
 func envName(name string) bool {
 	if name == "" {
 		return false

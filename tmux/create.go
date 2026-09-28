@@ -32,6 +32,7 @@ type (
 		Dir string
 
 		// Window specifies the name for the initial window. Disallowed when joining a Group.
+		// Backslashes, control bytes, and invalid UTF-8 are rejected.
 		Window string
 
 		// Program specifies the initial command. Zero value runs the default shell.
@@ -63,6 +64,7 @@ type (
 	// NewWindowOptions configures the creation of a new window inside an existing session.
 	NewWindowOptions struct {
 		// Name is the window name (#{window_name}).
+		// Backslashes, control bytes, and invalid UTF-8 are rejected.
 		Name string
 
 		// Dir is the working directory for the initial pane.
@@ -515,6 +517,10 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 	}
 
 	if opts.Window != "" {
+		if err := windowName(opts.Window); err != nil {
+			return nil, err
+		}
+
 		v, err := literal(opts.Window)
 		if err != nil {
 			return nil, err
@@ -630,6 +636,10 @@ func newWindowArgs(sessionID string, opts NewWindowOptions) ([]string, error) {
 	}
 
 	if opts.Name != "" {
+		if err := windowName(opts.Name); err != nil {
+			return nil, err
+		}
+
 		v, err := literal(opts.Name)
 		if err != nil {
 			return nil, err

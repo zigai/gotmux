@@ -85,6 +85,7 @@ type (
 		Index *int
 
 		// Name optionally specifies the name for the new window.
+		// Backslashes, control bytes, and invalid UTF-8 are rejected.
 		Name string
 
 		// Select controls whether the new window gains focus immediately.
@@ -172,7 +173,12 @@ func (s Session) ClearAlerts(ctx context.Context) error {
 }
 
 // Rename changes the title/name of this window.
+// Backslashes, control bytes, and invalid UTF-8 are rejected.
 func (w Window) Rename(ctx context.Context, name string) error {
+	if err := windowName(name); err != nil {
+		return opError("RenameWindow", err)
+	}
+
 	v, err := literal(name)
 	if err != nil {
 		return opError("RenameWindow", err)
@@ -625,6 +631,10 @@ func (p Pane) Swap(ctx context.Context, other Pane, selectPane bool) error {
 func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLink, error) {
 	target, err := linkTarget(s, opts.Index)
 	if err != nil {
+		return WindowLink{}, opError("BreakPane", err)
+	}
+
+	if err := windowName(opts.Name); err != nil {
 		return WindowLink{}, opError("BreakPane", err)
 	}
 
