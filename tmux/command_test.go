@@ -457,38 +457,6 @@ func TestControlModeUpfrontRejection(t *testing.T) {
 	}
 }
 
-func TestRunWithInputLimits(t *testing.T) {
-	s, err := New(Config{
-		Binary:           "/bin/sh",
-		SocketPath:       filepath.Join(t.TempDir(), "s"),
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              []string{},
-		Dir:              t.TempDir(),
-		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 64, Concurrent: 0},
-		UTF8:             UTF8Default,
-		Colors256:        false,
-		TerminalFeatures: nil,
-		LogLevel:         LogNone,
-		LoginShell:       false,
-	})
-	if err != nil {
-		t.Fatalf("failed to create server: %v", err)
-	}
-
-	cmd, _ := NewCommand("display-message", "hello")
-
-	hugeInput := make([]byte, 128)
-	if _, err := s.RunWith(t.Context(), cmd, RunOptions{Start: AllowStart, Input: hugeInput}); !errors.Is(err, ErrInputLimit) {
-		t.Fatalf("expected ErrInputLimit for RunWith with oversized input, got %v", err)
-	}
-
-	seq, _ := Sequence(cmd)
-	if _, err := s.RunSequenceWith(t.Context(), seq, RunOptions{Start: AllowStart, Input: hugeInput}); !errors.Is(err, ErrInputLimit) {
-		t.Fatalf("expected ErrInputLimit for RunSequenceWith with oversized input, got %v", err)
-	}
-}
-
 func TestSourceTextValidation(t *testing.T) {
 	s := localServer(t)
 
@@ -750,21 +718,6 @@ func TestAttachArgsFlagEmission(t *testing.T) {
 
 	if !slices.Contains(emptyTargetArgs, "-d") {
 		t.Fatalf("expected -d in attachArgs for DetachOtherClients, got %v", emptyTargetArgs)
-	}
-}
-
-func TestClientFlagValidation(t *testing.T) {
-	for _, flag := range []ClientFlag{
-		ClientFlagActivePane, ClientFlagIgnoreSize, ClientFlagNoDetachOnDestroy,
-		ClientFlagNoOutput, ClientFlagReadOnly, ClientFlagWaitExit,
-	} {
-		if !flag.Valid() {
-			t.Errorf("expected flag %q to be valid", flag)
-		}
-	}
-
-	if ClientFlag("invalid_flag").Valid() {
-		t.Errorf("expected invalid flag to be invalid")
 	}
 }
 

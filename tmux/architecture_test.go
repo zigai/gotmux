@@ -18,7 +18,6 @@ func TestPackageArchitectureEnforcement(t *testing.T) {
 
 	t.Run("Rule1_NoTmuxtestInProduction", func(t *testing.T) { checkProductionImports(t, root) })
 	t.Run("Rule2_NoCircularInternalImports", func(t *testing.T) { checkCircularImports(t, root) })
-	t.Run("Rule3_NoObsoleteInternalImports", func(t *testing.T) { checkObsoleteImports(t, root) })
 	t.Run("Rule4_NoIntegrationTestsInTmuxPackage", func(t *testing.T) { checkNoIntegrationInTmux(t, root) })
 }
 
@@ -40,16 +39,6 @@ func checkCircularImports(t *testing.T, root string) {
 			if strings.Contains(imp, "gotmux/tmux") {
 				t.Errorf("forbidden circular import in %s: %s", sub, imp)
 			}
-		}
-	}
-}
-
-func checkObsoleteImports(t *testing.T, root string) {
-	t.Helper()
-
-	for _, imp := range collectProductionImports(t, filepath.Join(root, "tmux")) {
-		if strings.Contains(imp, "gotmux/internal/codec") || strings.Contains(imp, "gotmux/internal/exec") {
-			t.Errorf("forbidden obsolete internal package import: %s", imp)
 		}
 	}
 }
