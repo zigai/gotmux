@@ -137,6 +137,23 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironment
 	return out, nil
 }
 
+// listedEnvName accepts names tmux stores that are not shell identifiers, such as
+// exported bash functions (BASH_FUNC_name%%) inherited from a client environment.
+// Whitespace and control bytes never appear in a well-formed record header.
+func listedEnvName(name string) bool {
+	if name == "" {
+		return false
+	}
+
+	for _, c := range []byte(name) {
+		if c <= ' ' || c == '=' || c == 0x7f {
+			return false
+		}
+	}
+
+	return true
+}
+
 // parseShellEnvironment decodes show-environment -s records: NAME="escaped"; export NAME; or unset NAME;.
 func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error) {
 	var out []EnvironmentEntry
@@ -145,7 +162,7 @@ func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error)
 	for rest != "" {
 		if after, ok := strings.CutPrefix(rest, "unset "); ok {
 			name, tail, found := strings.Cut(after, ";\n")
-			if !found || !envName(name) {
+			if !found || !listedEnvName(name) {
 				return nil, ErrProtocol
 			}
 
@@ -159,7 +176,7 @@ func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error)
 		}
 
 		name, after, found := strings.Cut(rest, "=\"")
-		if !found || !envName(name) {
+		if !found || !listedEnvName(name) {
 			return nil, ErrProtocol
 		}
 

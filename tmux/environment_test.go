@@ -27,6 +27,25 @@ func TestParseShellEnvironmentDecodesEscapedMultilineValues(t *testing.T) {
 	}
 }
 
+func TestParseShellEnvironmentAcceptsInheritedNames(t *testing.T) {
+	data := []byte("BASH_FUNC_x%%=\"() { :; }\"; export BASH_FUNC_x%%;\nunset A-B;\n1A=\"v\"; export 1A;\n")
+
+	got, err := parseShellEnvironment(data, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []EnvironmentEntry{
+		{Name: "BASH_FUNC_x%%", Value: EnvironmentValue{Value: PresentValue("() { :; }"), Unset: false, Hidden: false}},
+		{Name: "A-B", Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: false}},
+		{Name: "1A", Value: EnvironmentValue{Value: PresentValue("v"), Unset: false, Hidden: false}},
+	}
+
+	if diff := cmp.Diff(want, got, cmp.AllowUnexported(PresentValue(""))); diff != "" {
+		t.Fatalf("entries mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestParseShellEnvironmentRejectsMalformedRecords(t *testing.T) {
 	for name, data := range map[string]string{
 		"plain record":        "A=value\n",
@@ -34,9 +53,9 @@ func TestParseShellEnvironmentRejectsMalformedRecords(t *testing.T) {
 		"dangling escape":     "A=\"value\\",
 		"mismatched export":   "A=\"value\"; export B;\n",
 		"missing export":      "A=\"value\"\n",
-		"invalid name":        "1A=\"value\"; export 1A;\n",
+		"name with space":     "A B=\"value\"; export A B;\n",
 		"unterminated unset":  "unset A",
-		"invalid unset name":  "unset A-B;\n",
+		"empty unset name":    "unset ;\n",
 		"trailing garbage":    "A=\"v\"; export A;\njunk",
 		"continuation header": "    --color=\"x\"; export     --color;\n",
 	} {
