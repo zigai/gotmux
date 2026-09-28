@@ -792,6 +792,7 @@ func (c Client) Messages(ctx context.Context, opts MessagesOptions) ([]string, e
 }
 
 // Popup waits for tmux's popup command queue to resume (normally dismissal).
+// Only ctx bounds the wait.
 // Cancellation ends the local waiter, not necessarily the server-side popup.
 // No exit status or user choice is inferred.
 func (c Client) Popup(ctx context.Context, opts PopupOptions) error {
@@ -812,7 +813,7 @@ func (c Client) Popup(ctx context.Context, opts PopupOptions) error {
 		return opError("Popup", err)
 	}
 
-	return c.h.act(ctx, "display-popup", args...)
+	return c.h.actCallerBounded(ctx, "display-popup", args...)
 }
 
 func (c Client) ClosePopup(ctx context.Context) error {
@@ -820,6 +821,7 @@ func (c Client) ClosePopup(ctx context.Context) error {
 }
 
 // Popup displays an interactive modal popup overlay targeting this pane (-t flag).
+// Only ctx bounds the wait.
 // Cancellation ends the local waiter, not necessarily the server-side popup.
 // No exit status or user choice is inferred.
 func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
@@ -840,10 +842,11 @@ func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
 		return opError("Popup", err)
 	}
 
-	return p.h.act(ctx, "display-popup", args...)
+	return p.h.actCallerBounded(ctx, "display-popup", args...)
 }
 
 // Menu displays an interactive popup menu on this client and blocks until dismissal.
+// Only ctx bounds the wait.
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
 // Fails with [ErrTransportUnsupported] over control mode.
@@ -876,7 +879,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 		node.args = append(node.args, itemArgs...)
 	}
 
-	opCtx, op, err := c.h.server.begin(ctx)
+	opCtx, op, err := c.h.server.beginCallerBounded(ctx)
 	if err != nil {
 		return opError("Menu", err)
 	}
@@ -888,6 +891,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 }
 
 // Menu displays an interactive popup menu targeting this pane (-t flag).
+// Only ctx bounds the wait.
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
 // Fails with [ErrTransportUnsupported] over control mode.
@@ -920,7 +924,7 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) erro
 		node.args = append(node.args, itemArgs...)
 	}
 
-	opCtx, op, err := p.h.server.begin(ctx)
+	opCtx, op, err := p.h.server.beginCallerBounded(ctx)
 	if err != nil {
 		return opError("Menu", err)
 	}

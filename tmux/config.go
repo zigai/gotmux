@@ -95,6 +95,8 @@ type Config struct {
 // Limits bounds execution time, concurrent processes, and buffers across operations on a [Server].
 type Limits struct {
 	// CommandTimeout is the maximum duration for a single command before cancellation.
+	// It does not apply to commands that wait by design, which the caller's context bounds:
+	// [Server.WaitFor], [Server.Lock], and the Menu and Popup methods.
 	CommandTimeout time.Duration
 
 	// OutputBytes caps stdout/stderr bytes read from tmux before returning [ErrOutputLimit].

@@ -220,11 +220,20 @@ func (h handle) equal(other handle) bool {
 }
 
 func (h handle) act(ctx context.Context, name string, args ...string) error {
+	return h.actWithin(ctx, true, name, args...)
+}
+
+// actCallerBounded is act bounded only by the caller's context.
+func (h handle) actCallerBounded(ctx context.Context, name string, args ...string) error {
+	return h.actWithin(ctx, false, name, args...)
+}
+
+func (h handle) actWithin(ctx context.Context, commandTimeout bool, name string, args ...string) error {
 	if err := h.check(); err != nil {
 		return opError(name, err)
 	}
 
-	opCtx, op, err := h.server.begin(ctx)
+	opCtx, op, err := h.server.beginWithin(ctx, commandTimeout)
 	if err != nil {
 		return opError(name, err)
 	}

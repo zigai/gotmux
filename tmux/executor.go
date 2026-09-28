@@ -17,6 +17,15 @@ type operation struct {
 }
 
 func (s *Server) begin(ctx context.Context) (context.Context, *operation, error) {
+	return s.beginWithin(ctx, true)
+}
+
+// beginCallerBounded starts an operation bounded only by the caller's context.
+func (s *Server) beginCallerBounded(ctx context.Context) (context.Context, *operation, error) {
+	return s.beginWithin(ctx, false)
+}
+
+func (s *Server) beginWithin(ctx context.Context, commandTimeout bool) (context.Context, *operation, error) {
 	if s == nil || s.runner == nil {
 		return nil, nil, ErrInvalidHandle
 	}
@@ -35,7 +44,16 @@ func (s *Server) begin(ctx context.Context) (context.Context, *operation, error)
 		}
 	}
 
-	child, cancel := context.WithTimeout(ctx, s.config.Limits.CommandTimeout)
+	var (
+		child  context.Context
+		cancel context.CancelFunc
+	)
+
+	if commandTimeout {
+		child, cancel = context.WithTimeout(ctx, s.config.Limits.CommandTimeout)
+	} else {
+		child, cancel = context.WithCancel(ctx)
+	}
 
 	return child, &operation{
 		callerDone: ctx.Done(),

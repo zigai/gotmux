@@ -109,7 +109,11 @@ type (
 )
 
 func (s *Server) endpointAction(ctx context.Context, name string, args ...string) error {
-	opCtx, op, err := s.begin(ctx)
+	return s.endpointActionFrom(ctx, s.begin, name, args...)
+}
+
+func (s *Server) endpointActionFrom(ctx context.Context, begin func(context.Context) (context.Context, *operation, error), name string, args ...string) error {
+	opCtx, op, err := begin(ctx)
 	if err != nil {
 		return opError(name, err)
 	}

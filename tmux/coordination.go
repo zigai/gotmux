@@ -65,8 +65,9 @@ func requireDeadline(ctx context.Context) error {
 	return nil
 }
 
-// WaitFor blocks until tmux signals channel. A caller deadline is required;
-// canceling this client cannot retract an already queued server-side waiter.
+// WaitFor blocks until tmux signals channel. A caller deadline is required and is
+// the only bound: [Limits.CommandTimeout] does not apply. Canceling this client
+// cannot retract an already queued server-side waiter.
 func (s *Server) WaitFor(ctx context.Context, channel string) error {
 	if err := requireDeadline(ctx); err != nil {
 		return opError("WaitFor", err)
@@ -76,7 +77,7 @@ func (s *Server) WaitFor(ctx context.Context, channel string) error {
 		return opError("WaitFor", invalid("channel"))
 	}
 
-	return s.endpointAction(ctx, "wait-for", "--", channel)
+	return s.endpointActionFrom(ctx, s.beginCallerBounded, "wait-for", "--", channel)
 }
 
 // Signal wakes all callers waiting on channel via [Server.WaitFor] (wait-for -S).
@@ -89,7 +90,8 @@ func (s *Server) Signal(ctx context.Context, channel string) error {
 }
 
 // Lock acquires an exclusive named mutex lock on the server (wait-for -L).
-// A caller deadline is required.
+// A caller deadline is required and is the only bound: [Limits.CommandTimeout]
+// does not apply.
 func (s *Server) Lock(ctx context.Context, channel string) error {
 	if err := requireDeadline(ctx); err != nil {
 		return opError("Lock", err)
@@ -99,7 +101,7 @@ func (s *Server) Lock(ctx context.Context, channel string) error {
 		return opError("Lock", invalid("channel"))
 	}
 
-	return s.endpointAction(ctx, "wait-for", "-L", "--", channel)
+	return s.endpointActionFrom(ctx, s.beginCallerBounded, "wait-for", "-L", "--", channel)
 }
 
 // Unlock releases an exclusive named lock previously acquired via [Server.Lock] (wait-for -U).
