@@ -3,6 +3,8 @@
 package tmux_test
 
 import (
+	"context"
+	"slices"
 	"testing"
 
 	tmux "github.com/zigai/gotmux/tmux"
@@ -75,11 +77,10 @@ func TestIntegrationArrayOptions_ArbitraryAndSparse(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	// Set sparse array entries via indexed Set
-	if err := server.Options().Set(ctx, "codepoint-widths[100]", "2"); err != nil {
-		t.Fatalf("failed to set sparse array entry: %v", err)
-	}
-	if err := server.Options().Set(ctx, "codepoint-widths[500]", "1"); err != nil {
-		t.Fatalf("failed to set sparse array entry: %v", err)
+	for name, value := range map[string]string{"codepoint-widths[100]": "2", "codepoint-widths[500]": "1"} {
+		if err := server.Options().Set(ctx, name, value); err != nil {
+			t.Fatalf("failed to set sparse array entry %s: %v", name, err)
+		}
 	}
 
 	// Read single entry via indexed Get
@@ -87,22 +88,9 @@ func TestIntegrationArrayOptions_ArbitraryAndSparse(t *testing.T) {
 	if v, ok := val100.Effective.Get(); err != nil || !ok || v != "2" {
 		t.Fatalf("unexpected value for codepoint-widths[100]: %+v, err: %v", val100, err)
 	}
-	// Read full sparse array via Array
-	entries, err := server.Options().Array(ctx, "codepoint-widths")
-	if err != nil {
-		t.Fatalf("failed to read array: %v", err)
-	}
 
-	var found100, found500 bool
-	for _, e := range entries {
-		if e.Index == 100 && e.Value == "2" {
-			found100 = true
-		}
-		if e.Index == 500 && e.Value == "1" {
-			found500 = true
-		}
-	}
-	if !found100 || !found500 {
+	// Read full sparse array via Array
+	if entries := arrayEntries(t, ctx, server, "codepoint-widths"); entries[100] != "2" || entries[500] != "1" {
 		t.Fatalf("expected indices 100 and 500 in array, got entries: %+v", entries)
 	}
 
@@ -114,25 +102,37 @@ func TestIntegrationArrayOptions_ArbitraryAndSparse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpdateArray failed: %v", err)
 	}
+
 	if len(updateRes.Applied) != 2 {
 		t.Fatalf("expected 2 applied updates, got %v", updateRes.Applied)
 	}
 
-	// Verify index 100 was unset and index 200 was set
-	entriesAfter, err := server.Options().Array(ctx, "codepoint-widths")
-	if err != nil {
-		t.Fatalf("failed to read array after update: %v", err)
-	}
-	for _, e := range entriesAfter {
-		if e.Index == 100 {
-			t.Fatalf("index 100 should have been unset, still found: %+v", e)
-		}
+	// Verify index 100 was unset
+	after := arrayEntries(t, ctx, server, "codepoint-widths")
+	if _, ok := after[100]; ok {
+		t.Fatalf("index 100 should have been unset, still found: %+v", after)
 	}
 
 	// Calling Array on a scalar option must fail with not an array error
 	if _, err := server.Options().Array(ctx, "escape-time"); err == nil {
 		t.Fatal("expected error calling Array on scalar option escape-time, got nil")
 	}
+}
+
+func arrayEntries(t *testing.T, ctx context.Context, server *tmux.Server, name string) map[int]string {
+	t.Helper()
+
+	entries, err := server.Options().Array(ctx, name)
+	if err != nil {
+		t.Fatalf("failed to read array %s: %v", name, err)
+	}
+
+	values := make(map[int]string, len(entries))
+	for _, e := range entries {
+		values[e.Index] = e.Value
+	}
+
+	return values
 }
 
 func TestIntegrationScalarMutationFlags(t *testing.T) {
@@ -142,27 +142,18 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	if err := session.Options().Set(ctx, "monitor-activity", "on"); err != nil {
 		t.Fatalf("failed to set monitor-activity: %v", err)
 	}
-	got1, err := session.Options().Get(ctx, "monitor-activity")
-	if v, ok := got1.Local.Get(); err != nil || !ok || v != "on" {
-		t.Fatalf("expected on, got %+v, %v", got1, err)
-	}
 
-	// Toggle to off via SetWith with absent Value
-	if err := session.Options().SetWith(ctx, "monitor-activity", tmux.SetOptionOptions{}); err != nil {
-		t.Fatalf("failed to toggle monitor-activity: %v", err)
-	}
-	got2, err := session.Options().Get(ctx, "monitor-activity")
-	if v, ok := got2.Local.Get(); err != nil || !ok || v != "off" {
-		t.Fatalf("expected off after toggle, got %+v, %v", got2, err)
-	}
+	got, err := session.Options().Get(ctx, "monitor-activity")
+	assertLocal(t, "monitor-activity", got, err, "on")
 
-	// Toggle back to on
-	if err := session.Options().SetWith(ctx, "monitor-activity", tmux.SetOptionOptions{}); err != nil {
-		t.Fatalf("failed to toggle monitor-activity back: %v", err)
-	}
-	got3, err := session.Options().Get(ctx, "monitor-activity")
-	if v, ok := got3.Local.Get(); err != nil || !ok || v != "on" {
-		t.Fatalf("expected on after second toggle, got %+v, %v", got3, err)
+	// Toggle to off via SetWith with absent Value, then back to on
+	for _, want := range []string{"off", "on"} {
+		if err := session.Options().SetWith(ctx, "monitor-activity", tmux.SetOptionOptions{}); err != nil {
+			t.Fatalf("failed to toggle monitor-activity: %v", err)
+		}
+
+		got, err = session.Options().Get(ctx, "monitor-activity")
+		assertLocal(t, "toggled monitor-activity", got, err, want)
 	}
 
 	// 2. Format expansion (-F)
@@ -172,15 +163,15 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to set option with format expansion: %v", err)
 	}
-	gotFmt, err := session.Options().User(ctx, "@test_format")
-	if v, ok := gotFmt.Local.Get(); err != nil || !ok || v != "1" {
-		t.Fatalf("expected expanded format user option '1', got %+v, %v", gotFmt, err)
-	}
+
+	got, err = session.Options().User(ctx, "@test_format")
+	assertLocal(t, "expanded format user option", got, err, "1")
 
 	// 3. Append (-a)
 	if err := session.Options().Set(ctx, "@test_append", "hello"); err != nil {
 		t.Fatalf("failed to set @test_append: %v", err)
 	}
+
 	if err := session.Options().SetWith(ctx, "@test_append", tmux.SetOptionOptions{
 		Value:  tmux.PresentValue(" world"),
 		Append: true,
@@ -194,10 +185,9 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to set unset option with OnlyIfUnset: %v", err)
 	}
-	gotFirst, err := session.Options().User(ctx, "@test_nounset")
-	if v, ok := gotFirst.Local.Get(); err != nil || !ok || v != "first" {
-		t.Fatalf("expected 'first', got %+v, %v", gotFirst, err)
-	}
+
+	got, err = session.Options().User(ctx, "@test_nounset")
+	assertLocal(t, "@test_nounset", got, err, "first")
 
 	// Attempting to set an already set option with OnlyIfUnset fails in tmux and prevents overwrite
 	if err := session.Options().SetWith(ctx, "@test_nounset", tmux.SetOptionOptions{
@@ -206,14 +196,21 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected error setting already set option with OnlyIfUnset, got nil")
 	}
-	gotNoOver, err := session.Options().User(ctx, "@test_nounset")
-	if v, ok := gotNoOver.Local.Get(); err != nil || !ok || v != "first" {
-		t.Fatalf("value was overwritten despite OnlyIfUnset: %+v, %v", gotNoOver, err)
-	}
+
+	got, err = session.Options().User(ctx, "@test_nounset")
+	assertLocal(t, "@test_nounset after OnlyIfUnset", got, err, "first")
 
 	// 5. Cascade unset (-U)
 	if err := session.Options().UnsetWith(ctx, "monitor-activity", tmux.UnsetOptionOptions{Cascade: true}); err != nil {
 		t.Fatalf("UnsetWith cascade failed: %v", err)
+	}
+}
+
+func assertLocal(t *testing.T, option string, got tmux.OptionValue[string], err error, want string) {
+	t.Helper()
+
+	if v, ok := got.Local.Get(); err != nil || !ok || v != want {
+		t.Fatalf("%s: got %+v, %v; want local %q", option, got, err, want)
 	}
 }
 
@@ -233,12 +230,14 @@ func TestIntegrationOptionsList(t *testing.T) {
 	}
 
 	var hasInherited bool
+
 	for _, opt := range sessionOpts {
 		if opt.Inherited {
 			hasInherited = true
 			break
 		}
 	}
+
 	if !hasInherited {
 		t.Fatal("expected at least one inherited option with -A")
 	}
@@ -276,25 +275,66 @@ func TestIntegrationEnvironmentListPreservesMultilineValues(t *testing.T) {
 			t.Fatalf("%s Environment.ListWith: %v", listing.name, err)
 		}
 
-		found := false
+		assertEnvironmentEntries(t, listing.name, entries, map[string]tmux.EnvironmentValue{
+			listing.entry: {Value: tmux.PresentValue(value), Unset: false, Hidden: listing.hidden},
+		})
 
+		// Lines of the value must not be parsed as entries of their own.
 		for _, entry := range entries {
-			switch entry.Name {
-			case listing.entry:
-				found = true
-
-				if v, ok := entry.Value.Value.Get(); !ok || v != value || entry.Value.Unset || entry.Value.Hidden != listing.hidden {
-					t.Fatalf("%s multiline entry = %+v, want value %q", listing.name, entry, value)
-				}
-			case "GOTMUX_TEST_FORGED", "GOTMUX_TEST_FORGED_REMOVAL", "", "    --color":
+			if slices.Contains([]string{"GOTMUX_TEST_FORGED", "GOTMUX_TEST_FORGED_REMOVAL", "", "    --color"}, entry.Name) {
 				t.Fatalf("%s listing parsed value continuation as entry %q", listing.name, entry.Name)
 			}
 		}
+	}
+}
 
-		if !found {
-			t.Fatalf("%s listing is missing %s", listing.name, listing.entry)
+func assertEnvironmentEntries(t *testing.T, listing string, entries []tmux.EnvironmentEntry, want map[string]tmux.EnvironmentValue) {
+	t.Helper()
+
+	got := map[string]tmux.EnvironmentValue{}
+
+	for _, entry := range entries {
+		if _, wanted := want[entry.Name]; wanted {
+			got[entry.Name] = entry.Value
 		}
 	}
+
+	for name, value := range want {
+		if actual, listed := got[name]; !listed || actual != value {
+			t.Errorf("%s listing: %s = %+v (listed %v), want %+v", listing, name, actual, listed, value)
+		}
+	}
+}
+
+func TestIntegrationEnvironmentListInheritedNames(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	// Exported bash functions reach tmux's environment under names like BASH_FUNC_name%%.
+	command, err := tmux.NewCommand("set-environment", "-g", "BASH_FUNC_gotmux%%", "() { :; }")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := server.Run(ctx, command); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := server.Environment().List(ctx)
+	if err != nil {
+		t.Fatalf("Environment.List: %v", err)
+	}
+
+	for _, entry := range entries {
+		if entry.Name == "BASH_FUNC_gotmux%%" {
+			if v, ok := entry.Value.Value.Get(); !ok || v != "() { :; }" {
+				t.Fatalf("inherited entry = %+v", entry)
+			}
+
+			return
+		}
+	}
+
+	t.Fatal("listing is missing BASH_FUNC_gotmux%%")
 }
 
 func TestIntegrationEnvironmentList(t *testing.T) {
@@ -304,64 +344,36 @@ func TestIntegrationEnvironmentList(t *testing.T) {
 	if err := session.Environment().Set(ctx, "GOTMUX_TEST_REGULAR", "val123"); err != nil {
 		t.Fatalf("failed to set regular env: %v", err)
 	}
+
 	if err := session.Environment().Set(ctx, "GOTMUX_TEST_EMPTY", ""); err != nil {
 		t.Fatalf("failed to set empty env: %v", err)
 	}
+
 	if err := session.Environment().Remove(ctx, "GOTMUX_TEST_REMOVED"); err != nil {
 		t.Fatalf("failed to remove env: %v", err)
 	}
+
 	if err := server.Environment().SetHidden(ctx, "GOTMUX_TEST_HIDDEN", "secret"); err != nil {
 		t.Fatalf("failed to set hidden env: %v", err)
 	}
 
-	// List standard environment
 	entries, err := session.Environment().List(ctx)
 	if err != nil {
 		t.Fatalf("Environment.List failed: %v", err)
 	}
 
-	var foundReg, foundEmpty, foundRemoved bool
-	for _, e := range entries {
-		switch e.Name {
-		case "GOTMUX_TEST_REGULAR":
-			foundReg = true
-			if v, ok := e.Value.Value.Get(); e.Value.Unset || !ok || v != "val123" {
-				t.Fatalf("unexpected regular env: %+v", e)
-			}
-		case "GOTMUX_TEST_EMPTY":
-			foundEmpty = true
-			if v, ok := e.Value.Value.Get(); e.Value.Unset || !ok || v != "" {
-				t.Fatalf("unexpected empty env: %+v", e)
-			}
-		case "GOTMUX_TEST_REMOVED":
-			foundRemoved = true
-			if !e.Value.Unset || e.Value.Value.State() != tmux.Unavailable {
-				t.Fatalf("unexpected removed env: %+v", e)
-			}
-		}
-	}
+	assertEnvironmentEntries(t, "session", entries, map[string]tmux.EnvironmentValue{
+		"GOTMUX_TEST_REGULAR": {Value: tmux.PresentValue("val123"), Unset: false, Hidden: false},
+		"GOTMUX_TEST_EMPTY":   {Value: tmux.PresentValue(""), Unset: false, Hidden: false},
+		"GOTMUX_TEST_REMOVED": {Value: tmux.UnavailableValue[string](), Unset: true, Hidden: false},
+	})
 
-	if !foundReg || !foundEmpty || !foundRemoved {
-		t.Fatalf("missing expected entries in session environment: reg=%v, empty=%v, removed=%v",
-			foundReg, foundEmpty, foundRemoved)
-	}
-
-	// List hidden environment
 	hiddenEntries, err := server.Environment().ListWith(ctx, tmux.ListEnvironmentOptions{Hidden: true})
 	if err != nil {
 		t.Fatalf("Environment.ListWith(Hidden) failed: %v", err)
 	}
 
-	var foundHidden bool
-	for _, e := range hiddenEntries {
-		if e.Name == "GOTMUX_TEST_HIDDEN" {
-			foundHidden = true
-			if v, ok := e.Value.Value.Get(); !e.Value.Hidden || !ok || v != "secret" {
-				t.Fatalf("unexpected hidden env entry: %+v", e)
-			}
-		}
-	}
-	if !foundHidden {
-		t.Fatal("expected GOTMUX_TEST_HIDDEN in hidden environment list")
-	}
+	assertEnvironmentEntries(t, "hidden", hiddenEntries, map[string]tmux.EnvironmentValue{
+		"GOTMUX_TEST_HIDDEN": {Value: tmux.PresentValue("secret"), Unset: false, Hidden: true},
+	})
 }

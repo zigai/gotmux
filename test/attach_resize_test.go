@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"syscall"
 	"testing"
 	"time"
@@ -21,93 +22,31 @@ func TestAttachResizeAndSignal(t *testing.T) {
 
 	master, slave := openPTY(t)
 	setTerminalSize(t, slave)
-
-	doneReading := make(chan struct{})
-	go func() {
-		defer close(doneReading)
-		_, _ = io.Copy(io.Discard, master)
-	}()
-	t.Cleanup(func() {
-		_ = master.Close()
-		<-doneReading
-	})
+	drainPTY(t, master)
 
 	initialState, err := term.GetState(int(slave.Fd()))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	attachCtx, cancel := context.WithCancel(ctx)
-	done := make(chan error, 1)
+	var options tmux.AttachOptions
 
-	go func() {
-		var options tmux.AttachOptions
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, options)
-	}()
-
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("attachment failed to stop during cleanup")
-		}
-	})
-
-	_ = waitTerminalClient(t, ctx, server, slave, done)
+	_, cancel, done := attachCancelable(t, ctx, server, session, slave, options)
 
 	// Verify initial client geometry was received (24 rows x 80 cols)
-	clients, err := server.Clients(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var found bool
-	var clientPID int
-	for _, c := range clients {
-		if string(c.Name) == slave.Name() {
-			found = true
-			clientPID = c.PID
-			if c.Width != 80 || c.Height != 24 {
-				t.Logf("initial client size: %dx%d (expected 80x24)", c.Width, c.Height)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("client for terminal %s not found in server.Clients", slave.Name())
+	client := terminalClientInfo(t, ctx, server, slave)
+	if client.Width != 80 || client.Height != 24 {
+		t.Logf("initial client size: %dx%d (expected 80x24)", client.Width, client.Height)
 	}
 
-	// Dynamically change PTY size to 50 rows, 120 cols via TIOCSWINSZ
-	newSize := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: 50, Columns: 120, Xpixel: 0, Ypixel: 0}
-	ptyIoctl(t, int(master.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&newSize))
-	ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&newSize))
+	resizePTY(t, master, slave, 50, 120)
+	signalResize(client.PID)
 
-	// Signal client with SIGWINCH to notify it of the terminal window resize
-	if clientPID > 0 {
-		_ = syscall.Kill(clientPID, syscall.SIGWINCH)
-	}
+	awaitObservation(t, ctx, "client geometry 120x50", func() bool {
+		info := terminalClientInfo(t, ctx, server, slave)
 
-	var resized bool
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		clients, err := server.Clients(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, c := range clients {
-			if string(c.Name) == slave.Name() && c.Width == 120 && c.Height == 50 {
-				resized = true
-				break
-			}
-		}
-		if resized {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !resized {
-		t.Fatalf("timed out waiting for client geometry to update to 120x50")
-	}
+		return info.Width == 120 && info.Height == 50
+	})
 
 	// Cancel attachment context, verify Attach returns cleanly and restores terminal state
 	cancel()
@@ -115,6 +54,7 @@ func TestAttachResizeAndSignal(t *testing.T) {
 	select {
 	case err := <-done:
 		done <- err
+
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("expected context.Canceled from Attach, got: %v", err)
 		}
@@ -137,80 +77,96 @@ func TestIntegrationAttachResize_HighBandwidthStorm(t *testing.T) {
 
 	master, slave := openPTY(t)
 	setTerminalSize(t, slave)
+	drainPTY(t, master)
 
-	doneReading := make(chan struct{})
-	go func() {
-		defer close(doneReading)
-		_, _ = io.Copy(io.Discard, master)
-	}()
-	t.Cleanup(func() {
-		_ = master.Close()
-		<-doneReading
-	})
+	var options tmux.AttachOptions
 
-	attachCtx, cancel := context.WithCancel(ctx)
-	done := make(chan error, 1)
-
-	go func() {
-		var options tmux.AttachOptions
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, options)
-	}()
-
-	t.Cleanup(func() {
-		cancel()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-		}
-	})
-
-	client := waitTerminalClient(t, ctx, server, slave, done)
+	client, cancel, done := attachCancelable(t, ctx, server, session, slave, options)
 	if !client.Valid() {
 		t.Fatal("expected valid client")
 	}
 
-	clients, err := server.Clients(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var clientPID int
-	for _, c := range clients {
-		if string(c.Name) == slave.Name() {
-			clientPID = c.PID
-			break
-		}
-	}
+	clientPID := terminalClientInfo(t, ctx, server, slave).PID
 
 	panes, err := session.Panes(ctx)
 	if err != nil || len(panes) == 0 {
 		t.Fatalf("failed to query panes: %v", err)
 	}
-	pane := panes[0].Handle()
 
 	// Start high-bandwidth output in the background
-	_ = pane.Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
+	_ = panes[0].Handle().Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
 
 	// Blast rapid resize signals while data is streaming
 	for i := range 30 {
-		rows := uint16(24 + (i % 10))
-		cols := uint16(80 + (i % 20))
-		sz := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: rows, Columns: cols, Xpixel: 0, Ypixel: 0}
-		ptyIoctl(t, int(master.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&sz))
-		ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&sz))
-		if clientPID > 0 {
-			_ = syscall.Kill(clientPID, syscall.SIGWINCH)
-		}
+		resizePTY(t, master, slave, uint16(24+(i%10)), uint16(80+(i%20)))
+		signalResize(clientPID)
+
 		time.Sleep(5 * time.Millisecond)
 	}
 
 	// Verify clean teardown without deadlock
 	cancel()
+
 	select {
 	case err := <-done:
+		done <- err
+
 		if err != nil && !errors.Is(err, context.Canceled) {
 			t.Fatalf("unexpected error from Attach after resize storm: %v", err)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Attach deadlocked or timed out after resize storm")
 	}
+}
+
+func drainPTY(t *testing.T, master *os.File) {
+	t.Helper()
+
+	doneReading := make(chan struct{})
+	go func() {
+		defer close(doneReading)
+
+		_, _ = io.Copy(io.Discard, master)
+	}()
+
+	t.Cleanup(func() {
+		_ = master.Close()
+
+		<-doneReading
+	})
+}
+
+func resizePTY(t *testing.T, master, slave *os.File, rows, cols uint16) {
+	t.Helper()
+
+	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: rows, Columns: cols, Xpixel: 0, Ypixel: 0}
+	for _, end := range []*os.File{master, slave} {
+		ptyIoctl(t, int(end.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size)) //nolint:gosec // G103: TIOCSWINSZ reads this owned struct winsize (four uint16s, the Linux and Darwin layout) synchronously; ptyIoctl retains its lifetime; covered by the PTY resize tests.
+	}
+}
+
+// signalResize skips PID 0, which would signal the test's own process group.
+func signalResize(pid int) {
+	if pid > 0 {
+		_ = syscall.Kill(pid, syscall.SIGWINCH)
+	}
+}
+
+func terminalClientInfo(t *testing.T, ctx context.Context, server *tmux.Server, terminal *os.File) tmux.ClientInfo {
+	t.Helper()
+
+	clients, err := server.Clients(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, c := range clients {
+		if string(c.Name) == terminal.Name() {
+			return c
+		}
+	}
+
+	t.Fatalf("client for terminal %s not found in server.Clients", terminal.Name())
+
+	return tmux.ClientInfo{}
 }

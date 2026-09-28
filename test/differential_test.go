@@ -3,6 +3,8 @@
 package tmux_test
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -11,8 +13,9 @@ import (
 )
 
 func TestDifferentialCommandQuoting(t *testing.T) {
-	_ = os.Remove("/tmp/bad")
-	t.Cleanup(func() { _ = os.Remove("/tmp/bad") })
+	_ = os.Remove(injectionMarker)
+
+	t.Cleanup(func() { _ = os.Remove(injectionMarker) })
 
 	server, _, ctx := apiFixture(t)
 
@@ -69,7 +72,7 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 			name: "shell expansions and command substitution",
 			inputs: []string{
 				"$HOME",
-				"$(touch /tmp/bad)",
+				"$(touch " + injectionMarker + ")",
 				"`date`",
 				"$1",
 				"~",
@@ -80,7 +83,7 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 		{
 			name: "non-ASCII and UTF-8 bytes",
 			inputs: []string{
-				"日本語",
+				"日本語", //nolint:gosmopolitan // UTF-8 quoting corpus intentionally contains Han script
 				"emoji 🚀",
 				"\xff\xfe",
 			},
@@ -91,61 +94,55 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 		t.Run(p.name, func(t *testing.T) {
 			for _, input := range p.inputs {
 				t.Run(input, func(t *testing.T) {
-					_ = os.Remove("/tmp/bad")
-					t.Cleanup(func() { _ = os.Remove("/tmp/bad") })
+					_ = os.Remove(injectionMarker)
 
-					// Test with "-p", "-l", "--", input so format expressions (#{pane_id}, etc.)
-					// are printed literally without format expansion, verifying differential
-					// command quoting through the tmux C parser verbatim.
-					cmd, err := tmux.NewCommand("display-message", "-p", "-l", "--", input)
-					if err != nil {
-						t.Fatalf("NewCommand(%q) failed: %v", input, err)
-					}
+					t.Cleanup(func() { _ = os.Remove(injectionMarker) })
 
-					res, err := server.Run(ctx, cmd)
-					if err != nil {
-						t.Fatalf("server.Run(%q) failed: %v, res: %+v", input, err, res)
-					}
+					// -l prints format expressions literally.
+					assertDisplayEchoes(t, server, ctx, input, "-l")
 
-					if res.ExitCode != 0 {
-						t.Errorf("expected exit code 0 for input %q, got %d (stderr: %q)", input, res.ExitCode, string(res.Stderr))
-					}
-
-					wantStdout := input + "\n"
-					if string(res.Stdout) != wantStdout {
-						t.Errorf("stdout mismatch for input %q:\n got: %q\nwant: %q", input, string(res.Stdout), wantStdout)
-					}
-
-					if _, err := os.Stat("/tmp/bad"); err == nil {
-						t.Errorf("/tmp/bad was created during test of %q", input)
-						_ = os.Remove("/tmp/bad")
-					}
-
-					// For inputs without format characters, also verify with display-message -p -- <arg>
 					if !strings.Contains(input, "#") {
-						cmdNoL, err := tmux.NewCommand("display-message", "-p", "--", input)
-						if err != nil {
-							t.Fatalf("NewCommand without -l (%q) failed: %v", input, err)
-						}
-						resNoL, err := server.Run(ctx, cmdNoL)
-						if err != nil {
-							t.Fatalf("server.Run without -l (%q) failed: %v", input, err)
-						}
-						if resNoL.ExitCode != 0 || string(resNoL.Stdout) != wantStdout {
-							t.Errorf("display-message -p -- %q failed: exit=%d stdout=%q", input, resNoL.ExitCode, string(resNoL.Stdout))
-						}
-						if _, err := os.Stat("/tmp/bad"); err == nil {
-							t.Errorf("/tmp/bad was created during test without -l of %q", input)
-							_ = os.Remove("/tmp/bad")
-						}
+						assertDisplayEchoes(t, server, ctx, input)
 					}
 				})
 			}
 		})
 	}
 
-	if _, err := os.Stat("/tmp/bad"); err == nil {
-		t.Errorf("/tmp/bad exists at end of differential quoting tests")
-		_ = os.Remove("/tmp/bad")
+	assertNoInjection(t, "at end of differential quoting tests")
+}
+
+func assertDisplayEchoes(t *testing.T, server *tmux.Server, ctx context.Context, input string, flags ...string) {
+	t.Helper()
+
+	args := append(append([]string{"display-message", "-p"}, flags...), "--", input)
+
+	cmd, err := tmux.NewCommand(args[0], args[1:]...)
+	if err != nil {
+		t.Fatalf("NewCommand(%q) failed: %v", args, err)
+	}
+
+	res, err := server.Run(ctx, cmd)
+	if err != nil {
+		t.Fatalf("server.Run(%q) failed: %v, res: %+v", args, err, res)
+	}
+
+	if res.ExitCode != 0 {
+		t.Errorf("%q: exit code %d, want 0 (stderr: %q)", args, res.ExitCode, string(res.Stderr))
+	}
+
+	if want := input + "\n"; string(res.Stdout) != want {
+		t.Errorf("%q: stdout mismatch:\n got: %q\nwant: %q", args, string(res.Stdout), want)
+	}
+
+	assertNoInjection(t, fmt.Sprintf("by %q", args))
+}
+
+func assertNoInjection(t *testing.T, when string) {
+	t.Helper()
+
+	if _, err := os.Stat(injectionMarker); err == nil {
+		t.Errorf("%s was created %s", injectionMarker, when)
+		_ = os.Remove(injectionMarker)
 	}
 }

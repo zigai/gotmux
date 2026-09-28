@@ -52,7 +52,7 @@ var metamorphicValuePartitions = []string{
 
 	// Expansions & formats
 	"$HOME",
-	"$(touch /tmp/bad)",
+	"$(touch " + injectionMarker + ")",
 	"`date`",
 	"#{pane_id}",
 	"#{==:1,1}",
@@ -151,19 +151,19 @@ func assertMetamorphicEquivalence(ctx context.Context, rt *rapid.T, server *tmux
 		}
 	}
 
-	if _, err := os.Stat("/tmp/bad"); err == nil {
-		_ = os.Remove("/tmp/bad")
+	if _, err := os.Stat(injectionMarker); err == nil {
+		_ = os.Remove(injectionMarker)
 
-		rt.Fatalf("/tmp/bad was created during metamorphic test")
+		rt.Fatalf("%s was created during metamorphic test", injectionMarker)
 	}
 }
 
 // TestMetamorphicSequenceEquivalence validates that executing an atomic command batch via
 // RunSequence produces the exact same terminal daemon state as executing each command sequentially via Run.
 func TestMetamorphicSequenceEquivalence(t *testing.T) {
-	_ = os.Remove("/tmp/bad")
+	_ = os.Remove(injectionMarker)
 
-	t.Cleanup(func() { _ = os.Remove("/tmp/bad") })
+	t.Cleanup(func() { _ = os.Remove(injectionMarker) })
 
 	server := tmuxtest.NewServer(t)
 
@@ -244,9 +244,9 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 //
 //nolint:cyclop,gocognit // metamorphic property verification loop exercises multiple execution branches
 func TestMetamorphicSequenceAssociativity(t *testing.T) {
-	_ = os.Remove("/tmp/bad")
+	_ = os.Remove(injectionMarker)
 
-	t.Cleanup(func() { _ = os.Remove("/tmp/bad") })
+	t.Cleanup(func() { _ = os.Remove(injectionMarker) })
 
 	server := tmuxtest.NewServer(t)
 

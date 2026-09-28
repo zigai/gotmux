@@ -24,6 +24,7 @@ func assertNoCurrentContext(t *testing.T, info tmux.CurrentInfo) {
 
 	_, hasSession := info.Session.Get()
 	_, hasLink := info.Link.Get()
+
 	_, hasClient := info.Client.Get()
 	if info.Identity.PID != 0 || info.Pane.ID.Valid() || info.Window.ID.Valid() || hasSession || hasLink || hasClient {
 		t.Fatalf("failed discovery returned a current context: %+v", info)
@@ -33,10 +34,12 @@ func assertNoCurrentContext(t *testing.T, info tmux.CurrentInfo) {
 func TestIntegrationCurrentWithEnvDiscovery(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	explicitLink, explicitPane := graphWindow(t, ctx, session)
+
 	activeLink, activePane := graphWindow(t, ctx, session)
 	if err := activeLink.Select(ctx); err != nil {
 		t.Fatal(err)
 	}
+
 	identity, err := server.Probe(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -56,22 +59,33 @@ func TestIntegrationCurrentWithEnvDiscovery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !info.Identity.Equal(identity.Identity) || info.Pane.ID != test.pane || info.Window.ID != test.link.Window().ID() || info.Pane.WindowID != info.Window.ID {
-				t.Fatalf("wrong daemon/pane/window context: %+v", info)
-			}
-			if got, ok := info.Session.Get(); !ok || got.ID != session.ID() {
-				t.Fatalf("session: %+v, available=%v", got, ok)
-			}
-			if got, ok := info.Link.Get(); !ok || got.SessionID != session.ID() || got.WindowID != test.link.Window().ID() || got.Index != test.link.Index() {
-				t.Fatalf("link: %+v, available=%v", got, ok)
-			}
+
+			assertCurrentContext(t, info, identity.Identity, session.ID(), test.pane, test.link)
 		})
+	}
+}
+
+func assertCurrentContext(t *testing.T, info tmux.CurrentInfo, identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID, link tmux.WindowLink) {
+	t.Helper()
+
+	window := link.Window().ID()
+	if !info.Identity.Equal(identity) || info.Pane.ID != pane || info.Window.ID != window || info.Pane.WindowID != window {
+		t.Fatalf("wrong daemon/pane/window context: %+v", info)
+	}
+
+	if got, ok := info.Session.Get(); !ok || got.ID != session {
+		t.Fatalf("session: %+v, available=%v", got, ok)
+	}
+
+	if got, ok := info.Link.Get(); !ok || got.SessionID != session || got.WindowID != window || got.Index != link.Index() {
+		t.Fatalf("link: %+v, available=%v", got, ok)
 	}
 }
 
 func TestIntegrationCurrentWithEnvRejectsInvalidContext(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	pane := firstPane(t, server, ctx)
+
 	identity, err := server.Probe(ctx)
 	if err != nil {
 		t.Fatal(err)
@@ -97,6 +111,7 @@ func TestIntegrationCurrentWithEnvRejectsInvalidContext(t *testing.T) {
 			if !errors.Is(err, test.want) {
 				t.Fatalf("CurrentWithEnv error: %v, want %v", err, test.want)
 			}
+
 			assertNoCurrentContext(t, info)
 		})
 	}

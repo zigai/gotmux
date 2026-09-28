@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	tmux "github.com/zigai/gotmux/tmux"
@@ -102,24 +103,18 @@ func TestIntegrationAPIQueries(t *testing.T) {
 		t.Fatalf("extra field: %q, %v", raw, ok)
 	}
 
-	if got, err := session.Format(ctx, "#{session_id}"); err != nil || string(got) != string(session.ID()) {
-		t.Fatalf("session format: %q, %v", got, err)
-	}
+	got, err := session.Format(ctx, "#{session_id}")
+	assertFormatValues(t, "session format", [][]byte{got}, err, string(session.ID()))
 
 	window := windows[0].Handle()
-	if got, err := window.Format(ctx, "#{window_id}"); err != nil || string(got) != string(window.ID()) {
-		t.Fatalf("window format: %q, %v", got, err)
-	}
+	got, err = window.Format(ctx, "#{window_id}")
+	assertFormatValues(t, "window format", [][]byte{got}, err, string(window.ID()))
 
 	sMulti, err := session.FormatMulti(ctx, "#{session_id}", "#{session_name}")
-	if err != nil || len(sMulti) != 2 || string(sMulti[0]) != string(session.ID()) || string(sMulti[1]) != "fixture" {
-		t.Fatalf("session format multi: %q, %v", sMulti, err)
-	}
+	assertFormatValues(t, "session format multi", sMulti, err, string(session.ID()), "fixture")
 
 	wMulti, err := window.FormatMulti(ctx, "#{window_id}", "#{window_name}")
-	if err != nil || len(wMulti) != 2 || string(wMulti[0]) != string(window.ID()) {
-		t.Fatalf("window format multi: %q, %v", wMulti, err)
-	}
+	assertFormatValues(t, "window format multi", wMulti, err, string(window.ID()), windows[0].Name)
 
 	panes, err := window.PanesWith(ctx, tmux.QueryOptions{Filter: "0", ExtraFields: nil})
 	if err != nil || len(panes) != 0 {
@@ -262,13 +257,27 @@ func TestIntegrationAPIControlSupport(t *testing.T) {
 	}
 
 	client := clients[0].Handle()
-	if got, err := client.Format(ctx, "#{client_name}"); err != nil || string(got) != string(client.Name()) {
-		t.Fatalf("client format: %q, %v", got, err)
-	}
+	got, err := client.Format(ctx, "#{client_name}")
+	assertFormatValues(t, "client format", [][]byte{got}, err, string(client.Name()))
 
 	cMulti, err := client.FormatMulti(ctx, "#{client_name}", "#{client_control_mode}")
-	if err != nil || len(cMulti) != 2 || string(cMulti[0]) != string(client.Name()) || string(cMulti[1]) != "1" {
-		t.Fatalf("client format multi: %q, %v", cMulti, err)
+	assertFormatValues(t, "client format multi", cMulti, err, string(client.Name()), "1")
+}
+
+func assertFormatValues(t *testing.T, call string, got [][]byte, err error, want ...string) {
+	t.Helper()
+
+	if err != nil {
+		t.Fatalf("%s: %v", call, err)
+	}
+
+	values := make([]string, len(got))
+	for i, value := range got {
+		values[i] = string(value)
+	}
+
+	if !slices.Equal(values, want) {
+		t.Fatalf("%s = %q, want %q", call, values, want)
 	}
 }
 
@@ -431,6 +440,7 @@ func TestIntegrationPaneInfoParentMetadata(t *testing.T) {
 	}
 
 	p := panes[0]
+
 	sid, ok := p.SessionID.Get()
 	if !ok || sid != session.ID() {
 		t.Fatalf("expected pane session ID %v, got %v (ok=%v)", session.ID(), sid, ok)
@@ -482,6 +492,7 @@ func TestIntegrationCaptureWithTitle(t *testing.T) {
 	}
 
 	pane := panes[0].Handle()
+
 	res, err := pane.CaptureWithTitle(ctx, tmux.CaptureOptions{})
 	if err != nil {
 		t.Fatalf("CaptureWithTitle failed: %v", err)
@@ -532,6 +543,7 @@ func TestEnvironmentOperationNames(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on invalid env name")
 	}
+
 	var opErr *tmux.OperationError
 	if errors.As(err, &opErr) {
 		if opErr.Operation != "Environment.Unset" {
@@ -545,6 +557,7 @@ func TestEnvironmentOperationNames(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error on invalid env name")
 	}
+
 	if errors.As(err, &opErr) {
 		if opErr.Operation != "Environment.Remove" {
 			t.Errorf("expected opErr.Operation to be 'Environment.Remove', got %q", opErr.Operation)
@@ -561,12 +574,12 @@ func TestMissingObjectEffect(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error looking up nonexistent session")
 	}
+
 	if !errors.Is(err, tmux.ErrNotFound) {
 		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 
-	var opErr *tmux.OperationError
-	if errors.As(err, &opErr) {
+	if opErr, ok := errors.AsType[*tmux.OperationError](err); ok {
 		if opErr.Outcome.Effect == tmux.Confirmed {
 			t.Errorf("read-only missing session lookup reported Effect: Confirmed! Must not be Confirmed.")
 		}
@@ -575,10 +588,13 @@ func TestMissingObjectEffect(t *testing.T) {
 
 func TestDuplicateSessionCreationReportsRejection(t *testing.T) {
 	server, session, ctx := apiFixture(t)
+
 	var opts tmux.NewSessionOptions
+
 	opts.Name = "fixture"
 
 	_, err := server.NewSession(ctx, opts)
+
 	opErr, ok := errors.AsType[*tmux.OperationError](err)
 	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) || opErr.Outcome.Effect != tmux.Rejected || len(opErr.Outcome.Created) != 0 {
 		t.Fatalf("duplicate session = %#v, %v", opErr, err)
@@ -591,12 +607,16 @@ func TestDuplicateSessionCreationReportsRejection(t *testing.T) {
 
 func TestStaleSessionEnvironmentReportsNotFound(t *testing.T) {
 	server, _, ctx := apiFixture(t)
+
 	var opts tmux.NewSessionOptions
+
 	opts.Name = "stale"
+
 	stale, err := server.NewSession(ctx, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if err := stale.Kill(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -609,19 +629,26 @@ func TestStaleSessionEnvironmentReportsNotFound(t *testing.T) {
 
 func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
 	server, _, ctx := apiFixture(t)
+
 	pane := firstPane(t, server, ctx)
 	if err := pane.Submit(ctx, `printf '\033]8;;https://example.invalid\033\\LINK\033]8;;\033\\\n'`); err != nil {
 		t.Fatal(err)
 	}
 
 	var opts tmux.CaptureOptions
+
 	opts.IncludeEscapes = true
+
 	var captured []byte
+
 	awaitObservation(t, ctx, "OSC 8 capture", func() bool {
 		var err error
+
 		captured, err = pane.Capture(ctx, opts)
+
 		return err == nil && bytes.Contains(captured, []byte("\x1b]8;;https://example.invalid"))
 	})
+
 	if !bytes.Contains(captured, []byte("LINK")) {
 		t.Fatalf("linked text missing from capture: %q", captured)
 	}
@@ -637,6 +664,7 @@ func TestCaptureRangeEntireHistoryWithEnd(t *testing.T) {
 	pane := firstPane(t, server, ctx)
 
 	end := 10
+
 	_, err := pane.Capture(ctx, tmux.CaptureOptions{
 		EntireHistory: true,
 		End:           &end,

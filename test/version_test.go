@@ -48,46 +48,40 @@ func TestCapabilities(t *testing.T) {
 		t.Errorf("expected caps.Commands to be sorted")
 	}
 
-	// Also test ParseVersion.String() and Version(ctx)
 	ver, err := server.Version(ctx)
 	if err != nil {
 		t.Fatalf("server.Version failed: %v", err)
 	}
+
 	if !ver.AtLeast(3, 6) {
 		t.Errorf("expected server.Version.AtLeast(3, 6) to be true, got %v", ver)
 	}
+
 	if ver.String() == "" {
 		t.Errorf("expected non-empty ver.String()")
 	}
+}
 
-	parsed := tmux.ParseVersion("tmux 3.6a")
-	if parsed.String() != "tmux 3.6a" {
-		t.Errorf("expected parsed.String() == %q, got %q", "tmux 3.6a", parsed.String())
-	}
-	if parsed.Major != 3 || parsed.Minor != 6 || parsed.Patch != "a" || !parsed.Recognized {
-		t.Errorf("unexpected ParseVersion result: %+v", parsed)
-	}
-	if !parsed.AtLeast(3, 6) {
-		t.Errorf("expected parsed.AtLeast(3, 6) to be true")
-	}
-	if parsed.AtLeast(3, 7) {
-		t.Errorf("expected parsed.AtLeast(3, 7) to be false")
-	}
+func TestParseVersionForms(t *testing.T) {
+	for _, tc := range []struct {
+		raw           string
+		want          tmux.Version
+		atLeast36     bool
+		atLeast37     bool
+		wantRendering string
+	}{
+		{"tmux 3.6a", tmux.Version{Raw: "tmux 3.6a", Major: 3, Minor: 6, Patch: "a", Suffix: "", Recognized: true}, true, false, "tmux 3.6a"},
+		{"3.6", tmux.Version{Raw: "3.6", Major: 3, Minor: 6, Patch: "", Suffix: "", Recognized: true}, true, false, "3.6"},
+		{"3.6-rc1", tmux.Version{Raw: "3.6-rc1", Major: 3, Minor: 6, Patch: "", Suffix: "-rc1", Recognized: false}, true, false, "3.6-rc1"},
+	} {
+		got := tmux.ParseVersion(tc.raw)
+		if got != tc.want || got.String() != tc.wantRendering {
+			t.Errorf("ParseVersion(%q) = %+v (String %q), want %+v (String %q)", tc.raw, got, got.String(), tc.want, tc.wantRendering)
+		}
 
-	parsedPlain := tmux.ParseVersion("3.6")
-	if parsedPlain.String() != "3.6" {
-		t.Errorf("expected parsedPlain.String() == %q, got %q", "3.6", parsedPlain.String())
-	}
-	if parsedPlain.Major != 3 || parsedPlain.Minor != 6 || parsedPlain.Patch != "" || !parsedPlain.Recognized {
-		t.Errorf("unexpected ParseVersion result: %+v", parsedPlain)
-	}
-
-	devVer := tmux.ParseVersion("3.6-rc1")
-	if devVer.Recognized {
-		t.Errorf("expected development version with suffix to have Recognized=false")
-	}
-	if !devVer.AtLeast(3, 6) {
-		t.Errorf("expected development version AtLeast(3, 6) to return true")
+		if got.AtLeast(3, 6) != tc.atLeast36 || got.AtLeast(3, 7) != tc.atLeast37 {
+			t.Errorf("ParseVersion(%q): AtLeast(3, 6) = %v, AtLeast(3, 7) = %v; want %v, %v", tc.raw, got.AtLeast(3, 6), got.AtLeast(3, 7), tc.atLeast36, tc.atLeast37)
+		}
 	}
 }
 

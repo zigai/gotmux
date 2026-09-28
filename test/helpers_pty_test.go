@@ -20,6 +20,7 @@ func interactiveTerminal(t *testing.T) (*os.File, *os.File) {
 
 	t.Cleanup(func() {
 		_ = master.Close()
+
 		<-done
 	})
 

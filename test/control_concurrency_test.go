@@ -13,17 +13,22 @@ import (
 	tmux "github.com/zigai/gotmux/tmux"
 )
 
+// errEmptyResult marks a concurrent query that succeeded but returned nothing.
+var errEmptyResult = errors.New("empty result")
+
 func isContextError(err error) bool {
 	if err == nil {
 		return false
 	}
+
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	var cmdErr *tmux.CommandError
-	if errors.As(err, &cmdErr) {
+
+	if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
 		return errors.Is(cmdErr.Err, context.Canceled) || errors.Is(cmdErr.Err, context.DeadlineExceeded)
 	}
+
 	return false
 }
 
@@ -33,86 +38,30 @@ func TestControlConcurrentRequests(t *testing.T) {
 	bound := connection.Server()
 
 	const concurrency = 40
+
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 
 	errCh := make(chan error, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		go func(idx int) {
 			defer wg.Done()
 
 			// A subset of goroutines (idx % 5 == 0) use an early-canceled context
 			// to exercise request cancellation under concurrent dispatch.
-			var reqCtx context.Context
-			var cancel context.CancelFunc
+			canceled := idx%5 == 0
 
-			isCanceledSubset := (idx%5 == 0)
-			if isCanceledSubset {
-				reqCtx, cancel = context.WithTimeout(ctx, 100*time.Microsecond)
-			} else {
-				reqCtx, cancel = context.WithTimeout(ctx, 15*time.Second)
+			timeout := 15 * time.Second
+			if canceled {
+				timeout = 100 * time.Microsecond
 			}
+
+			reqCtx, cancel := context.WithTimeout(ctx, timeout)
 			defer cancel()
 
-			switch idx % 4 {
-			case 0:
-				// Query bound panes
-				panes, err := bound.Panes(reqCtx)
-				if err != nil {
-					if isCanceledSubset && isContextError(err) {
-						return
-					}
-					errCh <- fmt.Errorf("goroutine %d bound.Panes: %w", idx, err)
-					return
-				}
-				if len(panes) == 0 {
-					errCh <- fmt.Errorf("goroutine %d expected at least 1 pane", idx)
-				}
-
-			case 1:
-				// Query session windows
-				links, err := session.Windows(reqCtx)
-				if err != nil {
-					if isCanceledSubset && isContextError(err) {
-						return
-					}
-					errCh <- fmt.Errorf("goroutine %d session.Windows: %w", idx, err)
-					return
-				}
-				if len(links) == 0 {
-					errCh <- fmt.Errorf("goroutine %d expected at least 1 window", idx)
-				}
-
-			case 2:
-				// Query options
-				titles, err := session.Options().Titles(reqCtx)
-				if err != nil {
-					if isCanceledSubset && isContextError(err) {
-						return
-					}
-					errCh <- fmt.Errorf("goroutine %d session.Options.Titles: %w", idx, err)
-					return
-				}
-				if _, ok := titles.Effective.Get(); !ok && !isCanceledSubset {
-					errCh <- fmt.Errorf("goroutine %d expected titles option value", idx)
-				}
-
-			case 3:
-				// Create and kill a scratch window
-				var opts tmux.NewWindowOptions
-				opts.Name = fmt.Sprintf("scratch-%d", idx)
-				link, err := session.NewWindow(reqCtx, opts)
-				if err != nil {
-					if isCanceledSubset && isContextError(err) {
-						return
-					}
-					errCh <- fmt.Errorf("goroutine %d session.NewWindow: %w", idx, err)
-					return
-				}
-				if err := link.Window().Kill(ctx); err != nil {
-					errCh <- fmt.Errorf("goroutine %d kill scratch window: %w", idx, err)
-				}
+			if err := concurrentRequest(ctx, reqCtx, bound, session, idx, canceled); err != nil {
+				errCh <- err
 			}
 		}(i)
 	}
@@ -138,4 +87,83 @@ func TestControlConcurrentRequests(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("connection.Close() deadlocked or timed out")
 	}
+}
+
+func concurrentRequest(ctx, reqCtx context.Context, bound *tmux.Server, session tmux.Session, idx int, canceled bool) error {
+	switch idx % 4 {
+	case 0:
+		return concurrentPanes(reqCtx, bound, idx, canceled)
+	case 1:
+		return concurrentWindows(reqCtx, session, idx, canceled)
+	case 2:
+		return concurrentTitles(reqCtx, session, idx, canceled)
+	default:
+		return concurrentScratchWindow(ctx, reqCtx, session, idx, canceled)
+	}
+}
+
+func concurrentPanes(reqCtx context.Context, bound *tmux.Server, idx int, canceled bool) error {
+	panes, err := bound.Panes(reqCtx)
+	if err != nil {
+		return requestError(err, idx, "bound.Panes", canceled)
+	}
+
+	if len(panes) == 0 {
+		return fmt.Errorf("goroutine %d panes: %w", idx, errEmptyResult)
+	}
+
+	return nil
+}
+
+func concurrentWindows(reqCtx context.Context, session tmux.Session, idx int, canceled bool) error {
+	links, err := session.Windows(reqCtx)
+	if err != nil {
+		return requestError(err, idx, "session.Windows", canceled)
+	}
+
+	if len(links) == 0 {
+		return fmt.Errorf("goroutine %d windows: %w", idx, errEmptyResult)
+	}
+
+	return nil
+}
+
+func concurrentTitles(reqCtx context.Context, session tmux.Session, idx int, canceled bool) error {
+	titles, err := session.Options().Titles(reqCtx)
+	if err != nil {
+		return requestError(err, idx, "session.Options.Titles", canceled)
+	}
+
+	if _, ok := titles.Effective.Get(); !ok && !canceled {
+		return fmt.Errorf("goroutine %d titles option: %w", idx, errEmptyResult)
+	}
+
+	return nil
+}
+
+// The kill uses ctx, so an early-canceled reqCtx cannot skip it.
+func concurrentScratchWindow(ctx, reqCtx context.Context, session tmux.Session, idx int, canceled bool) error {
+	var opts tmux.NewWindowOptions
+
+	opts.Name = fmt.Sprintf("scratch-%d", idx)
+
+	link, err := session.NewWindow(reqCtx, opts)
+	if err != nil {
+		return requestError(err, idx, "session.NewWindow", canceled)
+	}
+
+	if err := link.Window().Kill(ctx); err != nil {
+		return fmt.Errorf("goroutine %d kill scratch window: %w", idx, err)
+	}
+
+	return nil
+}
+
+// requestError ignores context errors in the early-canceled subset.
+func requestError(err error, idx int, request string, canceled bool) error {
+	if canceled && isContextError(err) {
+		return nil
+	}
+
+	return fmt.Errorf("goroutine %d %s: %w", idx, request, err)
 }

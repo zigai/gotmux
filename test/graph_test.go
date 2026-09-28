@@ -70,39 +70,113 @@ func graphWindow(t *testing.T, ctx context.Context, session tmux.Session) (tmux.
 
 func TestIntegrationUnprobedHandleLists(t *testing.T) {
 	server, session, ctx := apiFixture(t)
+
+	second, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "second"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	secondPane, err := second.Window().ActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := secondPane.Split(ctx, tmux.SplitOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	zero := 0
+	if _, err := second.Window().Link(ctx, other, tmux.LinkOptions{Index: &zero, Replace: true}); err != nil {
+		t.Fatal(err)
+	}
+
 	unprobedSession, err := server.SessionHandle(session.ID())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	links, err := unprobedSession.Windows(ctx)
-	if err != nil || len(links) == 0 {
-		t.Fatalf("Session.Windows: %v, links=%d", err, len(links))
-	}
-	if windows, slots, err := unprobedSession.WindowInfos(ctx); err != nil || len(windows) == 0 || len(slots) == 0 {
-		t.Fatalf("Session.WindowInfos: %v, windows=%d, slots=%d", err, len(windows), len(slots))
-	}
-	if panes, err := unprobedSession.Panes(ctx); err != nil || len(panes) == 0 {
-		t.Fatalf("Session.Panes: %v, panes=%d", err, len(panes))
-	}
-	if _, err := unprobedSession.Clients(ctx); err != nil {
-		t.Fatalf("Session.Clients: %v", err)
-	}
-
-	unprobedWindow, err := server.WindowHandle(links[0].Window().ID())
+	unprobedWindow, err := server.WindowHandle(second.Window().ID())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slots, err := unprobedWindow.Links(ctx); err != nil || len(slots) == 0 {
-		t.Fatalf("Window.Links: %v, slots=%d", err, len(slots))
+
+	for _, tc := range []struct {
+		name          string
+		probed, found func() ([]string, error)
+	}{
+		{"Session.Windows", func() ([]string, error) { return linkKeys(session.Windows(ctx)) }, func() ([]string, error) { return linkKeys(unprobedSession.Windows(ctx)) }},
+		{"Session.WindowInfos", func() ([]string, error) { return windowInfoKeys(session.WindowInfos(ctx)) }, func() ([]string, error) { return windowInfoKeys(unprobedSession.WindowInfos(ctx)) }},
+		{"Session.Panes", func() ([]string, error) { return paneKeys(session.Panes(ctx)) }, func() ([]string, error) { return paneKeys(unprobedSession.Panes(ctx)) }},
+		{"Window.Links", func() ([]string, error) { return linkKeys(second.Window().Links(ctx)) }, func() ([]string, error) { return linkKeys(unprobedWindow.Links(ctx)) }},
+		{"Window.Panes", func() ([]string, error) { return paneKeys(second.Window().Panes(ctx)) }, func() ([]string, error) { return paneKeys(unprobedWindow.Panes(ctx)) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertSameListing(t, tc.probed, tc.found)
+		})
 	}
-	if panes, err := unprobedWindow.Panes(ctx); err != nil || len(panes) == 0 {
-		t.Fatalf("Window.Panes: %v, panes=%d", err, len(panes))
+
+	if _, err := unprobedSession.Clients(ctx); err != nil {
+		t.Fatalf("Session.Clients: %v", err)
 	}
+}
+
+func assertSameListing(t *testing.T, probed, unprobed func() ([]string, error)) {
+	t.Helper()
+
+	want, err := probed()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := unprobed()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("unprobed handle listed different objects (-probed +unprobed):\n%s", diff)
+	}
+}
+
+func linkKeys(links []tmux.WindowLink, err error) ([]string, error) {
+	keys := make([]string, 0, len(links))
+	for _, l := range links {
+		keys = append(keys, string(l.Session().ID())+":"+strconv.Itoa(l.Index())+"="+string(l.Window().ID()))
+	}
+
+	return keys, err
+}
+
+func windowInfoKeys(windows []tmux.WindowInfo, links []tmux.WindowLinkInfo, err error) ([]string, error) {
+	keys := make([]string, 0, len(windows)+len(links))
+	for _, w := range windows {
+		keys = append(keys, string(w.ID))
+	}
+
+	for _, l := range links {
+		keys = append(keys, string(l.SessionID)+":"+strconv.Itoa(l.Index)+"="+string(l.WindowID))
+	}
+
+	return keys, err
+}
+
+func paneKeys(panes []tmux.PaneInfo, err error) ([]string, error) {
+	keys := make([]string, 0, len(panes))
+	for _, p := range panes {
+		keys = append(keys, string(p.ID))
+	}
+
+	return keys, err
 }
 
 func TestIntegrationRenumberWindowsTargetsSession(t *testing.T) {
 	server, session, ctx := apiFixture(t)
+
 	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
 	if err != nil {
 		t.Fatal(err)
@@ -114,6 +188,7 @@ func TestIntegrationRenumberWindowsTargetsSession(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+
 	if err := session.RenumberWindows(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -129,10 +204,12 @@ func TestIntegrationRenumberWindowsTargetsSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+
 		got := make([]int, len(links))
 		for i, link := range links {
 			got[i] = link.Index()
 		}
+
 		if diff := cmp.Diff(tc.want, got); diff != "" {
 			t.Errorf("session %s indices (-want +got):\n%s", tc.session.ID(), diff)
 		}
@@ -141,10 +218,12 @@ func TestIntegrationRenumberWindowsTargetsSession(t *testing.T) {
 
 func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
 	server, _, ctx := apiFixture(t)
+
 	development, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "development"})
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if _, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "joined", Group: "dev"}); !errors.Is(err, tmux.ErrNotFound) {
 		t.Fatalf("Group dev matched development: %v", err)
 	}
@@ -153,40 +232,47 @@ func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	joined, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "joined", Group: "dev"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, target := range []tmux.Session{dev, joined} {
-		info, err := target.Info(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if group, ok := info.Group.Get(); !ok || group != "dev" {
-			t.Errorf("session %s group = %q, %t; want dev", target.ID(), group, ok)
-		}
-	}
+
+	assertInGroup(t, ctx, dev, "dev")
+	assertInGroup(t, ctx, joined, "dev")
+
 	if err := dev.Rename(ctx, "renamed"); err != nil {
 		t.Fatal(err)
 	}
+
 	third, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "third", Group: "dev"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	thirdInfo, err := third.Info(ctx)
+
+	assertInGroup(t, ctx, third, "dev")
+
+	if group, ok := sessionGroup(t, ctx, development); ok {
+		t.Errorf("development joined group %q", group)
+	}
+}
+
+func sessionGroup(t *testing.T, ctx context.Context, session tmux.Session) (string, bool) {
+	t.Helper()
+
+	info, err := session.Info(ctx)
 	if err != nil {
 		t.Fatal(err)
-	}
-	if group, ok := thirdInfo.Group.Get(); !ok || group != "dev" {
-		t.Errorf("third group = %q, %t; want dev", group, ok)
 	}
 
-	info, err := development.Info(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if group, ok := info.Group.Get(); ok {
-		t.Errorf("development joined group %q", group)
+	return info.Group.Get()
+}
+
+func assertInGroup(t *testing.T, ctx context.Context, session tmux.Session, want string) {
+	t.Helper()
+
+	if group, ok := sessionGroup(t, ctx, session); !ok || group != want {
+		t.Errorf("session %s group = %q, %t; want %s", session.ID(), group, ok, want)
 	}
 }
 
@@ -214,6 +300,7 @@ func TestIntegrationGraphUnlink(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !shared.Identity().Equal(other.Identity()) || !shared.Window().Equal(original.Window()) {
 		t.Fatalf("returned link lost window provenance: %+v", shared)
 	}
@@ -290,7 +377,8 @@ func TestIntegrationGraphJoinBreak(t *testing.T) {
 
 	var options tmux.BreakOptions
 
-	options.Name = "broken"
+	// break-pane stores -n verbatim; format syntax must survive unchanged.
+	options.Name = "broken #{session_name}"
 
 	broken, err := moving.Break(ctx, session, options)
 	if err != nil {
@@ -304,6 +392,11 @@ func TestIntegrationGraphJoinBreak(t *testing.T) {
 	panes, err := broken.Window().Panes(ctx)
 	if err != nil || len(panes) != 1 || panes[0].ID != moving.ID() {
 		t.Fatalf("returned window panes: %+v, %v", panes, err)
+	}
+
+	info, err := broken.Window().Info(ctx)
+	if err != nil || info.Name != options.Name {
+		t.Fatalf("broken window name = %q, %v; want %q", info.Name, err, options.Name)
 	}
 }
 
@@ -333,6 +426,7 @@ func TestIntegrationGraphPaneSwap(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+
 			if tc.unprobedTarget {
 				second, err = server.PaneHandle(second.ID())
 				if err != nil {
@@ -373,21 +467,11 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 				t.Fatal("fixture lacks a cross-window pane ID collision")
 			}
 
-			var err error
-			if tc.unprobedSource {
-				source, err = server.PaneHandle(source.ID())
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
-			if tc.unprobedTarget {
-				target, err = other.PaneHandle(target.ID())
-				if err != nil {
-					t.Fatal(err)
-				}
-			}
+			source = paneHandleFor(t, server, source, tc.unprobedSource)
+			target = paneHandleFor(t, other, target, tc.unprobedTarget)
 
 			var options tmux.JoinOptions
+
 			for _, action := range []struct {
 				name string
 				run  func() error
@@ -396,19 +480,39 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 				{name: "join", run: func() error { return source.Join(ctx, target, options) }},
 			} {
 				t.Run(action.name, func(t *testing.T) {
-					err := action.run()
-					if !errors.Is(err, tmux.ErrInvalidHandle) {
-						t.Errorf("cross-server mutation: %v", err)
-					}
-					if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
-						t.Errorf("cross-server mutation was not rejected before send: %v", err)
-					}
-
+					assertRejectedBeforeSend(t, action.run(), tmux.ErrInvalidHandle)
 					assertGraph(t, ctx, server, before)
 					assertGraph(t, ctx, other, otherBefore)
 				})
 			}
 		})
+	}
+}
+
+func paneHandleFor(t *testing.T, server *tmux.Server, pane tmux.Pane, unprobed bool) tmux.Pane {
+	t.Helper()
+
+	if !unprobed {
+		return pane
+	}
+
+	handle, err := server.PaneHandle(pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return handle
+}
+
+func assertRejectedBeforeSend(t *testing.T, err, want error) {
+	t.Helper()
+
+	if !errors.Is(err, want) {
+		t.Errorf("mutation error: %v, want %v", err, want)
+	}
+
+	if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
+		t.Errorf("mutation was not rejected before send: %v", err)
 	}
 }
 
@@ -427,44 +531,52 @@ func TestIntegrationGraphHandleLifetimes(t *testing.T) {
 			_, first := graphWindow(t, ctx, session)
 			_, second := graphWindow(t, ctx, session)
 			connection := apiControl(t, server, session, ctx)
-			targetServer := connection.AuxiliaryServer()
-			switch test.name {
-			case "different-connections":
-				targetServer = apiControl(t, server, session, ctx).Server()
-			case "unbound-target":
-				targetServer = server
-			case "closed-connection":
-				if err := connection.Close(); err != nil {
-					t.Fatal(err)
-				}
-			}
+			targetServer := lifetimeTarget(t, ctx, server, session, connection, test.name)
 
 			source, err := connection.Server().PaneHandle(first.ID())
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			target, err := targetServer.PaneHandle(second.ID())
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			want := graphState(t, ctx, server)
-			if test.want == nil {
-				a, b := string(first.ID()), string(second.ID())
-				want[a], want[b] = want[b], want[a]
-			}
 
 			err = source.Swap(ctx, target, false)
-			if !errors.Is(err, test.want) {
-				t.Errorf("swap error: %v, want %v", err, test.want)
-			}
-			if test.want != nil {
-				if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
-					t.Errorf("incompatible lifetime was not rejected before send: %v", err)
+			if test.want == nil {
+				if err != nil {
+					t.Errorf("swap error: %v, want nil", err)
 				}
+
+				a, b := string(first.ID()), string(second.ID())
+				want[a], want[b] = want[b], want[a]
+			} else {
+				assertRejectedBeforeSend(t, err, test.want)
 			}
+
 			assertGraph(t, ctx, server, want)
 		})
 	}
+}
+
+func lifetimeTarget(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, connection *tmux.Connection, name string) *tmux.Server {
+	t.Helper()
+
+	switch name {
+	case "different-connections":
+		return apiControl(t, server, session, ctx).Server()
+	case "unbound-target":
+		return server
+	case "closed-connection":
+		if err := connection.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return connection.AuxiliaryServer()
 }
 
 func TestIntegrationGraphMissingLookups(t *testing.T) {
@@ -491,17 +603,11 @@ func TestIntegrationGraphMissingLookups(t *testing.T) {
 func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	var winCreate tmux.NewWindowOptions
-	winCreate.Name = "win-initial"
-
-	winLink, err := session.NewWindow(ctx, winCreate)
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	winLink, _ := graphWindow(t, ctx, session)
 	targetWin := winLink.Window()
 
 	var sessCreate tmux.NewSessionOptions
+
 	sessCreate.Name = "other-session"
 
 	otherSession, err := server.NewSession(ctx, sessCreate)
@@ -510,6 +616,7 @@ func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 	}
 
 	var ctrlOpts tmux.ControlOptions
+
 	conn, err := server.OpenControl(ctx, session, ctrlOpts)
 	if err != nil {
 		t.Fatal(err)
@@ -519,99 +626,71 @@ func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 		_ = conn.Close()
 	})
 
-	snap, err := server.Snapshot(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if snap.Consistency != tmux.Consistent {
-		t.Fatalf("inconsistent snapshot: %+v", snap.MissingReferences())
-	}
-
-	var controlClientInfo tmux.ClientInfo
-	var found bool
-
-	for _, c := range snap.Clients() {
-		if c.Control {
-			controlClientInfo = c
-			found = true
-
-			break
-		}
-	}
-
-	if !found {
-		t.Fatal("control client not found in snapshot")
-	}
+	snap := consistentSnapshot(t, ctx, server)
+	controlClientInfo := snapshotControlClient(t, snap)
 
 	resSession, ok := snap.ResolveSession(session.ID())
-	if !ok || !resSession.Valid() || !resSession.Equal(session) || !resSession.Identity().Equal(snap.Identity) {
-		t.Fatalf("session resolution failed: ok=%v, resSession=%v", ok, resSession)
-	}
+	assertResolved(t, "session", resSession, ok, session, snap.Identity)
 
 	resWindow, ok := snap.ResolveWindow(targetWin.ID())
-	if !ok || !resWindow.Valid() || !resWindow.Equal(targetWin) || !resWindow.Identity().Equal(snap.Identity) {
-		t.Fatalf("window resolution failed: ok=%v, resWindow=%v", ok, resWindow)
-	}
+	assertResolved(t, "window", resWindow, ok, targetWin, snap.Identity)
 
 	resClient, ok := snap.ResolveClient(controlClientInfo.Name)
-	if !ok || !resClient.Valid() || !resClient.Equal(controlClientInfo.Handle()) || !resClient.Identity().Equal(snap.Identity) {
-		t.Fatalf("client resolution failed: ok=%v, resClient=%v", ok, resClient)
-	}
+	assertResolved(t, "client", resClient, ok, controlClientInfo.Handle(), snap.Identity)
 
-	if _, ok := snap.ResolveSession(tmux.SessionID("$9999")); ok {
-		t.Fatal("expected decoy session resolution to fail")
-	}
-	if _, ok := snap.ResolveWindow(tmux.WindowID("@9999")); ok {
-		t.Fatal("expected decoy window resolution to fail")
-	}
-	if _, ok := snap.ResolveClient(tmux.ClientName("/dev/pts/nonexistent")); ok {
-		t.Fatal("expected decoy client resolution to fail")
-	}
+	assertDecoysUnresolved(t, snap)
 
-	foreignServer := tmuxtest.NewServer(t)
-	foreignSession, err := foreignServer.FindSession(ctx, "fixture")
+	foreignSession, err := tmuxtest.NewServer(t).FindSession(ctx, "fixture")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	var swOpts tmux.SwitchOptions
-	if err := resClient.Switch(ctx, foreignSession, swOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
-		t.Fatalf("cross-server switch expected ErrInvalidHandle, got: %v", err)
-	}
-
-	var linkOpts tmux.LinkOptions
-	if _, err := resWindow.Link(ctx, foreignSession, linkOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
-		t.Fatalf("cross-server link expected ErrInvalidHandle, got: %v", err)
-	}
+	assertForeignTargetsRefused(t, ctx, resClient, resWindow, foreignSession)
 
 	if err := resSession.Rename(ctx, "session-mutated"); err != nil {
 		t.Fatal(err)
 	}
-	sinfo, err := resSession.Info(ctx)
-	if err != nil || sinfo.Name != "session-mutated" {
-		t.Fatalf("expected renamed session name 'session-mutated', got: %v, err=%v", sinfo.Name, err)
-	}
+
+	name, err := resSession.Format(ctx, "#{session_name}")
+	assertFormatValues(t, "renamed session name", [][]byte{name}, err, "session-mutated")
 
 	if err := resWindow.Rename(ctx, "win-renamed"); err != nil {
 		t.Fatal(err)
 	}
-	winfo, err := resWindow.Info(ctx)
-	if err != nil || winfo.Name != "win-renamed" {
-		t.Fatalf("expected renamed window name 'win-renamed', got: %v, err=%v", winfo.Name, err)
-	}
 
+	name, err = resWindow.Format(ctx, "#{window_name}")
+	assertFormatValues(t, "renamed window name", [][]byte{name}, err, "win-renamed")
+
+	var swOpts tmux.SwitchOptions
 	if err := resClient.Switch(ctx, otherSession, swOpts); err != nil {
 		t.Fatal(err)
 	}
-	cinfo, err := resClient.Info(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sessID, ok := cinfo.SessionID.Get(); !ok || sessID != otherSession.ID() {
-		t.Fatalf("expected switched client session %v, got ok=%v id=%v", otherSession.ID(), ok, sessID)
+
+	if sessID := clientSession(t, ctx, resClient); sessID != otherSession.ID() {
+		t.Fatalf("expected switched client session %v, got %v", otherSession.ID(), sessID)
 	}
 
-	if err := resClient.Detach(ctx); err != nil {
+	assertDetachedClientGone(t, ctx, server, conn, resClient)
+}
+
+func assertForeignTargetsRefused(t *testing.T, ctx context.Context, client tmux.Client, window tmux.Window, foreignSession tmux.Session) {
+	t.Helper()
+
+	var swOpts tmux.SwitchOptions
+	if err := client.Switch(ctx, foreignSession, swOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
+		t.Fatalf("cross-server switch expected ErrInvalidHandle, got: %v", err)
+	}
+
+	var linkOpts tmux.LinkOptions
+	if _, err := window.Link(ctx, foreignSession, linkOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
+		t.Fatalf("cross-server link expected ErrInvalidHandle, got: %v", err)
+	}
+}
+
+func assertDetachedClientGone(t *testing.T, ctx context.Context, server *tmux.Server, conn *tmux.Connection, client tmux.Client) {
+	t.Helper()
+
+	if err := client.Detach(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -619,15 +698,66 @@ func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 		t.Fatalf("expected ErrClosed on connection wait after detach, got: %v", err)
 	}
 
-	if _, err := resClient.Info(ctx); !errors.Is(err, tmux.ErrClientChanged) {
+	if _, err := client.Info(ctx); !errors.Is(err, tmux.ErrClientChanged) {
 		t.Fatalf("expected ErrClientChanged on detached client handle, got: %v", err)
 	}
 
-	snapPost, err := server.Snapshot(ctx)
+	if _, ok := consistentSnapshot(t, ctx, server).ResolveClient(client.Name()); ok {
+		t.Fatalf("detached client %q still found in snapshot", client.Name())
+	}
+}
+
+func consistentSnapshot(t *testing.T, ctx context.Context, server *tmux.Server) tmux.Snapshot {
+	t.Helper()
+
+	snap, err := server.Snapshot(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := snapPost.ResolveClient(resClient.Name()); ok {
-		t.Fatalf("detached client %q still found in snapshot", resClient.Name())
+
+	if snap.Consistency != tmux.Consistent {
+		t.Fatalf("inconsistent snapshot: %+v", snap.MissingReferences())
+	}
+
+	return snap
+}
+
+func snapshotControlClient(t *testing.T, snap tmux.Snapshot) tmux.ClientInfo {
+	t.Helper()
+
+	for _, c := range snap.Clients() {
+		if c.Control {
+			return c
+		}
+	}
+
+	t.Fatal("control client not found in snapshot")
+
+	return tmux.ClientInfo{}
+}
+
+type resolvedHandle[H any] interface {
+	Valid() bool
+	Equal(other H) bool
+	Identity() tmux.ServerIdentity
+}
+
+func assertResolved[H resolvedHandle[H]](t *testing.T, kind string, got H, ok bool, want H, identity tmux.ServerIdentity) {
+	t.Helper()
+
+	if !ok || !got.Valid() || !got.Equal(want) || !got.Identity().Equal(identity) {
+		t.Fatalf("%s resolution failed: ok=%v, resolved=%v", kind, ok, got)
+	}
+}
+
+func assertDecoysUnresolved(t *testing.T, snap tmux.Snapshot) {
+	t.Helper()
+
+	_, session := snap.ResolveSession(tmux.SessionID("$9999"))
+	_, window := snap.ResolveWindow(tmux.WindowID("@9999"))
+	_, client := snap.ResolveClient(tmux.ClientName("/dev/pts/nonexistent"))
+
+	if session || window || client {
+		t.Fatalf("decoy IDs resolved: session=%v window=%v client=%v", session, window, client)
 	}
 }

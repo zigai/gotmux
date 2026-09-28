@@ -236,9 +236,7 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	}
 
 	event := nextSubscription(t, ctx, stream, "all_panes", "sub-all-panes-val")
-	if id, ok := event.PaneID.Get(); !ok || id != pane.ID() {
-		t.Fatalf("expected pane %s in all_panes subscription, got: %+v", pane.ID(), event)
-	}
+	assertPresent(t, "all_panes subscription pane", event.PaneID, pane.ID())
 
 	// 2. TargetSession (empty target)
 	if err := connection.WatchFormatWith(ctx, "session_sub", tmux.TargetSession(), "#{session_name}"); err != nil {
@@ -249,17 +247,13 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	sessEvent := nextSubscription(t, ctx, stream, "session_sub", sessionInfo.Name)
-	if id, ok := sessEvent.SessionID.Get(); !ok || id != session.ID() {
-		t.Fatalf("expected session %s in session subscription, got: %+v", session.ID(), sessEvent)
-	}
+	assertPresent(t, "session subscription session", sessEvent.SessionID, session.ID())
 
 	// 3. Target Window
-	links, err := session.Windows(ctx)
-	if err != nil || len(links) == 0 {
-		t.Fatal(err)
-	}
-	window := links[0].Window()
+	window, _ := firstWindowPane(t, ctx, session)
+
 	boundWin, err := connection.Server().Window(ctx, window.ID())
 	if err != nil {
 		t.Fatal(err)
@@ -274,12 +268,8 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	}
 
 	winEvent := nextSubscription(t, ctx, stream, "win_sub", "new-win-sub-name")
-	if wid, ok := winEvent.WindowID.Get(); !ok || wid != window.ID() {
-		t.Fatalf("expected window %s in window subscription, got: %+v", window.ID(), winEvent)
-	}
-	if idx, ok := winEvent.WindowIndex.Get(); !ok || idx != 0 {
-		t.Errorf("expected WindowIndex 0, got %v (ok=%v)", idx, ok)
-	}
+	assertPresent(t, "window subscription window", winEvent.WindowID, window.ID())
+	assertPresent(t, "window subscription index", winEvent.WindowIndex, 0)
 
 	// 4. TargetAllWindows (@*)
 	if err := connection.WatchFormatWith(ctx, "all_windows", tmux.TargetAllWindows(), "#{window_name}"); err != nil {
@@ -291,7 +281,13 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	}
 
 	allWinEvent := nextSubscription(t, ctx, stream, "all_windows", "all-windows-name")
-	if wid, ok := allWinEvent.WindowID.Get(); !ok || wid != window.ID() {
-		t.Fatalf("expected window %s in all_windows subscription, got: %+v", window.ID(), allWinEvent)
+	assertPresent(t, "all_windows subscription window", allWinEvent.WindowID, window.ID())
+}
+
+func assertPresent[T comparable](t *testing.T, field string, value tmux.Value[T], want T) {
+	t.Helper()
+
+	if got, ok := value.Get(); !ok || got != want {
+		t.Fatalf("%s = %v (present %v), want %v", field, got, ok, want)
 	}
 }

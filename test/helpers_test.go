@@ -4,7 +4,11 @@ package tmux_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -14,6 +18,19 @@ import (
 )
 
 const observationInterval = 5 * time.Millisecond
+
+// injectionMarker is per process so concurrent runs cannot interfere.
+var injectionMarker = filepath.Join(os.TempDir(), fmt.Sprintf("gotmux-injection-%d", os.Getpid()))
+
+// closeOnCleanup ignores a resource the test already closed.
+func closeOnCleanup(tb testing.TB, c io.Closer) {
+	tb.Helper()
+	tb.Cleanup(func() {
+		if err := c.Close(); err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, tmux.ErrClosed) {
+			tb.Errorf("close: %v", err)
+		}
+	})
+}
 
 func integrationContext(t *testing.T) context.Context {
 	t.Helper()
@@ -83,6 +100,21 @@ func awaitObservation(t *testing.T, ctx context.Context, description string, obs
 		case <-ctx.Done():
 			t.Fatalf("waiting for %s: %v", description, ctx.Err())
 		case <-ticker.C:
+		}
+	}
+}
+
+type namedStep struct {
+	name string
+	run  func() error
+}
+
+func runSteps(t *testing.T, steps []namedStep) {
+	t.Helper()
+
+	for _, step := range steps {
+		if err := step.run(); err != nil {
+			t.Fatalf("%s failed: %v", step.name, err)
 		}
 	}
 }

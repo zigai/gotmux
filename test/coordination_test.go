@@ -71,6 +71,88 @@ func TestIntegrationCoordinationLock(t *testing.T) {
 	}
 }
 
+func TestIntegrationCoordinationCallerDeadlineBoundsWaits(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const commandTimeout = 200 * time.Millisecond
+
+	release := 3 * commandTimeout
+
+	short, err := tmux.New(tmux.Config{
+		Binary:           os.Getenv("TMUX_TEST_BINARY"),
+		SocketPath:       server.Endpoint().SocketPath,
+		SocketName:       "",
+		ConfigFile:       "",
+		Env:              nil,
+		Dir:              "",
+		Limits:           tmux.Limits{CommandTimeout: commandTimeout, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             tmux.UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         tmux.LogNone,
+		LoginShell:       false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("WaitFor", func(t *testing.T) {
+		signal := time.AfterFunc(release, func() { _ = server.Signal(ctx, "late") })
+		defer signal.Stop()
+
+		if err := short.WaitFor(ctx, "late"); err != nil {
+			t.Fatalf("wait signaled after CommandTimeout but within the caller deadline: %v", err)
+		}
+	})
+
+	t.Run("Lock", func(t *testing.T) {
+		if err := server.Lock(ctx, "held"); err != nil {
+			t.Fatal(err)
+		}
+
+		unlock := time.AfterFunc(release, func() { _ = server.Unlock(ctx, "held") })
+		defer unlock.Stop()
+
+		if err := short.Lock(ctx, "held"); err != nil {
+			t.Fatalf("lock released after CommandTimeout but within the caller deadline: %v", err)
+		}
+
+		if err := short.Unlock(ctx, "held"); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+func TestIntegrationCoordinationWaitsRefuseControlTransport(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	bound := apiControl(t, server, session, ctx).Server()
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"WaitFor", func() error { return bound.WaitFor(ctx, "control-wait") }},
+		{"Lock", func() error { return bound.Lock(ctx, "control-lock") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.call()
+
+			var op *tmux.OperationError
+			if !errors.Is(err, tmux.ErrTransportUnsupported) || !errors.As(err, &op) || op.Outcome.Effect != tmux.NotSent {
+				t.Fatalf("got %v, want ErrTransportUnsupported with effect NotSent", err)
+			}
+		})
+	}
+
+	// The lock was never taken: the subprocess transport can acquire it at once.
+	if err := server.Lock(ctx, "control-lock"); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.Unlock(ctx, "control-lock"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIntegrationSourceParseOnly(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	path := filepath.Join(t.TempDir(), "literal config.conf")
@@ -197,10 +279,12 @@ set-option -t ` + string(session.ID()) + ` @cond_branch "not_taken"
 # Escaped literals and semicolon in string
 set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{special}"
 `
+
 	res, err := server.SourceText(ctx, config, tmux.SourceOptions{})
 	if err != nil {
 		t.Fatalf("SourceText failed: %v", err)
 	}
+
 	if res.ExitCode != 0 {
 		t.Fatalf("unexpected exit code: %d", res.ExitCode)
 	}
@@ -213,6 +297,7 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	if _, err := server.SourceText(ctx, parseOnlyConfig, tmux.SourceOptions{ParseOnly: true}); err != nil {
 		t.Fatalf("SourceText with ParseOnly failed: %v", err)
 	}
+
 	val, err := session.Options().User(ctx, "@parse_only")
 	if err != nil || val.Local.State() != tmux.Unavailable {
 		t.Fatalf("ParseOnly option was unexpectedly set: %+v, %v", val, err)
@@ -220,11 +305,14 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 
 	// 3. SourceText with Verbose = true
 	verboseConfig := `set-option -t ` + string(session.ID()) + ` @verbose_opt "is_set"`
+
 	verboseRes, err := server.SourceText(ctx, verboseConfig, tmux.SourceOptions{Verbose: true})
 	if err != nil {
 		t.Fatalf("SourceText with Verbose failed: %v", err)
 	}
+
 	assertUserOption(t, ctx, session, "@verbose_opt", "is_set")
+
 	if len(verboseRes.Stdout) == 0 && len(verboseRes.Stderr) == 0 {
 		t.Fatalf("expected verbose output, got stdout=%q stderr=%q", verboseRes.Stdout, verboseRes.Stderr)
 	}
@@ -234,10 +322,12 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	if err != nil {
 		t.Fatalf("NewCommand failed: %v", err)
 	}
+
 	rawConfig := []byte("set-option -t " + string(session.ID()) + " @raw_source \"from_raw_runwith\"\n")
 	if _, err := server.RunWith(ctx, rawCmd, tmux.RunOptions{Input: rawConfig}); err != nil {
 		t.Fatalf("RunWith source-file - failed: %v", err)
 	}
+
 	assertUserOption(t, ctx, session, "@raw_source", "from_raw_runwith")
 }
 
@@ -246,33 +336,35 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 
 	// 1. RunShell with Delay and Background
 	shellScript := "sleep 0.05 && echo shell_ran_yes"
-	res, err := server.RunShell(ctx, shellScript, tmux.RunShellOptions{
-		Background:       false,
-		Delay:            0.05,
-		Cancel:           false,
-		ClearEnvironment: false,
-		Dir:              "",
-		Target:           "",
-	})
+
+	var shellOptions tmux.RunShellOptions
+
+	shellOptions.Delay = 0.05
+
+	res, err := server.RunShell(ctx, shellScript, shellOptions)
 	if err != nil || res.ExitCode != 0 {
 		t.Fatalf("RunShell with Delay failed: %v, res: %+v", err, res)
 	}
+
 	if !bytes.Contains(res.Stdout, []byte("shell_ran_yes")) {
 		t.Fatalf("expected stdout to contain 'shell_ran_yes', got: %q", string(res.Stdout))
 	}
 
 	// 2. Server.IfShell: true branch
 	cmdTrue := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "true_branch")
+
 	cmdFalse := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "false_branch")
 	if err := server.IfShell(ctx, "true", testSequence(t, cmdTrue), testSequence(t, cmdFalse)); err != nil {
 		t.Fatalf("IfShell true branch failed: %v", err)
 	}
+
 	assertUserOption(t, ctx, session, "@if_shell", "true_branch")
 
 	// Server.IfShell: false branch
 	if err := server.IfShell(ctx, "false", testSequence(t, cmdTrue), testSequence(t, cmdFalse)); err != nil {
 		t.Fatalf("IfShell false branch failed: %v", err)
 	}
+
 	assertUserOption(t, ctx, session, "@if_shell", "false_branch")
 	// 3. Server.LockScreen executes lock-server cleanly
 	if err := server.LockScreen(ctx); err != nil {

@@ -5,6 +5,7 @@ package tmux_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -206,8 +207,10 @@ func TestIntegrationClientPrompt(t *testing.T) {
 	options.Label = "TGO_PROMPT_READY"
 	template := tmux.PromptTemplate("set-option -t " + string(session.ID()) + " @prompt-effect '%%'")
 
-	result := make(chan error, 1)
-	go func() { result <- client.Prompt(ctx, template, options) }()
+	// Prompt returns once the prompt is shown, before anyone answers it.
+	if err := client.Prompt(ctx, template, options); err != nil {
+		t.Fatal(err)
+	}
 
 	awaitObservation(t, ctx, "prompt rendered", func() bool { return output.contains("TGO_PROMPT_READY") })
 
@@ -215,7 +218,6 @@ func TestIntegrationClientPrompt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	waitUIResult(t, ctx, result)
 	awaitUserOption(t, ctx, session, "@prompt-effect", "typed-value")
 }
 
@@ -324,132 +326,64 @@ func TestIntegrationClientSwitchToggleReadOnly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Case 1: Start client in Read-Write mode (AttachOptions{ReadOnly: false})
 	t.Run("StartReadWrite_ToggleToReadOnly_ThenToggleBack", func(t *testing.T) {
 		client, _, _ := uiClient(t, ctx, server, session1)
 
-		// Initial state: ReadOnly must be false
-		info, err := client.Info(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if info.ReadOnly {
-			t.Fatalf("expected initial client to be read-write, got ReadOnly=%v", info.ReadOnly)
-		}
-
-		// First toggle: Switch to session2 with ToggleReadOnly: true -> becomes read-only
-		err = client.Switch(ctx, session2, tmux.SwitchOptions{
-			ToggleReadOnly: true,
-		})
-		if err != nil {
-			t.Fatalf("client.Switch with ToggleReadOnly failed: %v", err)
-		}
-
-		awaitObservation(t, ctx, "client switched to session2 and read-only", func() bool {
-			ci, err := client.Info(ctx)
-			if err != nil {
-				return false
-			}
-			sid, ok := ci.SessionID.Get()
-			return ok && ci.ReadOnly && sid == session2.ID()
-		})
-
-		// Switch without toggle (ToggleReadOnly: false) -> remains read-only
-		err = client.Switch(ctx, session1, tmux.SwitchOptions{
-			ToggleReadOnly: false,
-		})
-		if err != nil {
-			t.Fatalf("client.Switch with ToggleReadOnly:false failed: %v", err)
-		}
-
-		awaitObservation(t, ctx, "client switched to session1 and still read-only", func() bool {
-			ci, err := client.Info(ctx)
-			if err != nil {
-				return false
-			}
-			sid, ok := ci.SessionID.Get()
-			return ok && ci.ReadOnly && sid == session1.ID()
-		})
-
-		// Second toggle: Switch back to session2 with ToggleReadOnly: true -> becomes read-write
-		err = client.Switch(ctx, session2, tmux.SwitchOptions{
-			ToggleReadOnly: true,
-		})
-		if err != nil {
-			t.Fatalf("client.Switch with ToggleReadOnly back to read-write failed: %v", err)
-		}
-
-		awaitObservation(t, ctx, "client read-write again", func() bool {
-			ci, err := client.Info(ctx)
-			if err != nil {
-				return false
-			}
-			sid, ok := ci.SessionID.Get()
-			return ok && !ci.ReadOnly && sid == session2.ID()
-		})
+		assertReadOnly(t, ctx, client, false)
+		switchAndAwait(t, ctx, client, session2, true, true)
+		switchAndAwait(t, ctx, client, session1, false, true)
+		switchAndAwait(t, ctx, client, session2, true, false)
 	})
 
-	// Case 2: Start client in Read-Only mode (AttachOptions{ReadOnly: true})
 	t.Run("StartReadOnly_ToggleToReadWrite", func(t *testing.T) {
 		master, slave := openPTY(t)
+
 		readDone := make(chan struct{})
-		go func() {
-			defer close(readDone)
-			discard := make([]byte, 1024)
-			for {
-				if _, err := master.Read(discard); err != nil {
-					return
-				}
-			}
-		}()
+		go func() { defer close(readDone); _, _ = io.Copy(io.Discard, master) }()
+
 		t.Cleanup(func() { _ = master.Close(); <-readDone })
 
-		attachCtx, cancel := context.WithCancel(ctx)
-		done := make(chan error, 1)
+		var options tmux.AttachOptions
 
-		go func() {
-			// Attach with ReadOnly: true
-			done <- session1.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, tmux.AttachOptions{
-				ReadOnly: true,
-			})
-		}()
+		options.ReadOnly = true
 
-		t.Cleanup(func() {
-			cancel()
-			select {
-			case <-done:
-			case <-time.After(5 * time.Second):
-				t.Error("UI attachment failed to stop")
-			}
-		})
+		client, _ := attachWith(t, ctx, server, session1, slave, options)
 
-		client := waitTerminalClient(t, ctx, server, slave, done)
+		assertReadOnly(t, ctx, client, true)
+		switchAndAwait(t, ctx, client, session2, true, false)
+	})
+}
 
-		// Verify initial state is ReadOnly: true (from AttachOptions.ReadOnly)
+func assertReadOnly(t *testing.T, ctx context.Context, client tmux.Client, want bool) {
+	t.Helper()
+
+	info, err := client.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if info.ReadOnly != want {
+		t.Fatalf("client ReadOnly = %v, want %v", info.ReadOnly, want)
+	}
+}
+
+func switchAndAwait(t *testing.T, ctx context.Context, client tmux.Client, target tmux.Session, toggle, wantReadOnly bool) {
+	t.Helper()
+
+	if err := client.Switch(ctx, target, tmux.SwitchOptions{ToggleReadOnly: toggle}); err != nil {
+		t.Fatalf("client.Switch(%s, ToggleReadOnly: %v) failed: %v", target.ID(), toggle, err)
+	}
+
+	description := fmt.Sprintf("client on %s with ReadOnly=%v", target.ID(), wantReadOnly)
+	awaitObservation(t, ctx, description, func() bool {
 		info, err := client.Info(ctx)
 		if err != nil {
-			t.Fatal(err)
-		}
-		if !info.ReadOnly {
-			t.Fatalf("expected client started with AttachOptions.ReadOnly=true to be read-only, got ReadOnly=%v", info.ReadOnly)
+			return false
 		}
 
-		// Toggle read-only using Switch with ToggleReadOnly: true -> becomes read-write
-		err = client.Switch(ctx, session2, tmux.SwitchOptions{
-			ToggleReadOnly: true,
-		})
-		if err != nil {
-			t.Fatalf("client.Switch with ToggleReadOnly failed: %v", err)
-		}
+		id, ok := info.SessionID.Get()
 
-		awaitObservation(t, ctx, "read-only client toggled to read-write", func() bool {
-			ci, err := client.Info(ctx)
-			if err != nil {
-				return false
-			}
-			sid, ok := ci.SessionID.Get()
-			return ok && !ci.ReadOnly && sid == session2.ID()
-		})
+		return ok && info.ReadOnly == wantReadOnly && id == target.ID()
 	})
 }
 
@@ -472,6 +406,7 @@ func TestIntegrationUIControls(t *testing.T) {
 	items := []tmux.MenuItem{
 		{Label: "TGO_KEYLESS_ITEM", Key: "", Commands: testSequence(t, cmd)},
 	}
+
 	result := make(chan error, 1)
 	go func() {
 		result <- client.Menu(ctx, items, tmux.MenuOptions{
@@ -488,6 +423,7 @@ func TestIntegrationUIControls(t *testing.T) {
 	if _, err := terminal.WriteString("q"); err != nil {
 		t.Fatal(err)
 	}
+
 	waitUIResult(t, ctx, result)
 
 	// 4. Client.LockScreen
@@ -514,7 +450,22 @@ func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
 		t.Fatalf("Client.Info session = %q (present %v), want %q", id, ok, displayed.ID())
 	}
 
-	unprobed, err := server.ClientHandle(info.Name)
+	assertUnprobedClientSession(t, ctx, server, info.Name, displayed)
+
+	values, err := client.FormatMulti(ctx, "#{session_id}", "#{client_name}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(values[0]) != string(displayed.ID()) || string(values[1]) != string(info.Name) {
+		t.Fatalf("Client.FormatMulti = %q, want [%q %q]", values, displayed.ID(), info.Name)
+	}
+}
+
+func assertUnprobedClientSession(t *testing.T, ctx context.Context, server *tmux.Server, name tmux.ClientName, displayed tmux.Session) {
+	t.Helper()
+
+	unprobed, err := server.ClientHandle(name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -528,16 +479,7 @@ func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
 		t.Fatalf("unprobed Client.InfoWith session = %q (present %v), want %q", id, ok, displayed.ID())
 	}
 
-	if name, ok := extended.Raw("session_name"); !ok || string(name) != "fixture" {
-		t.Fatalf("unprobed Client.InfoWith session_name = %q (present %v), want fixture", name, ok)
-	}
-
-	values, err := client.FormatMulti(ctx, "#{session_id}", "#{client_name}")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if string(values[0]) != string(displayed.ID()) || string(values[1]) != string(info.Name) {
-		t.Fatalf("Client.FormatMulti = %q, want [%q %q]", values, displayed.ID(), info.Name)
+	if sessionName, ok := extended.Raw("session_name"); !ok || string(sessionName) != "fixture" {
+		t.Fatalf("unprobed Client.InfoWith session_name = %q (present %v), want fixture", sessionName, ok)
 	}
 }

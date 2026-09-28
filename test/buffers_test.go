@@ -198,6 +198,7 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 	if err != nil || len(panes) == 0 {
 		t.Fatalf("failed to get server panes: %v", err)
 	}
+
 	pane := panes[0].Handle()
 	targetFile := filepath.Join(dir, "input_received.txt")
 
@@ -205,10 +206,12 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 	if err := pane.SendText(ctx, "cat > "+targetFile+"\n"); err != nil {
 		t.Fatalf("SendText failed: %v", err)
 	}
+
 	time.Sleep(100 * time.Millisecond)
 
 	// Pipe a script with Input: true. The script prints a test token.
-	token := "TGO_PIPE_INPUT_TOKEN_12345"
+	token := "TGO_PIPE_INPUT_TOKEN_12345" //nolint:gosec // G101 false positive: a marker the piped script echoes, not a credential.
+
 	script := "echo " + token
 	if err := pane.Pipe(ctx, script, tmux.PipeOptions{Input: true}); err != nil {
 		t.Fatalf("pane.Pipe with Input:true failed: %v", err)
@@ -216,16 +219,19 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 
 	// Allow script to run and write to pane
 	time.Sleep(300 * time.Millisecond)
+
 	_ = pane.StopPipe(ctx)
 
 	// Close cat in pane with Ctrl-D
 	_ = pane.SendKeys(ctx, "C-d")
 
 	awaitFile(t, ctx, targetFile)
+
 	data, err := os.ReadFile(targetFile)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	if !bytes.Contains(data, []byte(token)) {
 		t.Fatalf("expected %q in %s, got %q", token, targetFile, string(data))
 	}
@@ -278,50 +284,10 @@ func TestIntegrationLoadBufferStdinAndFlags(t *testing.T) {
 
 	// 1. Raw RunWith loading arbitrary binary data including NUL bytes via stdin
 	wantBytes := []byte("binary\x00data\x01\x02\xff\xfe\r\n\x00trailing")
-	b1, err := tmux.NamedBuffer("r3-bin-buf")
-	if err != nil {
-		t.Fatalf("NamedBuffer failed: %v", err)
-	}
-
-	loadCmd, err := tmux.NewCommand("load-buffer", "-b", "r3-bin-buf", "-")
-	if err != nil {
-		t.Fatalf("NewCommand failed: %v", err)
-	}
-
-	if _, err := server.RunWith(ctx, loadCmd, tmux.RunOptions{Input: wantBytes}); err != nil {
-		t.Fatalf("RunWith load-buffer - failed: %v", err)
-	}
-
-	gotBytes, err := server.ReadBuffer(ctx, b1)
-	if err != nil {
-		t.Fatalf("ReadBuffer failed: %v", err)
-	}
-	if !bytes.Equal(gotBytes, wantBytes) {
-		t.Fatalf("ReadBuffer bytes mismatch: got %q, want %q", gotBytes, wantBytes)
-	}
+	assertStdinLoad(t, ctx, server, "r3-bin-buf", wantBytes)
 
 	// 2. Raw RunWith with -w flag (sending to clipboard)
-	b2, err := tmux.NamedBuffer("r3-clip-buf")
-	if err != nil {
-		t.Fatalf("NamedBuffer failed: %v", err)
-	}
-
-	loadClipCmd, err := tmux.NewCommand("load-buffer", "-w", "-b", "r3-clip-buf", "-")
-	if err != nil {
-		t.Fatalf("NewCommand with -w failed: %v", err)
-	}
-
-	if _, err := server.RunWith(ctx, loadClipCmd, tmux.RunOptions{Input: wantBytes}); err != nil {
-		t.Fatalf("RunWith load-buffer -w failed: %v", err)
-	}
-
-	gotClipBytes, err := server.ReadBuffer(ctx, b2)
-	if err != nil {
-		t.Fatalf("ReadBuffer failed: %v", err)
-	}
-	if !bytes.Equal(gotClipBytes, wantBytes) {
-		t.Fatalf("ReadBuffer -w bytes mismatch: got %q, want %q", gotClipBytes, wantBytes)
-	}
+	assertStdinLoad(t, ctx, server, "r3-clip-buf", wantBytes, "-w")
 
 	// 3. Verify WriteBuffer's documented contract: zero-length data is rejected with ErrUnsupported
 	// and outcome is NotSent (do not change empty WriteBuffer into a misleading success).
@@ -330,62 +296,69 @@ func TestIntegrationLoadBufferStdinAndFlags(t *testing.T) {
 		t.Fatalf("NamedBuffer failed: %v", err)
 	}
 
-	err = server.WriteBuffer(ctx, bEmpty, nil)
-	if !errors.Is(err, tmux.ErrUnsupported) {
-		t.Fatalf("expected ErrUnsupported for WriteBuffer with nil data, got %v", err)
+	for _, data := range [][]byte{nil, {}} {
+		if err := server.WriteBuffer(ctx, bEmpty, data); !errors.Is(err, tmux.ErrUnsupported) {
+			t.Fatalf("expected ErrUnsupported for WriteBuffer with %#v, got %v", data, err)
+		}
+	}
+}
+
+func assertStdinLoad(t *testing.T, ctx context.Context, server *tmux.Server, name string, data []byte, flags ...string) {
+	t.Helper()
+
+	args := append(append([]string{}, flags...), "-b", name, "-")
+
+	loadCmd, err := tmux.NewCommand("load-buffer", args...)
+	if err != nil {
+		t.Fatalf("NewCommand failed: %v", err)
 	}
 
-	err = server.WriteBuffer(ctx, bEmpty, []byte{})
-	if !errors.Is(err, tmux.ErrUnsupported) {
-		t.Fatalf("expected ErrUnsupported for WriteBuffer with empty data, got %v", err)
+	if _, err := server.RunWith(ctx, loadCmd, tmux.RunOptions{Input: data}); err != nil {
+		t.Fatalf("RunWith load-buffer %q failed: %v", args, err)
+	}
+
+	if got := bufferContent(t, ctx, server, name); !bytes.Equal(got, data) {
+		t.Fatalf("load-buffer %q: got %q, want %q", args, got, data)
 	}
 }
 
 func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 	server, session, ctx := apiFixture(t)
+
 	panes, err := session.Panes(ctx)
 	if err != nil || len(panes) == 0 {
 		t.Fatalf("failed to query panes for session: %v", err)
 	}
+
 	pane := panes[0]
 
 	// 1. RenameBuffer
-	bufOriginal := "test-buf-original"
-	bufRenamed := "test-buf-renamed"
-	if err := server.SetBufferWith(ctx, bufOriginal, []byte("rename test content"), tmux.SetBufferOptions{Append: false}); err != nil {
+	if err := server.SetBufferWith(ctx, "test-buf-original", []byte("rename test content"), tmux.SetBufferOptions{Append: false}); err != nil {
 		t.Fatalf("SetBufferWith failed: %v", err)
 	}
 
-	if err := server.RenameBuffer(ctx, bufOriginal, bufRenamed); err != nil {
+	if err := server.RenameBuffer(ctx, "test-buf-original", "test-buf-renamed"); err != nil {
 		t.Fatalf("RenameBuffer failed: %v", err)
 	}
 
-	bRenamed, err := tmux.NamedBuffer(bufRenamed)
-	if err != nil {
-		t.Fatalf("NamedBuffer failed: %v", err)
-	}
-	data, err := server.ReadBuffer(ctx, bRenamed)
-	if err != nil || string(data) != "rename test content" {
-		t.Fatalf("unexpected content after RenameBuffer: %q, err: %v", data, err)
+	if data := bufferContent(t, ctx, server, "test-buf-renamed"); string(data) != "rename test content" {
+		t.Fatalf("unexpected content after RenameBuffer: %q", data)
 	}
 
-	bOrig, _ := tmux.NamedBuffer(bufOriginal)
-	if _, err := server.ReadBuffer(ctx, bOrig); err == nil {
-		t.Fatal("original buffer should not exist after rename")
-	}
+	assertBufferAbsent(t, ctx, server, "test-buf-original")
 
 	// 2. SetBufferWith with Append: true
 	bufAppend := "test-buf-append"
 	if err := server.SetBufferWith(ctx, bufAppend, []byte("part1"), tmux.SetBufferOptions{Append: false}); err != nil {
 		t.Fatalf("SetBufferWith initial failed: %v", err)
 	}
+
 	if err := server.SetBufferWith(ctx, bufAppend, []byte("part2"), tmux.SetBufferOptions{Append: true}); err != nil {
 		t.Fatalf("SetBufferWith append failed: %v", err)
 	}
-	bApp, _ := tmux.NamedBuffer(bufAppend)
-	appData, err := server.ReadBuffer(ctx, bApp)
-	if err != nil || string(appData) != "part1part2" {
-		t.Fatalf("unexpected content after append: %q, err: %v", appData, err)
+
+	if appData := bufferContent(t, ctx, server, bufAppend); string(appData) != "part1part2" {
+		t.Fatalf("unexpected content after append: %q", appData)
 	}
 
 	// 3. PasteWith with Delete: true
@@ -405,8 +378,34 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 	}
 
 	// Verify buffer was deleted after paste (-d)
-	bPast, _ := tmux.NamedBuffer(bufPaste)
-	if _, err := server.ReadBuffer(ctx, bPast); err == nil {
-		t.Fatal("buffer should have been deleted after paste with Delete: true")
+	assertBufferAbsent(t, ctx, server, bufPaste)
+}
+
+func bufferContent(t *testing.T, ctx context.Context, server *tmux.Server, name string) []byte {
+	t.Helper()
+
+	buffer, err := tmux.NamedBuffer(name)
+	if err != nil {
+		t.Fatalf("NamedBuffer(%q) failed: %v", name, err)
+	}
+
+	data, err := server.ReadBuffer(ctx, buffer)
+	if err != nil {
+		t.Fatalf("ReadBuffer(%q) failed: %v", name, err)
+	}
+
+	return data
+}
+
+func assertBufferAbsent(t *testing.T, ctx context.Context, server *tmux.Server, name string) {
+	t.Helper()
+
+	buffer, err := tmux.NamedBuffer(name)
+	if err != nil {
+		t.Fatalf("NamedBuffer(%q) failed: %v", name, err)
+	}
+
+	if _, err := server.ReadBuffer(ctx, buffer); err == nil {
+		t.Fatalf("buffer %q still exists", name)
 	}
 }

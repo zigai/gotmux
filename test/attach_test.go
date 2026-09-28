@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"testing"
@@ -217,192 +218,129 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 		signal.Stop(sigChan)
 		signal.Reset(syscall.SIGHUP)
 	})
+
 	// 1. Attach with working directory (-c) and client flags (-f)
 	dir := t.TempDir()
-	term1 := attachmentTerminal(t)
-	attachCtx1, cancel1 := context.WithCancel(ctx)
-	done1 := make(chan error, 1)
-
-	go func() {
-		opts := tmux.AttachOptions{
-			ReadOnly:            false,
-			PreserveEnvironment: true,
-			Detach:              tmux.DetachNone,
-			Dir:                 dir,
-			Flags:               []tmux.ClientFlag{tmux.ClientFlagIgnoreSize, tmux.ClientFlagReadOnly},
-		}
-		done1 <- session.Attach(attachCtx1, tmux.TerminalStreams{In: term1, Out: term1, Err: term1}, opts)
-	}()
-
-	t.Cleanup(func() {
-		cancel1()
-		select {
-		case <-done1:
-		case <-time.After(5 * time.Second):
-			t.Error("client 1 failed to stop")
-		}
+	client1, done1 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{
+		PreserveEnvironment: true,
+		Detach:              tmux.DetachNone,
+		Dir:                 dir,
+		Flags:               []tmux.ClientFlag{tmux.ClientFlagIgnoreSize, tmux.ClientFlagReadOnly},
 	})
 
-	client1 := waitTerminalClient(t, ctx, server, term1, done1)
-	info1, err := client1.Info(ctx)
-	if err != nil {
-		t.Fatalf("client1.Info failed: %v", err)
-	}
-	if !info1.ReadOnly {
-		t.Errorf("expected client1 to be read-only from Flags, got false")
-	}
+	assertReadOnly(t, ctx, client1, true)
 
 	// Verify session path was updated by -c
 	pathBytes, err := session.Format(ctx, tmux.Format("#{session_path}"))
 	if err != nil {
 		t.Fatalf("session.Format failed: %v", err)
 	}
+
 	if string(pathBytes) != dir {
 		t.Errorf("expected session path %q, got %q", dir, string(pathBytes))
 	}
 
-	// 2. Attach client 2 with Detach: DetachOtherClients (-d)
-	term2 := attachmentTerminal(t)
-	attachCtx2, cancel2 := context.WithCancel(ctx)
-	done2 := make(chan error, 1)
+	// 2. Client 2 with DetachOtherClients (-d) detaches client 1.
+	client2, done2 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{Detach: tmux.DetachOtherClients})
+	if err := awaitReturn(t, done1, "client 1 after DetachOtherClients"); !endedByDetach(err) {
+		t.Fatalf("client 1 unexpected error on detach: %v", err)
+	}
 
+	detachAndAwait(t, ctx, client2, done2, "client 2")
+
+	// 3. Client 3 read-only through AttachOptions.ReadOnly (without Flags)
+	client3, done3 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{ReadOnly: true, Detach: tmux.DetachNone})
+	assertReadOnly(t, ctx, client3, true)
+
+	// 4. Client 4 with DetachParentSignal (-x) detaches client 3.
+	client4, done4 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{Detach: tmux.DetachParentSignal})
+	if err := awaitReturn(t, done3, "client 3 after DetachParentSignal"); !endedByDetach(err) {
+		t.Fatalf("client 3 unexpected error on detach by signal: %v", err)
+	}
+
+	detachAndAwait(t, ctx, client4, done4, "client 4")
+}
+
+// awaitReturn puts the result back for cleanups that also wait on done.
+func awaitReturn(t *testing.T, done chan error, call string) error {
+	t.Helper()
+
+	select {
+	case err := <-done:
+		done <- err
+
+		return err
+	case <-time.After(5 * time.Second):
+		t.Fatalf("%s did not return", call)
+
+		return nil
+	}
+}
+
+func endedByDetach(err error) bool {
+	return err == nil || errors.Is(err, context.Canceled)
+}
+
+func detachAndAwait(t *testing.T, ctx context.Context, client tmux.Client, done chan error, name string) {
+	t.Helper()
+
+	if err := client.Detach(ctx); err != nil {
+		t.Fatalf("%s detach failed: %v", name, err)
+	}
+
+	if err := awaitReturn(t, done, name+" after Detach"); !endedByDetach(err) {
+		t.Fatalf("%s unexpected error on detach: %v", name, err)
+	}
+}
+
+func startPrepared(t *testing.T, cmd *exec.Cmd) chan error {
+	t.Helper()
+
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start prepared command: %v", err)
+	}
+
+	done := make(chan error, 1)
 	go func() {
-		opts := tmux.AttachOptions{
-			ReadOnly:            false,
-			PreserveEnvironment: false,
-			Detach:              tmux.DetachOtherClients,
-			Dir:                 "",
-			Flags:               nil,
-		}
-		done2 <- session.Attach(attachCtx2, tmux.TerminalStreams{In: term2, Out: term2, Err: term2}, opts)
+		done <- cmd.Wait()
 	}()
 
 	t.Cleanup(func() {
-		cancel2()
+		_ = cmd.Process.Kill()
+
 		select {
-		case <-done2:
+		case <-done:
 		case <-time.After(5 * time.Second):
-			t.Error("client 2 failed to stop")
+			t.Error("prepared command failed to stop")
 		}
 	})
 
-	client2 := waitTerminalClient(t, ctx, server, term2, done2)
+	return done
+}
 
-	// Client 1 should now be detached and done1 should finish
-	select {
-	case err := <-done1:
-		done1 <- err
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("client 1 unexpected error on detach: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 1 was not detached by client 2 with DetachOtherClients")
+func detachAndAwaitExit(t *testing.T, ctx context.Context, client tmux.Client, done chan error, name string) {
+	t.Helper()
+
+	if err := client.Detach(ctx); err != nil {
+		t.Fatalf("%s detach failed: %v", name, err)
 	}
 
-	// Detach client 2 cleanly
-	if err := client2.Detach(ctx); err != nil {
-		t.Fatalf("client 2 detach failed: %v", err)
-	}
-
-	select {
-	case err := <-done2:
-		done2 <- err
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("client 2 unexpected error on detach: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 2 failed to detach")
-	}
-
-	// 3. Attach client 3 with ReadOnly: true directly (without Flags)
-	term3 := attachmentTerminal(t)
-	attachCtx3, cancel3 := context.WithCancel(ctx)
-	done3 := make(chan error, 1)
-
-	go func() {
-		opts := tmux.AttachOptions{
-			ReadOnly:            true,
-			PreserveEnvironment: false,
-			Detach:              tmux.DetachNone,
-			Dir:                 "",
-			Flags:               nil,
-		}
-		done3 <- session.Attach(attachCtx3, tmux.TerminalStreams{In: term3, Out: term3, Err: term3}, opts)
-	}()
-
-	t.Cleanup(func() {
-		cancel3()
-		select {
-		case <-done3:
-		case <-time.After(5 * time.Second):
-		}
-	})
-
-	client3 := waitTerminalClient(t, ctx, server, term3, done3)
-	info3, err := client3.Info(ctx)
-	if err != nil {
-		t.Fatalf("client3.Info failed: %v", err)
-	}
-	if !info3.ReadOnly {
-		t.Errorf("expected client3 to be read-only from AttachOptions.ReadOnly, got false")
-	}
-
-	// 4. Attach client 4 with Detach: DetachParentSignal (-x)
-	term4 := attachmentTerminal(t)
-	attachCtx4, cancel4 := context.WithCancel(ctx)
-	done4 := make(chan error, 1)
-
-	go func() {
-		opts := tmux.AttachOptions{
-			ReadOnly:            false,
-			PreserveEnvironment: false,
-			Detach:              tmux.DetachParentSignal,
-			Dir:                 "",
-			Flags:               nil,
-		}
-		done4 <- session.Attach(attachCtx4, tmux.TerminalStreams{In: term4, Out: term4, Err: term4}, opts)
-	}()
-
-	t.Cleanup(func() {
-		cancel4()
-		select {
-		case <-done4:
-		case <-time.After(5 * time.Second):
-		}
-	})
-
-	client4 := waitTerminalClient(t, ctx, server, term4, done4)
-
-	// Client 3 should now be detached by client 4's DetachParentSignal
-	select {
-	case err := <-done3:
-		done3 <- err
-		if err != nil && !errors.Is(err, context.Canceled) {
-			t.Fatalf("client 3 unexpected error on detach by signal: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 3 was not detached by client 4 with DetachParentSignal")
-	}
-
-	if err := client4.Detach(ctx); err != nil {
-		t.Fatalf("client 4 detach failed: %v", err)
-	}
-	select {
-	case err := <-done4:
-		done4 <- err
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 4 failed to detach")
+	if err := awaitReturn(t, done, name+" process after Detach"); err != nil {
+		t.Fatalf("%s process exited with %v after detach", name, err)
 	}
 }
 
 func TestIntegrationPrepareTerminalAttachedSession(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	sessName := "attached_terminal_sess"
+
 	cmd, err := tmux.NewCommand("new-session", "-A", "-s", sessName)
 	if err != nil {
 		t.Fatalf("NewCommand failed: %v", err)
 	}
+
 	term := attachmentTerminal(t)
+
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -411,60 +349,26 @@ func TestIntegrationPrepareTerminalAttachedSession(t *testing.T) {
 		t.Fatalf("PrepareTerminal failed: %v", err)
 	}
 
-	if err := execCmd.Start(); err != nil {
-		t.Fatalf("execCmd.Start failed: %v", err)
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- execCmd.Wait()
-	}()
-
-	t.Cleanup(func() {
-		cancel()
-		_ = execCmd.Process.Kill()
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("process failed to stop")
-		}
-	})
-
+	done := startPrepared(t, execCmd)
 	client := waitTerminalClient(t, ctx, server, term, done)
-	info, err := client.Info(ctx)
-	if err != nil {
-		t.Fatalf("client.Info failed: %v", err)
-	}
 
 	sess, err := server.FindSession(ctx, sessName)
 	if err != nil {
 		t.Fatalf("FindSession failed: %v", err)
 	}
-	sid, ok := info.SessionID.Get()
-	if !ok || sid != sess.ID() {
-		t.Errorf("expected session ID %v, got %v (ok=%v)", sess.ID(), sid, ok)
+
+	if sid := clientSession(t, ctx, client); sid != sess.ID() {
+		t.Errorf("expected session ID %v, got %v", sess.ID(), sid)
 	}
 
-	// Detach client gracefully
-	if err := client.Detach(ctx); err != nil {
-		t.Fatalf("client.Detach failed: %v", err)
-	}
-
-	select {
-	case err := <-done:
-		done <- err
-		if err != nil {
-			t.Fatalf("execCmd.Wait error on detach: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("process did not exit after detach")
-	}
+	detachAndAwaitExit(t, ctx, client, done, "client")
 }
 
 func TestIntegrationPrepareDefaultTerminal(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	term := attachmentTerminal(t)
+
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -484,7 +388,9 @@ func TestIntegrationPrepareDefaultTerminal(t *testing.T) {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = execCmd.Process.Kill()
+
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -504,6 +410,7 @@ func TestIntegrationPrepareDefaultTerminal(t *testing.T) {
 	select {
 	case err := <-done:
 		done <- err
+
 		if err != nil {
 			t.Fatalf("execCmd.Wait error on detach: %v", err)
 		}
@@ -516,10 +423,12 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	sessName := "term_seq_sess"
+
 	cmd1, err := tmux.NewCommand("new-session", "-d", "-s", sessName)
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	cmd2, err := tmux.NewCommand("attach-session", "-t", sessName)
 	if err != nil {
 		t.Fatal(err)
@@ -531,6 +440,7 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 	}
 
 	term := attachmentTerminal(t)
+
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -550,7 +460,9 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = execCmd.Process.Kill()
+
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -565,6 +477,7 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 	select {
 	case err := <-done:
 		done <- err
+
 		if err != nil {
 			t.Fatalf("execCmd.Wait error on detach: %v", err)
 		}
@@ -577,6 +490,7 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
 	term := attachmentTerminal(t)
+
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -602,7 +516,9 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 
 	t.Cleanup(func() {
 		cancel()
+
 		_ = execCmd.Process.Kill()
+
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
@@ -617,6 +533,7 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 	select {
 	case err := <-done:
 		done <- err
+
 		if err != nil {
 			t.Fatalf("execCmd.Wait error on detach: %v", err)
 		}
@@ -628,109 +545,42 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 func TestIntegrationServerPrepareAttach(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
+	var options tmux.AttachOptions
+
 	// 1. server.PrepareAttach with valid session ID
 	term1 := attachmentTerminal(t)
+
 	termCtx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 
-	execCmd1, err := server.PrepareAttach(termCtx1, session.ID(), tmux.TerminalStreams{In: term1, Out: term1, Err: term1}, tmux.AttachOptions{
-		ReadOnly:            false,
-		PreserveEnvironment: false,
-		Detach:              tmux.DetachNone,
-		Dir:                 "",
-		Flags:               nil,
-	})
+	execCmd1, err := server.PrepareAttach(termCtx1, session.ID(), tmux.TerminalStreams{In: term1, Out: term1, Err: term1}, options)
 	if err != nil {
 		t.Fatalf("server.PrepareAttach failed: %v", err)
 	}
 
-	if err := execCmd1.Start(); err != nil {
-		t.Fatalf("execCmd1.Start failed: %v", err)
-	}
-
-	done1 := make(chan error, 1)
-	go func() {
-		done1 <- execCmd1.Wait()
-	}()
-
-	t.Cleanup(func() {
-		cancel1()
-		_ = execCmd1.Process.Kill()
-		select {
-		case <-done1:
-		case <-time.After(5 * time.Second):
-		}
-	})
-
-	client1 := waitTerminalClient(t, ctx, server, term1, done1)
-	if err := client1.Detach(ctx); err != nil {
-		t.Fatalf("client1.Detach failed: %v", err)
-	}
-
-	select {
-	case err := <-done1:
-		done1 <- err
-		if err != nil {
-			t.Fatalf("execCmd1.Wait error on detach: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 1 did not exit after detach")
-	}
+	done1 := startPrepared(t, execCmd1)
+	detachAndAwaitExit(t, ctx, waitTerminalClient(t, ctx, server, term1, done1), done1, "client 1")
 
 	// 2. server.PrepareAttachTarget with empty target (attaching to default session)
 	term2 := attachmentTerminal(t)
+
 	termCtx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
-	execCmd2, err := server.PrepareAttachTarget(termCtx2, "", tmux.TerminalStreams{In: term2, Out: term2, Err: term2}, tmux.AttachOptions{
-		ReadOnly:            false,
-		PreserveEnvironment: false,
-		Detach:              tmux.DetachNone,
-		Dir:                 "",
-		Flags:               nil,
-	})
+	execCmd2, err := server.PrepareAttachTarget(termCtx2, "", tmux.TerminalStreams{In: term2, Out: term2, Err: term2}, options)
 	if err != nil {
 		t.Fatalf("server.PrepareAttachTarget with empty target failed: %v", err)
 	}
 
-	if err := execCmd2.Start(); err != nil {
-		t.Fatalf("execCmd2.Start failed: %v", err)
-	}
-
-	done2 := make(chan error, 1)
-	go func() {
-		done2 <- execCmd2.Wait()
-	}()
-
-	t.Cleanup(func() {
-		cancel2()
-		_ = execCmd2.Process.Kill()
-		select {
-		case <-done2:
-		case <-time.After(5 * time.Second):
-		}
-	})
-
-	client2 := waitTerminalClient(t, ctx, server, term2, done2)
-	if err := client2.Detach(ctx); err != nil {
-		t.Fatalf("client2.Detach failed: %v", err)
-	}
-
-	select {
-	case err := <-done2:
-		done2 <- err
-		if err != nil {
-			t.Fatalf("execCmd2.Wait error on detach: %v", err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("client 2 did not exit after detach")
-	}
+	done2 := startPrepared(t, execCmd2)
+	detachAndAwaitExit(t, ctx, waitTerminalClient(t, ctx, server, term2, done2), done2, "client 2")
 }
 
 func TestIntegrationAttach_MasterHangupTeardown(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
 	master, slave := openPTY(t)
+
 	attachCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -762,11 +612,13 @@ func TestIntegrationAttach_MasterHangupTeardown(t *testing.T) {
 		if err != nil {
 			return false
 		}
+
 		for _, c := range clients {
 			if c.Name == client.Name() {
 				return false
 			}
 		}
+
 		return true
 	})
 }
