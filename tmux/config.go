@@ -55,7 +55,8 @@ type Config struct {
 	Binary string
 
 	// SocketPath is an absolute path to the server socket (-S flag).
-	// Wins over SocketName and ambient $TMUX. Cannot contain NUL bytes.
+	// Wins over ambient $TMUX; setting both SocketPath and SocketName is rejected with
+	// [ErrInvalidArgument]. Cannot contain NUL bytes.
 	SocketPath string
 
 	// SocketName is a named socket (-L flag) under TMUX_TMPDIR. Cannot contain slashes or NUL bytes.
