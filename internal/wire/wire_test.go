@@ -98,6 +98,32 @@ func TestParseWordsEscapesAndComments(t *testing.T) {
 	}
 }
 
+// A "$" not followed by a name, such as the session ID "$0" in hooks, stays literal.
+func TestParseWordsRefusesSyntaxTmuxEvaluates(t *testing.T) {
+	for _, input := range []string{`$HOME`, `a$HOME`, `${HOME}`, `"$HOME"`, `"a $_x"`, `~`, `~/x`, `"~/x"`, `a"~"`, `a#{pane_id}`, `{ a }`, `a;b`} {
+		if got, err := ParseWords(input); !errors.Is(err, ErrCommandText) {
+			t.Errorf("ParseWords(%q) = %#v, %v; want ErrCommandText", input, got, err)
+		}
+	}
+
+	for _, tc := range []struct {
+		input string
+		want  []string
+	}{
+		{`'$HOME'`, []string{"$HOME"}},
+		{`\$HOME`, []string{"$HOME"}},
+		{`'~/x'`, []string{"~/x"}},
+		{`a~`, []string{"a~"}},
+		{`"a~"`, []string{"a~"}},
+		{`"$0" $1 $() a$ $`, []string{"$0", "$1", "$()", "a$", "$"}},
+	} {
+		got, err := ParseWords(tc.input)
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("ParseWords(%q) = %#v, %v; want %#v", tc.input, got, err, tc.want)
+		}
+	}
+}
+
 func TestArgvTrailingSemicolon(t *testing.T) {
 	// Reference cmd_parse_from_arguments behavior from the pinned tmux parser.
 	for _, input := range []string{";", "x;", `x\;`, `x\\;`, `a;b`, `\`, "", ";;"} {

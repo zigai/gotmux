@@ -18,11 +18,15 @@ func ParseWords(text string) ([]string, error) {
 
 	quote := byte(0)
 	started := false
+	// fresh is true where a word or quoted part begins, where tmux expands "~".
+	fresh := true
 
 	for i := 0; i < len(text); i++ {
 		c := text[i]
 		if quote == 0 && isSpace(c) {
 			flushWord(&words, &b, &started)
+
+			fresh = true
 
 			continue
 		}
@@ -38,6 +42,7 @@ func ParseWords(text string) ([]string, error) {
 		if nextQuote, changed := toggleQuote(c, quote); changed {
 			quote = nextQuote
 			started = true
+			fresh = true
 
 			continue
 		}
@@ -49,17 +54,19 @@ func ParseWords(text string) ([]string, error) {
 			}
 
 			i = next
+			fresh = false
 
 			continue
 		}
 
-		if c == 0 {
+		if refusedWordByte(text, i, quote, fresh) {
 			return nil, ErrCommandText
 		}
 
 		b.WriteByte(c)
 
 		started = true
+		fresh = false
 	}
 
 	if quote != 0 {
@@ -77,6 +84,24 @@ func SplitSequence(text string) ([]string, error) {
 
 func SplitBindingSequence(text string) ([]string, error) {
 	return splitSequence(text, true)
+}
+
+// refusedWordByte reports a NUL or a byte tmux would expand outside single quotes.
+func refusedWordByte(text string, i int, quote byte, fresh bool) bool {
+	switch c := text[i]; {
+	case c == 0:
+		return true
+	case quote == '\'':
+		return false
+	case c == '$':
+		return i+1 < len(text) && startsVariable(text[i+1])
+	default:
+		return c == '~' && fresh
+	}
+}
+
+func startsVariable(c byte) bool {
+	return c == '{' || c == '_' || ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
 }
 
 func splitSequence(text string, escapedSeparator bool) ([]string, error) {
