@@ -847,7 +847,8 @@ func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
 	return popupResult(p.h.actCallerBounded(ctx, "display-popup", args...))
 }
 
-// Menu displays an interactive popup menu on this client and blocks until dismissal.
+// Menu displays an interactive popup menu on this client.
+// It blocks until dismissed on tmux 3.6 and 3.7, and returns once shown from 3.8.
 // Only ctx bounds the wait.
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
@@ -893,6 +894,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 }
 
 // Menu displays an interactive popup menu targeting this pane (-t flag).
+// It blocks until dismissed on tmux 3.6 and 3.7, and returns once shown from 3.8.
 // Only ctx bounds the wait.
 //
 // Cancellation ends the local waiter but does not guarantee immediate dismissal of the menu on the client.
