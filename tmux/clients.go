@@ -932,6 +932,7 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) erro
 }
 
 // Prompt displays an interactive command prompt in this client's status line.
+// It returns once the prompt is shown; tmux runs template when the user submits it.
 //
 // Fails with [ErrTransportUnsupported] over control mode.
 func (c Client) Prompt(ctx context.Context, template PromptTemplate, opts PromptOptions) error {
@@ -1516,7 +1517,8 @@ func promptArgs(clientID string, template PromptTemplate, opts PromptOptions) ([
 		return nil, invalid("prompt")
 	}
 
-	args := []string{"-t", clientID}
+	// Without -b, the invoking client waits until a user answers the prompt.
+	args := []string{"-b", "-t", clientID}
 	if opts.Label != "" {
 		args = append(args, "-p", wire.LiteralFormat(opts.Label))
 	}
