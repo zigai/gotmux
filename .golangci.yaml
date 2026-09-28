@@ -2,6 +2,8 @@ version: "2"
 
 run:
   timeout: 3m
+  build-tags:
+    - integration
 
 formatters:
   enable:
@@ -210,3 +212,7 @@ linters:
 
       - path: ".*_test\\.go"
         linters: [decorder, funcorder]
+
+      # Integration tests set only the option fields a case is about.
+      - path: "^test/"
+        linters: [exhaustruct_v5]
