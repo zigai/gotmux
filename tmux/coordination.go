@@ -68,9 +68,15 @@ func requireDeadline(ctx context.Context) error {
 // WaitFor blocks until tmux signals channel. A caller deadline is required and is
 // the only bound: [Limits.CommandTimeout] does not apply. Canceling this client
 // cannot retract an already queued server-side waiter.
+//
+// Fails with [ErrTransportUnsupported] on a control-bound server.
 func (s *Server) WaitFor(ctx context.Context, channel string) error {
 	if err := requireDeadline(ctx); err != nil {
 		return opError("WaitFor", err)
+	}
+
+	if s != nil && s.conn != nil {
+		return opError("WaitFor", ErrTransportUnsupported)
 	}
 
 	if !validFormatName(channel) {
@@ -92,9 +98,15 @@ func (s *Server) Signal(ctx context.Context, channel string) error {
 // Lock acquires an exclusive named mutex lock on the server (wait-for -L).
 // A caller deadline is required and is the only bound: [Limits.CommandTimeout]
 // does not apply.
+//
+// Fails with [ErrTransportUnsupported] on a control-bound server.
 func (s *Server) Lock(ctx context.Context, channel string) error {
 	if err := requireDeadline(ctx); err != nil {
 		return opError("Lock", err)
+	}
+
+	if s != nil && s.conn != nil {
+		return opError("Lock", ErrTransportUnsupported)
 	}
 
 	if !validFormatName(channel) {
