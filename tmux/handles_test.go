@@ -8,6 +8,8 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -55,6 +57,25 @@ func testConfig(binary, socketPath string) Config {
 		LogLevel:         0,
 		LoginShell:       false,
 	}
+}
+
+// dispatchedCommand returns the stand-in's argv after the socket flags.
+func dispatchedCommand(t *testing.T, s *Server, log string) []string {
+	t.Helper()
+
+	data, err := os.ReadFile(log)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	args := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+
+	i := slices.Index(args, s.Endpoint().SocketPath)
+	if i < 0 {
+		t.Fatalf("socket path missing from argv %q", args)
+	}
+
+	return args[i+1:]
 }
 
 func writeMockResponse(t *testing.T, name string, data []byte) {
@@ -206,9 +227,8 @@ func TestWindowSelect(t *testing.T) {
 		t.Fatalf("Window.Select failed: %v", err)
 	}
 
-	args, _ := os.ReadFile(log)
-	if !bytes.Contains(args, []byte("select-window")) {
-		t.Fatalf("expected select-window in dispatched args: %q", args)
+	if got, want := dispatchedCommand(t, s, log), []string{"select-window", "-t", "@1"}; !slices.Equal(got, want) {
+		t.Fatalf("dispatched %q, want %q", got, want)
 	}
 }
 
@@ -234,8 +254,41 @@ func TestBufferHelpers(t *testing.T) {
 		t.Fatalf("Pane.Paste failed: %v", err)
 	}
 
-	args, _ := os.ReadFile(log)
-	if !bytes.Contains(args, []byte("paste-buffer")) {
-		t.Fatalf("expected paste-buffer in dispatched args: %q", args)
+	if got, want := dispatchedCommand(t, s, log), []string{"paste-buffer", "-t", "%1"}; !slices.Equal(got, want) {
+		t.Fatalf("dispatched %q, want %q", got, want)
+	}
+}
+
+func TestEqualRequiresEveryIdentityField(t *testing.T) {
+	s := localServer(t)
+	base := mockServerIdentity(s)
+	other := base
+	other.Endpoint.SocketPath += "-other"
+
+	cases := []struct {
+		name   string
+		change func(ServerIdentity) ServerIdentity
+		equal  bool
+	}{
+		{"identical", func(i ServerIdentity) ServerIdentity { return i }, true},
+		{"same start instant in another location", func(i ServerIdentity) ServerIdentity { i.Started = i.Started.In(time.FixedZone("x", 3600)); return i }, true},
+		{"endpoint", func(i ServerIdentity) ServerIdentity { i.Endpoint = other.Endpoint; return i }, false},
+		{"reported socket", func(i ServerIdentity) ServerIdentity { i.ReportedSocket += "-other"; return i }, false},
+		{"pid", func(i ServerIdentity) ServerIdentity { i.PID++; return i }, false},
+		{"start time", func(i ServerIdentity) ServerIdentity { i.Started = i.Started.Add(time.Second); return i }, false},
+		{"control generation", func(i ServerIdentity) ServerIdentity { i.Generation++; return i }, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			changed := tc.change(base)
+			if got := base.Equal(changed); got != tc.equal {
+				t.Fatalf("ServerIdentity.Equal = %v, want %v", got, tc.equal)
+			}
+
+			a := Pane{h: s.newHandle("%7", PaneKind, base)}
+			if got := a.Equal(Pane{h: s.newHandle("%7", PaneKind, changed)}); got != tc.equal {
+				t.Fatalf("Pane.Equal = %v, want %v", got, tc.equal)
+			}
+		})
 	}
 }

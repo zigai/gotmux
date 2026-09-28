@@ -61,7 +61,7 @@ func TestNewIsPureAndCopiesConfig(t *testing.T) {
 
 func TestNewValidation(t *testing.T) {
 	//nolint:exhaustruct_v5 // testing validation of individual partial config fields
-	for _, cfg := range []Config{{SocketPath: "relative"}, {SocketPath: "/tmp/a", SocketName: "a"}, {Env: []string{"A=1", "A=2"}}, {Env: []string{"bad"}}, {Env: []string{"A=\x00"}}, {Limits: Limits{OutputBytes: -1}}, {Limits: Limits{Concurrent: -1}}, {SocketName: "../escape"}} {
+	for _, cfg := range []Config{{SocketPath: "relative"}, {SocketPath: "/tmp/a", SocketName: "a"}, {Env: []string{"A=1", "A=2"}}, {Env: []string{"bad"}}, {Env: []string{"A=\x00"}}, {Limits: Limits{OutputBytes: -1}}, {Limits: Limits{Concurrent: -1}}, {Limits: Limits{CommandTimeout: -1}}, {Limits: Limits{InputBytes: -1}}, {Limits: Limits{OutputBytes: 1<<40 + 1}}, {Limits: Limits{InputBytes: 1<<40 + 1}}, {Limits: Limits{Concurrent: 1<<20 + 1}}, {SocketName: "../escape"}} {
 		cfg.Binary = "/bin/sh"
 		if _, e := New(cfg); !errors.Is(e, ErrInvalidArgument) {
 			t.Errorf("config accepted or wrong classification: %v", e)
@@ -212,18 +212,46 @@ func TestCommandOwnershipAndDomains(t *testing.T) {
 	}
 }
 
-func TestInvalidHandlesNeverUseCurrent(t *testing.T) {
+func TestInvalidHandlesFailWithoutRunningTmux(t *testing.T) {
+	s, _, argv := mockScriptServer(t)
 	ctx := context.Background()
+	malformed := func(id string, kind ObjectKind) handle {
+		return handle{server: s, origin: mockServerIdentity(s), id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
+	}
 
 	//nolint:exhaustruct_v5 // testing methods on uninitialized zero handles
-	calls := []func() error{func() error { return (Pane{}).Kill(ctx) }, func() error { return (Window{}).Kill(ctx) }, func() error { return (Session{}).Kill(ctx) }, func() error { return (WindowLink{}).Select(ctx) }, func() error { _, e := (Pane{}).Info(ctx); return e }}
-	for _, call := range calls {
-		e := call()
+	cases := []struct {
+		name string
+		call func() error
+	}{
+		{"zero pane", func() error { return (Pane{}).Kill(ctx) }},
+		{"zero pane info", func() error { _, e := (Pane{}).Info(ctx); return e }},
+		{"zero window", func() error { return (Window{}).Kill(ctx) }},
+		{"zero session", func() error { return (Session{}).Kill(ctx) }},
+		{"zero window link", func() error { return (WindowLink{}).Select(ctx) }},
+		{"zero client detach", func() error { return (Client{}).Detach(ctx) }},
+		{"zero client message", func() error { return (Client{}).Message(ctx, "hello") }},
+		{"zero client info", func() error { _, e := (Client{}).Info(ctx); return e }},
+		{"malformed pane", func() error { return Pane{h: malformed("%x", PaneKind)}.Kill(ctx) }},
+		{"malformed window", func() error { return Window{h: malformed("@", WindowKind)}.Kill(ctx) }},
+		{"malformed session", func() error { return Session{h: malformed("$01", SessionKind)}.Kill(ctx) }},
+		{"empty client name", func() error { return Client{h: malformed("", ClientKind)}.Detach(ctx) }},
+		{"client name with newline", func() error { return Client{h: malformed("/dev/pts/1\n", ClientKind)}.Message(ctx, "hello") }},
+		{"client name with NUL", func() error { _, e := Client{h: malformed("/dev/pts/1\x00", ClientKind)}.Info(ctx); return e }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := tc.call()
 
-		var op *OperationError
-		if !errors.Is(e, ErrInvalidHandle) || !errors.As(e, &op) || op.Outcome.Effect != NotSent {
-			t.Fatalf("%#v", e)
-		}
+			var op *OperationError
+			if !errors.Is(e, ErrInvalidHandle) || !errors.As(e, &op) || op.Outcome.Effect != NotSent {
+				t.Fatalf("got %#v, want ErrInvalidHandle with effect NotSent", e)
+			}
+
+			if _, err := os.Stat(argv); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("tmux ran for an invalid handle (argv log stat: %v)", err)
+			}
+		})
 	}
 }
 

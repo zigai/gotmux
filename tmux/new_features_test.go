@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"errors"
+	"os"
 	"slices"
 	"testing"
 )
@@ -503,7 +504,14 @@ func TestCaptureFlagArgsEnhanced(t *testing.T) {
 	}
 }
 
-func TestRespawnPreserveEnvironment(t *testing.T) {
+func TestRespawnRejectsNULInDir(t *testing.T) {
+	s, _, argv := mockScriptServer(t)
+
+	p, err := s.PaneHandle("%1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	opts := RespawnOptions{
 		Program:             Program{kind: 0, name: "", args: nil},
 		Dir:                 "\x00invalid",
@@ -513,9 +521,15 @@ func TestRespawnPreserveEnvironment(t *testing.T) {
 		PreserveEnvironment: true,
 	}
 
-	err := respawn(t.Context(), zeroHandle, "respawn-pane", opts)
-	if err == nil {
-		t.Fatal("expected error on invalid dir")
+	err = p.Respawn(t.Context(), opts)
+
+	var op *OperationError
+	if !errors.Is(err, ErrInvalidArgument) || !errors.As(err, &op) || op.Outcome.Effect != NotSent {
+		t.Fatalf("got %v, want ErrInvalidArgument with effect NotSent", err)
+	}
+
+	if _, err := os.Stat(argv); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("tmux ran for a Dir containing NUL (argv log stat: %v)", err)
 	}
 }
 

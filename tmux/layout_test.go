@@ -58,18 +58,16 @@ func TestSplitSizeArgs(t *testing.T) {
 	}
 }
 
-func TestLayoutConstants(t *testing.T) {
-	layouts := []Layout{
-		EvenHorizontal,
-		EvenVertical,
-		MainHorizontal,
-		MainVertical,
-		Tiled,
-	}
-
-	for _, l := range layouts {
-		if l == "" {
-			t.Error("expected non-empty layout constant")
+func TestLayoutConstantsNameTmuxLayouts(t *testing.T) {
+	for layout, want := range map[Layout]string{
+		EvenHorizontal: "even-horizontal",
+		EvenVertical:   "even-vertical",
+		MainHorizontal: "main-horizontal",
+		MainVertical:   "main-vertical",
+		Tiled:          "tiled",
+	} {
+		if string(layout) != want {
+			t.Errorf("layout %q, want tmux name %q", layout, want)
 		}
 	}
 }

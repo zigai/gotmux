@@ -93,7 +93,7 @@ func TestCanceledNextDoesNotConsume(t *testing.T) {
 func TestEventReservationCeiling(t *testing.T) {
 	c := eventConnection(t)
 	c.opts.EventBytes = 1024
-	c.opts.MaxStreams = 2
+	c.opts.MaxStreams = 8
 
 	s, e := c.Events(context.Background(), testEventOptions(1024, 0))
 	if e != nil {
@@ -101,7 +101,7 @@ func TestEventReservationCeiling(t *testing.T) {
 	}
 
 	if _, e := c.Events(context.Background(), testEventOptions(1, 0)); !errors.Is(e, ErrResourceLimit) {
-		t.Fatal(e)
+		t.Fatalf("stream beyond EventBytes: got %v, want ErrResourceLimit", e)
 	}
 
 	if err := s.Close(); err != nil {
@@ -109,7 +109,57 @@ func TestEventReservationCeiling(t *testing.T) {
 	}
 
 	if _, e := c.Events(context.Background(), testEventOptions(1024, 0)); e != nil {
+		t.Fatalf("reservation not released by Close: %v", e)
+	}
+}
+
+func TestEventStreamCountCeiling(t *testing.T) {
+	c := eventConnection(t)
+	c.opts.EventBytes = 1024
+	c.opts.MaxStreams = 2
+
+	first, e := c.Events(context.Background(), testEventOptions(100, 0))
+	if e != nil {
 		t.Fatal(e)
+	}
+
+	if _, e := c.Events(context.Background(), testEventOptions(100, 0)); e != nil {
+		t.Fatal(e)
+	}
+
+	if _, e := c.Events(context.Background(), testEventOptions(100, 0)); !errors.Is(e, ErrResourceLimit) {
+		t.Fatalf("third stream under EventBytes but beyond MaxStreams: got %v, want ErrResourceLimit", e)
+	}
+
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, e := c.Events(context.Background(), testEventOptions(100, 0)); e != nil {
+		t.Fatalf("stream slot not released by Close: %v", e)
+	}
+}
+
+func TestEventOptionsRejectInvalid(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		opts EventOptions
+	}{
+		{"negative MaxBytes", EventOptions{MaxBytes: -1, MaxCount: 0, Overflow: FailOnOverflow}},
+		{"negative MaxCount", EventOptions{MaxBytes: 0, MaxCount: -1, Overflow: FailOnOverflow}},
+		{"unknown overflow policy", EventOptions{MaxBytes: 0, MaxCount: 0, Overflow: FailOnOverflow + 1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := eventConnection(t)
+
+			if _, e := c.Events(context.Background(), tc.opts); !errors.Is(e, ErrInvalidArgument) {
+				t.Fatalf("got %v, want ErrInvalidArgument", e)
+			}
+
+			if len(c.streams) != 0 || c.eventReserved != 0 {
+				t.Fatalf("rejected options left %d streams and %d reserved bytes", len(c.streams), c.eventReserved)
+			}
+		})
 	}
 }
 
