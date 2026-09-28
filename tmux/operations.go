@@ -634,12 +634,12 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 		return WindowLink{}, opError("BreakPane", err)
 	}
 
-	if err := windowName(opts.Name); err != nil {
-		return WindowLink{}, opError("BreakPane", err)
+	// Unlike new-window, break-pane stores -n verbatim without format expansion.
+	if !wire.ValidString(opts.Name) {
+		return WindowLink{}, opError("BreakPane", invalid("NUL literal"))
 	}
 
-	name, err := literal(opts.Name)
-	if err != nil {
+	if err := windowName(opts.Name); err != nil {
 		return WindowLink{}, opError("BreakPane", err)
 	}
 
@@ -649,7 +649,7 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 	}
 	defer op.close()
 
-	args := breakArgs(p.h.id, target, name, opts)
+	args := breakArgs(p.h.id, target, opts)
 
 	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("break-pane", args...)), p.h.guard(), nil)
 	if err != nil {
@@ -677,14 +677,14 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 	return link.Handle(), nil
 }
 
-func breakArgs(paneID, target, name string, opts BreakOptions) []string {
+func breakArgs(paneID, target string, opts BreakOptions) []string {
 	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(WindowKind))}
 	if !opts.Select {
 		args = append(args, "-d")
 	}
 
 	if opts.Name != "" {
-		args = append(args, "-n", name)
+		args = append(args, "-n", opts.Name)
 	}
 
 	return args
