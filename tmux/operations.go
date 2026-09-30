@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	PaneAbove PaneDirection = iota
-	PaneBelow
-	PaneLeft
-	PaneRight
+	PaneDirectionAbove PaneDirection = iota
+	PaneDirectionBelow
+	PaneDirectionLeft
+	PaneDirectionRight
 )
 
 // PaneDirection identifies a neighboring pane relative to a target pane.
@@ -108,93 +108,99 @@ type (
 	}
 )
 
-func (s *Server) endpointAction(ctx context.Context, name string, args ...string) error {
-	return s.endpointActionFrom(ctx, s.begin, name, args...)
+func (s *Server) endpointAction(ctx context.Context, label string, name string, args ...string) error {
+	return s.endpointActionFrom(ctx, label, s.begin, name, args...)
 }
 
-func (s *Server) endpointActionFrom(ctx context.Context, begin func(context.Context) (context.Context, *operation, error), name string, args ...string) error {
+func (s *Server) endpointActionFrom(ctx context.Context, label string, begin func(context.Context) (context.Context, *operation, error), name string, args ...string) error {
 	opCtx, op, err := begin(ctx)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 
 	_, err = s.execute(opCtx, op, emptyPlan(command(name, args...)), newGuard(info.Identity), nil)
 
-	return opError(name, err)
+	return opError(label, err)
 }
 
 // Kill explicitly terminates the entire tmux server daemon and all sessions/windows/panes managed by it.
 // This is an explicit administrative action; normal cleanup of a [Connection] or [Server] never invokes it.
-func (s *Server) Kill(ctx context.Context) error { return s.endpointAction(ctx, "kill-server") }
+func (s *Server) Kill(ctx context.Context) error {
+	return s.endpointAction(ctx, "Server.Kill", "kill-server")
+}
 
 // KillOtherSessions terminates all sessions on the server except the target session.
 func (s *Server) KillOtherSessions(ctx context.Context, target SessionID) error {
 	if !target.Valid() {
-		return opError("KillOtherSessions", invalid("target session"))
+		return opError("Server.KillOtherSessions", invalid("target session"))
 	}
 
-	return s.endpointAction(ctx, "kill-session", "-a", "-t", string(target))
+	return s.endpointAction(ctx, "Server.KillOtherSessions", "kill-session", "-a", "-t", string(target))
 }
 
 // Kill terminates this session and all windows that have no remaining links in other sessions.
-func (s Session) Kill(ctx context.Context) error { return s.h.act(ctx, "kill-session", "-t", s.h.id) }
+func (s Session) Kill(ctx context.Context) error {
+	return s.h.act(ctx, "Session.Kill", "kill-session", "-t", s.h.id)
+}
 
 // Rename changes the human-readable name of this session.
 // Session names cannot contain colons or periods.
 func (s Session) Rename(ctx context.Context, name string) error {
 	if err := sessionName(name, false); err != nil {
-		return opError("RenameSession", err)
+		return opError("Session.Rename", err)
 	}
 
-	return s.h.act(ctx, "rename-session", "-t", s.h.id, "--", wire.LiteralFormat(name))
+	return s.h.act(ctx, "Session.Rename", "rename-session", "-t", s.h.id, "--", wire.LiteralFormat(name))
 }
 
 // LockScreen locks this session by running the lock-command on attached clients.
 func (s Session) LockScreen(ctx context.Context) error {
-	return s.h.act(ctx, "lock-session", "-t", s.h.id)
+	return s.h.act(ctx, "Session.LockScreen", "lock-session", "-t", s.h.id)
 }
 
 // RenumberWindows renumbers all windows in this session in sequential order,
 // respecting the base-index option (-r flag).
 func (s Session) RenumberWindows(ctx context.Context) error {
-	return s.h.act(ctx, "move-window", "-r", "-t", s.h.id+":")
+	return s.h.act(ctx, "Session.RenumberWindows", "move-window", "-r", "-t", s.h.id+":")
 }
 
 // KillOtherWindows terminates all windows in this session except the currently active window.
 func (s Session) KillOtherWindows(ctx context.Context) error {
-	return s.h.act(ctx, "kill-window", "-a", "-t", s.h.id+":")
+	return s.h.act(ctx, "Session.KillOtherWindows", "kill-window", "-a", "-t", s.h.id+":")
 }
 
 // ClearAlerts clears alerts (bell, activity, or silence) in all windows linked to this session (-C flag).
 func (s Session) ClearAlerts(ctx context.Context) error {
-	return s.h.act(ctx, "kill-session", "-C", "-t", s.h.id)
+	return s.h.act(ctx, "Session.ClearAlerts", "kill-session", "-C", "-t", s.h.id)
 }
 
 // Rename changes the title/name of this window.
 // Backslashes, control bytes, and invalid UTF-8 are rejected.
 func (w Window) Rename(ctx context.Context, name string) error {
 	if err := windowName(name); err != nil {
-		return opError("RenameWindow", err)
+		return opError("Window.Rename", err)
 	}
 
 	v, err := literal(name)
 	if err != nil {
-		return opError("RenameWindow", err)
+		return opError("Window.Rename", err)
 	}
 
-	return w.h.act(ctx, "rename-window", "-t", w.h.id, "--", v)
+	return w.h.act(ctx, "Window.Rename", "rename-window", "-t", w.h.id, "--", v)
 }
 
 // Kill destroys the shared window object across ALL sessions where it is linked.
 // To remove the window from only one session without killing it globally,
 // use [WindowLink.Unlink].
-func (w Window) Kill(ctx context.Context) error { return w.h.act(ctx, "kill-window", "-t", w.h.id) }
+func (w Window) Kill(ctx context.Context) error {
+	return w.h.act(ctx, "Window.Kill", "kill-window", "-t", w.h.id)
+}
 
 // Rotate rotates the positions of the panes within this window upward or downward.
 // If reverse is true, panes rotate downward (-D flag); otherwise upward (-U flag).
@@ -204,23 +210,27 @@ func (w Window) Rotate(ctx context.Context, reverse bool) error {
 		flag = "-D"
 	}
 
-	return w.h.act(ctx, "rotate-window", "-t", w.h.id, flag)
+	return w.h.act(ctx, "Window.Rotate", "rotate-window", "-t", w.h.id, flag)
 }
 
 // Kill terminates this pane and sends SIGHUP to its child process.
-func (p Pane) Kill(ctx context.Context) error { return p.h.act(ctx, "kill-pane", "-t", p.h.id) }
+func (p Pane) Kill(ctx context.Context) error {
+	return p.h.act(ctx, "Pane.Kill", "kill-pane", "-t", p.h.id)
+}
 
 // Select gives user focus to this pane within its window.
-func (p Pane) Select(ctx context.Context) error { return p.h.act(ctx, "select-pane", "-t", p.h.id) }
+func (p Pane) Select(ctx context.Context) error {
+	return p.h.act(ctx, "Pane.Select", "select-pane", "-t", p.h.id)
+}
 
 // SetTitle updates the pane's title string (#{pane_title}).
 func (p Pane) SetTitle(ctx context.Context, title string) error {
 	v, err := literal(title)
 	if err != nil {
-		return opError("SetTitle", err)
+		return opError("Pane.SetTitle", err)
 	}
 
-	return p.h.act(ctx, "select-pane", "-t", p.h.id, "-T", v)
+	return p.h.act(ctx, "Pane.SetTitle", "select-pane", "-t", p.h.id, "-T", v)
 }
 
 // SetInputEnabled enables or disables keyboard and mouse input transmission to this pane.
@@ -231,12 +241,12 @@ func (p Pane) SetInputEnabled(ctx context.Context, enabled bool) error {
 		flag = "-e"
 	}
 
-	return p.h.act(ctx, "select-pane", "-t", p.h.id, flag)
+	return p.h.act(ctx, "Pane.SetInputEnabled", "select-pane", "-t", p.h.id, flag)
 }
 
 // ClearHistory removes and clears the scrollback history for this pane.
 func (p Pane) ClearHistory(ctx context.Context) error {
-	return p.h.act(ctx, "clear-history", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.ClearHistory", "clear-history", "-t", p.h.id)
 }
 
 // Select switches the active window in its session to this window using default options.
@@ -246,7 +256,7 @@ func (w Window) Select(ctx context.Context) error {
 
 // Select switches the active/focused window in this session to this link slot.
 func (l WindowLink) Select(ctx context.Context) error {
-	return l.act(ctx, "select-window", "-t", l.target())
+	return l.act(ctx, "WindowLink.Select", "select-window", "-t", l.target())
 }
 
 // Unlink removes only this observed membership from the session.
@@ -263,54 +273,56 @@ func (l WindowLink) UnlinkWith(ctx context.Context, opts UnlinkOptions) error {
 		args = append(args, "-k")
 	}
 
-	return l.act(ctx, "unlink-window", args...)
+	return l.act(ctx, "WindowLink.Unlink", "unlink-window", args...)
 }
 
 // LastWindow selects the previously active window in this session.
 func (s Session) LastWindow(ctx context.Context) error {
-	return s.h.act(ctx, "last-window", "-t", s.h.id)
+	return s.h.act(ctx, "Session.LastWindow", "last-window", "-t", s.h.id)
 }
 
 // LastPane selects the previously active pane in this window.
-func (w Window) LastPane(ctx context.Context) error { return w.h.act(ctx, "last-pane", "-t", w.h.id) }
+func (w Window) LastPane(ctx context.Context) error {
+	return w.h.act(ctx, "Window.LastPane", "last-pane", "-t", w.h.id)
+}
 
 // SelectLayout applies a named layout arrangement to the panes in this window.
 func (w Window) SelectLayout(ctx context.Context, layout Layout) error {
 	if layout == "" || !wire.ValidString(string(layout)) {
-		return opError("SelectLayout", invalid("layout"))
+		return opError("Window.SelectLayout", invalid("layout"))
 	}
 
-	return w.h.act(ctx, "select-layout", "-t", w.h.id, "--", string(layout))
+	return w.h.act(ctx, "Window.SelectLayout", "select-layout", "-t", w.h.id, "--", string(layout))
 }
 
 // NextLayout cycles this window to the next preset layout arrangement.
 func (w Window) NextLayout(ctx context.Context) error {
-	return w.h.act(ctx, "select-layout", "-t", w.h.id, "-n")
+	return w.h.act(ctx, "Window.NextLayout", "select-layout", "-t", w.h.id, "-n")
 }
 
 // PreviousLayout cycles this window to the previous preset layout arrangement.
 func (w Window) PreviousLayout(ctx context.Context) error {
-	return w.h.act(ctx, "select-layout", "-t", w.h.id, "-p")
+	return w.h.act(ctx, "Window.PreviousLayout", "select-layout", "-t", w.h.id, "-p")
 }
 
 // Resize sets the window's total dimensions in character cells.
 func (w Window) Resize(ctx context.Context, size Size) error {
 	args, err := resizeArgs(w.h.id, size)
 	if err != nil {
-		return opError("ResizeWindow", err)
+		return opError("Window.Resize", err)
 	}
 
-	return w.h.act(ctx, "resize-window", args...)
+	return w.h.act(ctx, "Window.Resize", "resize-window", args...)
 }
 
 // Resize sets the pane's dimensions in character cells.
 func (p Pane) Resize(ctx context.Context, size Size) error {
 	args, err := resizeArgs(p.h.id, size)
 	if err != nil {
-		return opError("ResizePane", err)
+		return opError("Pane.Resize", err)
 	}
 
-	return p.h.act(ctx, "resize-pane", args...)
+	return p.h.act(ctx, "Pane.Resize", "resize-pane", args...)
 }
 
 func resizeArgs(id string, size Size) ([]string, error) {
@@ -332,7 +344,7 @@ func resizeArgs(id string, size Size) ([]string, error) {
 
 // ToggleZoom toggles whether this pane is zoomed to fill the entire window (-Z flag).
 func (p Pane) ToggleZoom(ctx context.Context) error {
-	return p.h.act(ctx, "resize-pane", "-t", p.h.id, "-Z")
+	return p.h.act(ctx, "Pane.ToggleZoom", "resize-pane", "-t", p.h.id, "-Z")
 }
 
 func tmuxEnvFlags(env map[string]string) ([]string, error) {
@@ -361,10 +373,10 @@ func tmuxEnvFlags(env map[string]string) ([]string, error) {
 	return args, nil
 }
 
-func respawn(ctx context.Context, h handle, name string, opts RespawnOptions) error {
+func respawn(ctx context.Context, label string, h handle, name string, opts RespawnOptions) error {
 	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 
 	args := []string{"-t", h.id}
@@ -378,7 +390,7 @@ func respawn(ctx context.Context, h handle, name string, opts RespawnOptions) er
 
 	tmuxEnvArgs, err := tmuxEnvFlags(opts.TmuxEnv)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 
 	args = append(args, tmuxEnvArgs...)
@@ -389,19 +401,19 @@ func respawn(ctx context.Context, h handle, name string, opts RespawnOptions) er
 		args = append(args, argv...)
 	}
 
-	return h.act(ctx, name, args...)
+	return h.act(ctx, label, name, args...)
 }
 
 // Respawn re-executes the command in this pane, replacing the existing or dead process.
 // Unlike pane creation where a zero Program executes the default shell, Respawn with
 // a zero Program requests tmux's previously stored respawn command.
 func (p Pane) Respawn(ctx context.Context, opts RespawnOptions) error {
-	return respawn(ctx, p.h, "respawn-pane", opts)
+	return respawn(ctx, "Pane.Respawn", p.h, "respawn-pane", opts)
 }
 
 // Respawn re-executes the command in the window's initial pane.
 func (w Window) Respawn(ctx context.Context, opts RespawnOptions) error {
-	return respawn(ctx, w.h, "respawn-window", opts)
+	return respawn(ctx, "Window.Respawn", w.h, "respawn-window", opts)
 }
 
 func linkTarget(s Session, index *int) (string, error) {
@@ -427,11 +439,11 @@ func linkTarget(s Session, index *int) (string, error) {
 func (w Window) Link(ctx context.Context, s Session, opts LinkOptions) (WindowLink, error) {
 	target, err := linkTarget(s, opts.Index)
 	if err != nil {
-		return WindowLink{}, opError("LinkWindow", err)
+		return WindowLink{}, opError("Window.Link", err)
 	}
 
 	if opts.Index == nil && opts.Replace {
-		return WindowLink{}, opError("LinkWindow", invalid("Replace requires an explicit index"))
+		return WindowLink{}, opError("Window.Link", invalid("Replace requires an explicit index"))
 	}
 
 	args := []string{"-s", w.h.id, "-t", target}
@@ -445,18 +457,18 @@ func (w Window) Link(ctx context.Context, s Session, opts LinkOptions) (WindowLi
 
 	opCtx, op, err := beginHandles(ctx, &w.h, &s.h)
 	if err != nil {
-		return WindowLink{}, opError("LinkWindow", err)
+		return WindowLink{}, opError("Window.Link", err)
 	}
 	defer op.close()
 
-	return mutateLink(opCtx, op, w.h, w.h.guard(), "link-window", args, target)
+	return mutateLink(opCtx, "Window.Link", op, w.h, w.h.guard(), "link-window", args, target)
 }
 
-func mutateLink(ctx context.Context, op *operation, h handle, g *guard, name string, args []string, target string) (WindowLink, error) {
+func mutateLink(ctx context.Context, label string, op *operation, h handle, g *guard, name string, args []string, target string) (WindowLink, error) {
 	if strings.HasSuffix(target, ":") {
-		index, err := freeWindowIndex(ctx, op, h.server, h.origin, target)
+		index, err := freeWindowIndex(ctx, label, op, h.server, h.origin, target)
 		if err != nil {
-			return WindowLink{}, opError(name, err)
+			return WindowLink{}, opError(label, err)
 		}
 
 		target += strconv.Itoa(index)
@@ -469,33 +481,33 @@ func mutateLink(ctx context.Context, op *operation, h handle, g *guard, name str
 		}
 	}
 
-	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, wire.RecordFormat(fieldsFor(WindowKind))))}
+	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, wire.RecordFormat(fieldsFor(ObjectKindWindow))))}
 
 	r, err := h.server.execute(ctx, op, plan{nodes: nodes, mode: replyRecords, allowStart: false}, g, nil)
 	if err != nil {
-		return WindowLink{}, opError(name, err)
+		return WindowLink{}, opError(label, err)
 	}
 
-	return parseLinkedWindow(h, name, target, r.Stdout)
+	return parseLinkedWindow(label, h, target, r.Stdout)
 }
 
-func parseLinkedWindow(h handle, name, target string, data []byte) (WindowLink, error) {
-	rows, err := parseRaw(data, fieldsFor(WindowKind), "link")
+func parseLinkedWindow(label string, h handle, target string, data []byte) (WindowLink, error) {
+	rows, err := parseRaw(data, fieldsFor(ObjectKindWindow), "link")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = ErrProtocol
 		}
 
-		return WindowLink{}, afterError(name, err)
+		return WindowLink{}, afterError(label, err)
 	}
 
 	_, link, err := h.server.decodeWindow(rows[0], &h.origin)
 	if err != nil {
-		return WindowLink{}, afterError(name, err)
+		return WindowLink{}, afterError(label, err)
 	}
 
 	if string(link.WindowID) != h.id || string(link.SessionID)+":"+strconv.Itoa(link.Index) != target {
-		return WindowLink{}, afterError(name, ErrLinkChanged)
+		return WindowLink{}, afterError(label, ErrLinkChanged)
 	}
 
 	return link.Handle(), nil
@@ -505,16 +517,16 @@ func parseLinkedWindow(h handle, name, target string, data []byte) (WindowLink, 
 // A nil Index chooses a free slot. Returns a handle for the confirmed destination slot.
 func (l WindowLink) Move(ctx context.Context, s Session, opts LinkOptions) (WindowLink, error) {
 	if err := l.check(); err != nil {
-		return WindowLink{}, opError("MoveWindow", err)
+		return WindowLink{}, opError("WindowLink.Move", err)
 	}
 
 	target, err := linkTarget(s, opts.Index)
 	if err != nil {
-		return WindowLink{}, opError("MoveWindow", err)
+		return WindowLink{}, opError("WindowLink.Move", err)
 	}
 
 	if opts.Index == nil && opts.Replace {
-		return WindowLink{}, opError("MoveWindow", invalid("Replace requires an explicit index"))
+		return WindowLink{}, opError("WindowLink.Move", invalid("Replace requires an explicit index"))
 	}
 
 	args := []string{"-s", l.target(), "-t", target}
@@ -528,26 +540,26 @@ func (l WindowLink) Move(ctx context.Context, s Session, opts LinkOptions) (Wind
 
 	opCtx, op, err := beginHandles(ctx, &l.h, &s.h)
 	if err != nil {
-		return WindowLink{}, opError("MoveWindow", err)
+		return WindowLink{}, opError("WindowLink.Move", err)
 	}
 	defer op.close()
 
-	return mutateLink(opCtx, op, l.h, l.guard(), "move-window", args, target)
+	return mutateLink(opCtx, "WindowLink.Move", op, l.h, l.guard(), "move-window", args, target)
 }
 
 // Swap exchanges the slot positions of this window link and another window link.
-func (l WindowLink) Swap(ctx context.Context, other WindowLink, selectWindow bool) error {
+func (l WindowLink) Swap(ctx context.Context, other WindowLink, opts SwapWindowOptions) error {
 	if err := l.check(); err != nil {
-		return opError("SwapWindow", err)
+		return opError("WindowLink.Swap", err)
 	}
 
 	if err := other.check(); err != nil {
-		return opError("SwapWindow", err)
+		return opError("WindowLink.Swap", err)
 	}
 
 	opCtx, op, err := beginHandles(ctx, &l.h, &other.h)
 	if err != nil {
-		return opError("SwapWindow", err)
+		return opError("WindowLink.Swap", err)
 	}
 	defer op.close()
 
@@ -555,24 +567,24 @@ func (l WindowLink) Swap(ctx context.Context, other WindowLink, selectWindow boo
 	g.links = append(g.links, other.guard().links...)
 
 	args := []string{"-s", l.target(), "-t", other.target()}
-	if !selectWindow {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
 	_, err = l.h.server.execute(opCtx, op, emptyPlan(command("swap-window", args...)), g, nil)
 
-	return opError("SwapWindow", err)
+	return opError("WindowLink.Swap", err)
 }
 
 // Join moves this pane from its current window into target's window as a split.
 func (p Pane) Join(ctx context.Context, target Pane, opts JoinOptions) error {
 	if opts.Direction > Horizontal {
-		return opError("JoinPane", invalid("direction"))
+		return opError("Pane.Join", invalid("direction"))
 	}
 
 	size, err := opts.Size.args()
 	if err != nil {
-		return opError("JoinPane", err)
+		return opError("Pane.Join", err)
 	}
 
 	args := []string{"-s", p.h.id, "-t", target.h.id}
@@ -598,13 +610,13 @@ func (p Pane) Join(ctx context.Context, target Pane, opts JoinOptions) error {
 
 	opCtx, op, err := beginHandles(ctx, &p.h, &target.h)
 	if err != nil {
-		return opError("JoinPane", err)
+		return opError("Pane.Join", err)
 	}
 	defer op.close()
 
 	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("join-pane", args...)), p.h.guard(), nil)
 
-	return opError("join-pane", err)
+	return opError("Pane.Join", err)
 }
 
 // Move is an alias for [Pane.Join], moving this pane beside target pane.
@@ -613,21 +625,22 @@ func (p Pane) Move(ctx context.Context, target Pane, opts JoinOptions) error {
 }
 
 // Swap exchanges the positions and dimensions of this pane and another pane.
-func (p Pane) Swap(ctx context.Context, other Pane, selectPane bool) error {
+// Use [Pane.SwapUp] and [Pane.SwapDown] to swap with a neighbor.
+func (p Pane) Swap(ctx context.Context, other Pane, opts SwapPaneOptions) error {
 	opCtx, op, err := beginHandles(ctx, &p.h, &other.h)
 	if err != nil {
-		return opError("SwapPane", err)
+		return opError("Pane.Swap", err)
 	}
 	defer op.close()
 
 	args := []string{"-s", p.h.id, "-t", other.h.id}
-	if !selectPane {
+	if !opts.Select {
 		args = append(args, "-d")
 	}
 
 	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("swap-pane", args...)), p.h.guard(), nil)
 
-	return opError("swap-pane", err)
+	return opError("Pane.Swap", err)
 }
 
 // Break removes this pane from its current window and creates a new window containing only
@@ -635,21 +648,21 @@ func (p Pane) Swap(ctx context.Context, other Pane, selectPane bool) error {
 func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLink, error) {
 	target, err := linkTarget(s, opts.Index)
 	if err != nil {
-		return WindowLink{}, opError("BreakPane", err)
+		return WindowLink{}, opError("Pane.Break", err)
 	}
 
 	// Unlike new-window, break-pane stores -n verbatim without format expansion.
 	if !wire.ValidString(opts.Name) {
-		return WindowLink{}, opError("BreakPane", invalid("NUL literal"))
+		return WindowLink{}, opError("Pane.Break", invalid("NUL literal"))
 	}
 
 	if err := windowName(opts.Name); err != nil {
-		return WindowLink{}, opError("BreakPane", err)
+		return WindowLink{}, opError("Pane.Break", err)
 	}
 
 	opCtx, op, err := beginHandles(ctx, &p.h, &s.h)
 	if err != nil {
-		return WindowLink{}, opError("BreakPane", err)
+		return WindowLink{}, opError("Pane.Break", err)
 	}
 	defer op.close()
 
@@ -657,32 +670,32 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 
 	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("break-pane", args...)), p.h.guard(), nil)
 	if err != nil {
-		return WindowLink{}, opError("BreakPane", err)
+		return WindowLink{}, opError("Pane.Break", err)
 	}
 
-	rows, err := parseRaw(r.Stdout, fieldsFor(WindowKind), "window")
+	rows, err := parseRaw(r.Stdout, fieldsFor(ObjectKindWindow), "window")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = ErrProtocol
 		}
 
-		return WindowLink{}, afterError("BreakPane", err, recoverCreated(r.Stdout, WindowKind)...)
+		return WindowLink{}, afterError("Pane.Break", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
 	}
 
 	_, link, err := p.h.server.decodeWindow(rows[0], &p.h.origin)
 	if err != nil {
-		return WindowLink{}, afterError("BreakPane", err, recoverCreated(r.Stdout, WindowKind)...)
+		return WindowLink{}, afterError("Pane.Break", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
 	}
 
 	if err = opCtx.Err(); err != nil {
-		return link.Handle(), afterError("BreakPane", err, createdFromHandle(link.link.h))
+		return link.Handle(), afterError("Pane.Break", err, createdFromHandle(link.link.h))
 	}
 
 	return link.Handle(), nil
 }
 
 func breakArgs(paneID, target string, opts BreakOptions) []string {
-	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(WindowKind))}
+	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(ObjectKindWindow))}
 	if !opts.Select {
 		args = append(args, "-d")
 	}
@@ -698,7 +711,7 @@ func breakArgs(paneID, target string, opts BreakOptions) []string {
 // To stop piping, callers must explicitly invoke [Pane.StopPipe].
 func (p Pane) Pipe(ctx context.Context, script string, opts PipeOptions) error {
 	if !wire.ValidString(script) || script == "" {
-		return opError("Pipe", invalid("pipe script"))
+		return opError("Pane.Pipe", invalid("pipe script"))
 	}
 
 	args := []string{"-t", p.h.id}
@@ -716,20 +729,22 @@ func (p Pane) Pipe(ctx context.Context, script string, opts PipeOptions) error {
 
 	args = append(args, "--", script)
 
-	return p.h.act(ctx, "pipe-pane", args...)
+	return p.h.act(ctx, "Pane.Pipe", "pipe-pane", args...)
 }
 
 // StopPipe stops any active background shell command piping I/O from this pane.
-func (p Pane) StopPipe(ctx context.Context) error { return p.h.act(ctx, "pipe-pane", "-t", p.h.id) }
+func (p Pane) StopPipe(ctx context.Context) error {
+	return p.h.act(ctx, "Pane.StopPipe", "pipe-pane", "-t", p.h.id)
+}
 
 // NextWindow selects the next window in this session.
 func (s Session) NextWindow(ctx context.Context) error {
-	return s.h.act(ctx, "next-window", "-t", s.h.id)
+	return s.h.act(ctx, "Session.NextWindow", "next-window", "-t", s.h.id)
 }
 
 // PreviousWindow selects the previous window in this session.
 func (s Session) PreviousWindow(ctx context.Context) error {
-	return s.h.act(ctx, "previous-window", "-t", s.h.id)
+	return s.h.act(ctx, "Session.PreviousWindow", "previous-window", "-t", s.h.id)
 }
 
 // SelectAdjacent selects a neighboring pane using tmux's directional navigation.
@@ -737,24 +752,24 @@ func (p Pane) SelectAdjacent(ctx context.Context, direction PaneDirection) error
 	var flag string
 
 	switch direction {
-	case PaneAbove:
+	case PaneDirectionAbove:
 		flag = "-U"
-	case PaneBelow:
+	case PaneDirectionBelow:
 		flag = "-D"
-	case PaneLeft:
+	case PaneDirectionLeft:
 		flag = "-L"
-	case PaneRight:
+	case PaneDirectionRight:
 		flag = "-R"
 	default:
-		return opError("SelectAdjacent", invalid("pane direction"))
+		return opError("Pane.SelectAdjacent", invalid("pane direction"))
 	}
 
-	return p.h.act(ctx, "select-pane", "-t", p.h.id, flag)
+	return p.h.act(ctx, "Pane.SelectAdjacent", "select-pane", "-t", p.h.id, flag)
 }
 
 // The native link/move command claims this slot without -k. If another client
 // claims it first, tmux rejects the mutation rather than overwriting that client.
-func freeWindowIndex(ctx context.Context, op *operation, server *Server, id ServerIdentity, target string) (int, error) {
+func freeWindowIndex(ctx context.Context, label string, op *operation, server *Server, id ServerIdentity, target string) (int, error) {
 	r, err := server.execute(ctx, op, recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat([]string{"base-index"}))), newGuard(id), nil)
 	if err != nil {
 		return 0, err
@@ -770,7 +785,7 @@ func freeWindowIndex(ctx context.Context, op *operation, server *Server, id Serv
 		return 0, ErrProtocol
 	}
 
-	_, links, err := server.windows(ctx, op, id, target)
+	_, links, err := server.windows(ctx, label, op, id, target)
 	if err != nil {
 		return 0, err
 	}

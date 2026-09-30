@@ -15,7 +15,7 @@ type (
 
 	// EnvironmentValue captures the state of an environment variable in tmux.
 	EnvironmentValue struct {
-		// Value is the string content of the variable if set, or Unavailable if absent.
+		// Value is the string content of the variable if set, or [ValueStateUnavailable] if absent.
 		Value Value[string]
 
 		// Unset is true if the variable was explicitly marked for removal (-r flag).
@@ -42,30 +42,44 @@ type (
 		// Hidden includes variables from the hidden environment table (-h flag).
 		Hidden bool
 	}
+
+	// GetEnvironmentOptions configures [EnvironmentScope.GetWith].
+	GetEnvironmentOptions struct {
+		// Hidden reads the variable from the hidden environment table (-h flag).
+		Hidden bool
+	}
 )
 
 // Environment returns the global server environment scope (set-environment -g).
 // Variables set here are inherited by all newly created sessions.
 func (s *Server) Environment() EnvironmentScope {
 	var zero handle
-	return EnvironmentScope{target: optionTarget{server: s, h: zero, scope: GlobalSessionScope}}
+	return EnvironmentScope{target: optionTarget{server: s, h: zero, scope: ScopeGlobalSession}}
 }
 
 // Environment returns the environment scope for this specific session.
 // Variables set here override global environment variables for panes created in this session.
 func (s Session) Environment() EnvironmentScope {
-	return EnvironmentScope{target: optionTarget{server: s.h.server, h: s.h, scope: SessionScope}}
+	return EnvironmentScope{target: optionTarget{server: s.h.server, h: s.h, scope: ScopeSession}}
 }
 
 // Get retrieves one variable by name, preserving embedded newlines and empty values.
-func (scope EnvironmentScope) Get(ctx context.Context, name string, hidden bool) (EnvironmentValue, error) {
+func (scope EnvironmentScope) Get(ctx context.Context, name string) (EnvironmentValue, error) {
+	return scope.GetWith(ctx, name, GetEnvironmentOptions{Hidden: false})
+}
+
+// GetWith retrieves one variable by name with custom options, such as reading
+// the hidden environment table.
+func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts GetEnvironmentOptions) (EnvironmentValue, error) {
+	hidden := opts.Hidden
+
 	if !envName(name) {
-		return EnvironmentValue{}, opError("Environment.Get", invalid("environment name"))
+		return EnvironmentValue{}, opError("EnvironmentScope.Get", invalid("environment name"))
 	}
 
 	opCtx, op, g, err := scope.target.prepare(ctx)
 	if err != nil {
-		return EnvironmentValue{}, opError("Environment.Get", err)
+		return EnvironmentValue{}, opError("EnvironmentScope.Get", err)
 	}
 	defer op.close()
 
@@ -83,7 +97,7 @@ func (scope EnvironmentScope) Get(ctx context.Context, name string, hidden bool)
 			return EnvironmentValue{Value: UnavailableValue[string](), Unset: false, Hidden: hidden}, nil
 		}
 
-		return EnvironmentValue{}, opError("Environment.Get", err)
+		return EnvironmentValue{}, opError("EnvironmentScope.Get", err)
 	}
 
 	data := bytes.TrimSuffix(r.Stdout, []byte{'\n'})
@@ -97,7 +111,7 @@ func (scope EnvironmentScope) Get(ctx context.Context, name string, hidden bool)
 
 	prefix := name + "="
 	if !strings.HasPrefix(string(data), prefix) {
-		return EnvironmentValue{}, afterError("Environment.Get", ErrProtocol)
+		return EnvironmentValue{}, afterError("EnvironmentScope.Get", ErrProtocol)
 	}
 
 	return EnvironmentValue{Value: PresentValue(string(data[len(prefix):])), Unset: false, Hidden: hidden}, nil
@@ -112,7 +126,7 @@ func (scope EnvironmentScope) List(ctx context.Context) ([]EnvironmentEntry, err
 func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironmentOptions) ([]EnvironmentEntry, error) {
 	opCtx, op, g, err := scope.target.prepare(ctx)
 	if err != nil {
-		return nil, opError("Environment.List", err)
+		return nil, opError("EnvironmentScope.List", err)
 	}
 	defer op.close()
 
@@ -126,12 +140,12 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironment
 
 	r, err := scope.target.server.execute(opCtx, op, plainPlan(command("show-environment", args...)), g, nil)
 	if err != nil {
-		return nil, opError("Environment.List", err)
+		return nil, opError("EnvironmentScope.List", err)
 	}
 
 	out, err := parseShellEnvironment(r.Stdout, opts.Hidden)
 	if err != nil {
-		return nil, afterError("Environment.List", err)
+		return nil, afterError("EnvironmentScope.List", err)
 	}
 
 	return out, nil
@@ -223,25 +237,25 @@ func unescapeShellValue(s string) (string, string, error) {
 
 // Set assigns a value to an environment variable in this scope.
 func (scope EnvironmentScope) Set(ctx context.Context, name, value string) error {
-	return scope.change(ctx, name, value, "", "Environment.Set")
+	return scope.change(ctx, name, value, "", "EnvironmentScope.Set")
 }
 
 // SetHidden assigns a value to a hidden environment variable (-h flag).
 // Hidden variables are stored in tmux but are not automatically exported to child processes.
 func (scope EnvironmentScope) SetHidden(ctx context.Context, name, value string) error {
-	return scope.change(ctx, name, value, "-h", "Environment.SetHidden")
+	return scope.change(ctx, name, value, "-h", "EnvironmentScope.SetHidden")
 }
 
 // Unset deletes the specified variable from tmux's environment table (-u flag).
 // Contrast with [EnvironmentScope.Remove]: Unset removes the variable from tmux, whereas
 // Remove explicitly instructs tmux to strip the variable from child process environments.
 func (scope EnvironmentScope) Unset(ctx context.Context, name string) error {
-	return scope.change(ctx, name, "", "-u", "Environment.Unset")
+	return scope.change(ctx, name, "", "-u", "EnvironmentScope.Unset")
 }
 
 // Remove marks the variable to be stripped from new program environments (-r flag).
 func (scope EnvironmentScope) Remove(ctx context.Context, name string) error {
-	return scope.change(ctx, name, "", "-r", "Environment.Remove")
+	return scope.change(ctx, name, "", "-r", "EnvironmentScope.Remove")
 }
 
 func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opName string) error {
@@ -272,7 +286,7 @@ func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opN
 }
 
 func (scope EnvironmentScope) base() []string {
-	if scope.target.scope == GlobalSessionScope {
+	if scope.target.scope == ScopeGlobalSession {
 		return []string{"-g"}
 	}
 

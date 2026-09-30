@@ -31,7 +31,7 @@ func testEventOptions(byteCount int64, count int) EventOptions {
 	return EventOptions{
 		MaxBytes: byteCount,
 		MaxCount: count,
-		Overflow: FailOnOverflow,
+		Overflow: OverflowPolicyFail,
 	}
 }
 
@@ -145,9 +145,9 @@ func TestEventOptionsRejectInvalid(t *testing.T) {
 		name string
 		opts EventOptions
 	}{
-		{"negative MaxBytes", EventOptions{MaxBytes: -1, MaxCount: 0, Overflow: FailOnOverflow}},
-		{"negative MaxCount", EventOptions{MaxBytes: 0, MaxCount: -1, Overflow: FailOnOverflow}},
-		{"unknown overflow policy", EventOptions{MaxBytes: 0, MaxCount: 0, Overflow: FailOnOverflow + 1}},
+		{"negative MaxBytes", EventOptions{MaxBytes: -1, MaxCount: 0, Overflow: OverflowPolicyFail}},
+		{"negative MaxCount", EventOptions{MaxBytes: 0, MaxCount: -1, Overflow: OverflowPolicyFail}},
+		{"unknown overflow policy", EventOptions{MaxBytes: 0, MaxCount: 0, Overflow: OverflowPolicyFail + 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := eventConnection(t)
@@ -484,7 +484,7 @@ func TestEventStream_BurstSaturation(t *testing.T) {
 	s1, err := c.Events(context.Background(), EventOptions{
 		MaxBytes: 10 * 1024 * 1024,
 		MaxCount: 60000,
-		Overflow: FailOnOverflow,
+		Overflow: OverflowPolicyFail,
 	})
 	if err != nil {
 		t.Fatalf("failed to create stream 1: %v", err)
@@ -494,7 +494,7 @@ func TestEventStream_BurstSaturation(t *testing.T) {
 	s2, err := c.Events(context.Background(), EventOptions{
 		MaxBytes: 2048,
 		MaxCount: 5,
-		Overflow: FailOnOverflow,
+		Overflow: OverflowPolicyFail,
 	})
 	if err != nil {
 		t.Fatalf("failed to create stream 2: %v", err)

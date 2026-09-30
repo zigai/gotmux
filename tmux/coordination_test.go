@@ -4,6 +4,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestRunShellOptions(t *testing.T) {
@@ -73,5 +74,37 @@ func TestRunShellOptions(t *testing.T) {
 
 	if !slices.Contains(args, "-E") {
 		t.Fatalf("expected -E in args, got %v", args)
+	}
+}
+
+func TestRunShellDelayInSeconds(t *testing.T) {
+	tests := []struct {
+		delay time.Duration
+		want  string
+	}{
+		{50 * time.Millisecond, "0.05"},
+		{1500 * time.Millisecond, "1.5"},
+		{2 * time.Second, "2"},
+	}
+
+	for _, tt := range tests {
+		args, err := runShellArgs("true", RunShellOptions{
+			Background:       false,
+			Delay:            tt.delay,
+			Cancel:           false,
+			ClearEnvironment: false,
+			TmuxCommands:     false,
+			IncludeStderr:    false,
+			Dir:              "",
+			Target:           "",
+		})
+		if err != nil {
+			t.Fatalf("Delay %v: %v", tt.delay, err)
+		}
+
+		i := slices.Index(args, "-d")
+		if i < 0 || i+1 >= len(args) || args[i+1] != tt.want {
+			t.Errorf("Delay %v: args = %q, want -d %s", tt.delay, args, tt.want)
+		}
 	}
 }

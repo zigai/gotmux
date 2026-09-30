@@ -227,8 +227,8 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	stream := controlEvents(t, ctx, connection)
 
 	// 1. TargetAllPanes (%*)
-	if err := connection.WatchFormatWith(ctx, "all_panes", tmux.TargetAllPanes(), "#{pane_title}"); err != nil {
-		t.Fatalf("WatchFormatWith TargetAllPanes failed: %v", err)
+	if err := connection.WatchFormat(ctx, "all_panes", tmux.TargetAllPanes(), "#{pane_title}"); err != nil {
+		t.Fatalf("WatchFormat TargetAllPanes failed: %v", err)
 	}
 
 	if err := pane.SetTitle(ctx, "sub-all-panes-val"); err != nil {
@@ -239,8 +239,8 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	assertPresent(t, "all_panes subscription pane", event.PaneID, pane.ID())
 
 	// 2. TargetSession (empty target)
-	if err := connection.WatchFormatWith(ctx, "session_sub", tmux.TargetSession(), "#{session_name}"); err != nil {
-		t.Fatalf("WatchFormatWith TargetSession failed: %v", err)
+	if err := connection.WatchFormat(ctx, "session_sub", tmux.TargetSession(), "#{session_name}"); err != nil {
+		t.Fatalf("WatchFormat TargetSession failed: %v", err)
 	}
 
 	sessionInfo, err := session.Info(ctx)
@@ -259,8 +259,8 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := connection.WatchFormatWith(ctx, "win_sub", boundWin, "#{window_name}"); err != nil {
-		t.Fatalf("WatchFormatWith Window failed: %v", err)
+	if err := connection.WatchFormat(ctx, "win_sub", boundWin, "#{window_name}"); err != nil {
+		t.Fatalf("WatchFormat Window failed: %v", err)
 	}
 
 	if err := window.Rename(ctx, "new-win-sub-name"); err != nil {
@@ -272,8 +272,8 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	assertPresent(t, "window subscription index", winEvent.WindowIndex, 0)
 
 	// 4. TargetAllWindows (@*)
-	if err := connection.WatchFormatWith(ctx, "all_windows", tmux.TargetAllWindows(), "#{window_name}"); err != nil {
-		t.Fatalf("WatchFormatWith TargetAllWindows failed: %v", err)
+	if err := connection.WatchFormat(ctx, "all_windows", tmux.TargetAllWindows(), "#{window_name}"); err != nil {
+		t.Fatalf("WatchFormat TargetAllWindows failed: %v", err)
 	}
 
 	if err := window.Rename(ctx, "all-windows-name"); err != nil {

@@ -216,7 +216,7 @@ func (f *controlWireFixture) assertCleanup(t *testing.T) {
 }
 
 // 1. Truncated control frame %begin 1 4 1\n followed by immediate EOF.
-// Verify request fails with an error wrapping ErrProtocol and Effect: Unknown.
+// Verify request fails with an error wrapping ErrProtocol and EffectUnknown.
 func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 	f := newControlWireFixture(t, 1)
 
@@ -246,8 +246,8 @@ func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 			t.Errorf("expected error wrapping ErrProtocol, got %v", err)
 		}
 
-		if eff := outcomeOf(err).Effect; eff != Unknown {
-			t.Errorf("expected Effect Unknown, got %v", eff)
+		if eff := outcomeOf(err).Effect; eff != EffectUnknown {
+			t.Errorf("expected EffectUnknown, got %v", eff)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for request failure")
@@ -257,7 +257,7 @@ func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 }
 
 // 2. Premature pipe closure / broken pipe while multiple requests are queued.
-// The in-flight request fails with Effect: Unknown; the queued requests fail with Effect: NotSent.
+// The in-flight request fails with EffectUnknown; the queued requests fail with EffectNotSent.
 func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 	f := newControlWireFixture(t, 3)
 	inflightErr := make(chan error, 1)
@@ -300,8 +300,8 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 			t.Fatal("expected inflight request to fail, got nil")
 		}
 
-		if eff := outcomeOf(err).Effect; eff != Unknown {
-			t.Errorf("expected inflight Effect Unknown, got %v", eff)
+		if eff := outcomeOf(err).Effect; eff != EffectUnknown {
+			t.Errorf("expected inflight EffectUnknown, got %v", eff)
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for inflight request error")
@@ -314,8 +314,8 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 				t.Fatalf("expected queued request %d to fail, got nil", i+1)
 			}
 
-			if eff := outcomeOf(err).Effect; eff != NotSent {
-				t.Errorf("expected queued request %d Effect NotSent, got %v", i+1, eff)
+			if eff := outcomeOf(err).Effect; eff != EffectNotSent {
+				t.Errorf("expected queued request %d Effect EffectNotSent, got %v", i+1, eff)
 			}
 		case <-time.After(2 * time.Second):
 			t.Fatalf("timed out waiting for queued request %d error", i+1)
@@ -356,8 +356,8 @@ func TestControlWireFault_UnsolicitedExit(t *testing.T) {
 		t.Errorf("expected subsequent operation to return ErrClosed, got %v", err)
 	}
 
-	if eff := outcomeOf(err).Effect; eff != NotSent {
-		t.Errorf("expected subsequent operation Effect NotSent, got %v", eff)
+	if eff := outcomeOf(err).Effect; eff != EffectNotSent {
+		t.Errorf("expected subsequent operation Effect EffectNotSent, got %v", eff)
 	}
 
 	f.assertCleanup(t)
@@ -485,7 +485,7 @@ func testConnection(s *Server, cancel context.CancelCauseFunc) *Connection {
 			Generation:     0,
 		},
 		id:     "",
-		kind:   SessionKind,
+		kind:   ObjectKindSession,
 		client: clientCheck{name: "", pid: 0, created: 0},
 	}}
 

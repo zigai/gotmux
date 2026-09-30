@@ -290,7 +290,7 @@ func TestIntegrationLoadBufferStdinAndFlags(t *testing.T) {
 	assertStdinLoad(t, ctx, server, "r3-clip-buf", wantBytes, "-w")
 
 	// 3. Verify WriteBuffer's documented contract: zero-length data is rejected with ErrUnsupported
-	// and outcome is NotSent (do not change empty WriteBuffer into a misleading success).
+	// and outcome is EffectNotSent (do not change empty WriteBuffer into a misleading success).
 	bEmpty, err := tmux.NamedBuffer("r3-empty-buf")
 	if err != nil {
 		t.Fatalf("NamedBuffer failed: %v", err)

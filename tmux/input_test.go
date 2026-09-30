@@ -31,7 +31,7 @@ func TestCaptureFlagsDistinguishEscapesFromEmptyCellTrimming(t *testing.T) {
 
 func TestCaptureTitleDelimiter(t *testing.T) {
 	s, response, _ := mockScriptServer(t)
-	p := Pane{h: s.newHandle("%7", PaneKind, mockServerIdentity(s))}
+	p := Pane{h: s.newHandle("%7", ObjectKindPane, mockServerIdentity(s))}
 
 	const marker = "___GOTMUX_CAPTURE_TITLE___"
 
@@ -65,5 +65,34 @@ func TestCaptureTitleDelimiter(t *testing.T) {
 
 	if got.Title != title || string(got.Output) != content {
 		t.Fatalf("title=%q output=%q; wanted title=%q output=%q", got.Title, got.Output, title, content)
+	}
+}
+
+func TestCaptureFlagArgsEscapeNonPrintableAndAlternateOnly(t *testing.T) {
+	opts := CaptureOptions{
+		Start:               nil,
+		End:                 nil,
+		EntireHistory:       false,
+		ScrollbackEnd:       false,
+		JoinWrapped:         false,
+		IncludeEscapes:      false,
+		PreserveSpaces:      false,
+		PaneState:           false,
+		Quiet:               false,
+		TrimEmptyCells:      false,
+		Screen:              0,
+		Buffer:              "",
+		MaxBytes:            0,
+		EscapeNonPrintable:  true,
+		AlternateScreenOnly: true,
+	}
+
+	flags := captureFlagArgs(opts)
+	if !slices.Contains(flags, "-C") {
+		t.Errorf("expected captureFlagArgs to contain -C, got: %v", flags)
+	}
+
+	if !slices.Contains(flags, "-F") {
+		t.Errorf("expected captureFlagArgs to contain -F, got: %v", flags)
 	}
 }

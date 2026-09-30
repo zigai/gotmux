@@ -154,7 +154,7 @@ func TestRecordProvenanceAndRawOwnership(t *testing.T) {
 	}
 
 	mode, ok := p.Mode.Get()
-	if !ok || mode != "" || p.Selection.State() != Unavailable {
+	if !ok || mode != "" || p.Selection.State() != ValueStateUnavailable {
 		t.Fatal("presence")
 	}
 }
@@ -217,7 +217,7 @@ func TestSnapshotCopiesAndChurn(t *testing.T) {
 	snap := Snapshot{panes: []PaneInfo{p}, clients: []ClientInfo{{Name: "x", Flags: []string{"read-only"}}}}
 	snap.assess()
 
-	if snap.Consistency != Incomplete || snap.MissingCount != 1 {
+	if snap.Consistency != ConsistencyIncomplete || snap.MissingCount != 1 {
 		t.Fatal(snap)
 	}
 
@@ -292,7 +292,7 @@ func TestGuardUnwrap(t *testing.T) {
 	g := &guard{identity: fixtureIdentity(s), links: []linkCheck{{session: "$1", index: 0, window: "@2"}}, clients: nil}
 
 	_, e := g.unwrap(Result{Stdout: []byte(guardServerChanged), Stderr: nil, ExitCode: 0}, nil)
-	if !errors.Is(e, ErrServerChanged) || outcomeOf(e).Effect != NotSent {
+	if !errors.Is(e, ErrServerChanged) || outcomeOf(e).Effect != EffectNotSent {
 		t.Fatal(e)
 	}
 
@@ -336,16 +336,16 @@ func TestNestedCommandEncoding(t *testing.T) {
 
 func TestPresence(t *testing.T) {
 	var z Value[string]
-	if _, ok := z.Get(); ok || z.State() != Unavailable {
+	if _, ok := z.Get(); ok || z.State() != ValueStateUnavailable {
 		t.Fatal(z)
 	}
 
 	p := PresentValue("")
-	if v, ok := p.Get(); !ok || v != "" || p.State() != Present {
+	if v, ok := p.Get(); !ok || v != "" || p.State() != ValueStatePresent {
 		t.Fatal(p)
 	}
 
-	if UnsupportedValue[bool]().State() != Unsupported {
+	if UnsupportedValue[bool]().State() != ValueStateUnsupported {
 		t.Fatal("unsupported")
 	}
 }
@@ -353,53 +353,53 @@ func TestPresence(t *testing.T) {
 func TestCreationRecoveryUsesObjectIDNotPID(t *testing.T) {
 	s := localServer(t)
 	m := paneFixture(s)
-	fields := fieldsFor(PaneKind)
+	fields := fieldsFor(ObjectKindPane)
 
 	values := make([]string, len(fields))
 	for i, f := range fields {
 		values[i] = m[f]
 	}
 
-	objects := recoverCreated(wire.EncodeRecord(values), PaneKind)
-	if len(objects) != 1 || objects[0].RawID != "%7" || objects[0].Identity.State() != Unavailable {
+	objects := recoverCreated(wire.EncodeRecord(values), ObjectKindPane)
+	if len(objects) != 1 || objects[0].RawID != "%7" || objects[0].Identity.State() != ValueStateUnavailable {
 		t.Fatalf("%#v", objects)
 	}
 }
 
 func TestProbeFailureDoesNotDispatchRequestedMutation(t *testing.T) {
-	e := opError("NewSession", &discoveryError{Err: &CommandError{Command: "", Result: failedResult(), Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrNoServer}})
-	if outcomeOf(e).Effect != NotSent || !errors.Is(e, ErrNoServer) {
+	e := opError("NewSession", &discoveryError{Err: &CommandError{Command: "", Result: failedResult(), Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrNoServer}})
+	if outcomeOf(e).Effect != EffectNotSent || !errors.Is(e, ErrNoServer) {
 		t.Fatal(e)
 	}
 }
 
 func TestDuplicateSessionRejectionHasNoCreatedObject(t *testing.T) {
-	commandErr := &CommandError{Command: "new-session", Result: Result{Stdout: nil, Stderr: []byte("duplicate session: fixture\n"), ExitCode: 1}, Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrAlreadyExists}
-	err := creationError("NewSession", commandErr, nil, SessionKind)
+	commandErr := &CommandError{Command: "new-session", Result: Result{Stdout: nil, Stderr: []byte("duplicate session: fixture\n"), ExitCode: 1}, Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrAlreadyExists}
+	err := creationError("NewSession", commandErr, nil, ObjectKindSession)
 
 	got, ok := errors.AsType[*OperationError](err)
-	if !ok || !errors.Is(err, ErrAlreadyExists) || got.Outcome.Effect != Rejected || len(got.Outcome.Created) != 0 {
+	if !ok || !errors.Is(err, ErrAlreadyExists) || got.Outcome.Effect != EffectRejected || len(got.Outcome.Created) != 0 {
 		t.Fatalf("duplicate creation = %#v, %v", got, err)
 	}
 
 	commandErr.Err = errors.Join(ErrAlreadyExists, context.Canceled)
-	err = creationError("NewSession", commandErr, nil, SessionKind)
+	err = creationError("NewSession", commandErr, nil, ObjectKindSession)
 
 	got, ok = errors.AsType[*OperationError](err)
-	if !ok || got.Outcome.Effect != Unknown {
+	if !ok || got.Outcome.Effect != EffectUnknown {
 		t.Fatalf("canceled duplicate creation = %#v, %v", got, err)
 	}
 
 	var prior CreatedObject
 
-	prior.Kind = SessionKind
+	prior.Kind = ObjectKindSession
 	prior.RawID = "$99"
 	commandErr.Err = ErrAlreadyExists
 	commandErr.Outcome.Created = []CreatedObject{prior}
-	err = creationError("NewSession", commandErr, nil, SessionKind)
+	err = creationError("NewSession", commandErr, nil, ObjectKindSession)
 
 	got, ok = errors.AsType[*OperationError](err)
-	if !ok || got.Outcome.Effect != Unknown || len(got.Outcome.Created) != 1 || got.Outcome.Created[0].RawID != prior.RawID {
+	if !ok || got.Outcome.Effect != EffectUnknown || len(got.Outcome.Created) != 1 || got.Outcome.Created[0].RawID != prior.RawID {
 		t.Fatalf("duplicate with prior creation = %#v, %v", got, err)
 	}
 }
@@ -485,7 +485,7 @@ func assertResolvedWindow(t *testing.T, snap Snapshot, id WindowID, want Window,
 	t.Helper()
 
 	w, ok := snap.ResolveWindow(id)
-	if !ok || !w.Valid() || w.ID() != id || !w.Equal(want) || !w.Identity().Equal(origin) {
+	if !ok || !w.Valid() || w.ID() != id || !w.Equal(want) || !w.ServerIdentity().Equal(origin) {
 		t.Fatalf("unexpected window resolution: ok=%v, handle=%v", ok, w)
 	}
 
@@ -499,7 +499,7 @@ func assertResolvedSession(t *testing.T, snap Snapshot, id SessionID, want Sessi
 	t.Helper()
 
 	sess, ok := snap.ResolveSession(id)
-	if !ok || !sess.Valid() || sess.ID() != id || !sess.Equal(want) || !sess.Identity().Equal(origin) {
+	if !ok || !sess.Valid() || sess.ID() != id || !sess.Equal(want) || !sess.ServerIdentity().Equal(origin) {
 		t.Fatalf("unexpected session resolution: ok=%v, handle=%v", ok, sess)
 	}
 
@@ -513,7 +513,7 @@ func assertResolvedClient(t *testing.T, snap Snapshot, name ClientName, want Cli
 	t.Helper()
 
 	c, ok := snap.ResolveClient(name)
-	if !ok || !c.Valid() || c.Name() != name || !c.Equal(want) || !c.Identity().Equal(origin) {
+	if !ok || !c.Valid() || c.Name() != name || !c.Equal(want) || !c.ServerIdentity().Equal(origin) {
 		t.Fatalf("unexpected client resolution: ok=%v, handle=%v", ok, c)
 	}
 
@@ -643,5 +643,45 @@ func TestResolveClientEqualityRecyclingAndDaemonIsolation(t *testing.T) {
 
 	if h1.Equal(cDiffDaemon.Handle()) {
 		t.Fatal("expected different daemon origin to break handle equality")
+	}
+}
+
+func TestOptionalNonnegativeDecoder(t *testing.T) {
+	d := &recordDecoder{
+		kind: "pane",
+		raw: map[string]string{
+			"empty":    "",
+			"valid":    "42",
+			"zero":     "0",
+			"negative": "-5",
+			"bad":      "notanumber",
+		},
+		err: nil,
+	}
+
+	if val := d.optionalNonnegative("empty"); val != 0 || d.err != nil {
+		t.Errorf("expected 0 with no error on empty string, got %d, err=%v", val, d.err)
+	}
+
+	if val := d.optionalNonnegative("valid"); val != 42 || d.err != nil {
+		t.Errorf("expected 42 with no error, got %d, err=%v", val, d.err)
+	}
+
+	if val := d.optionalNonnegative("zero"); val != 0 || d.err != nil {
+		t.Errorf("expected 0 with no error, got %d, err=%v", val, d.err)
+	}
+
+	_ = d.optionalNonnegative("negative")
+
+	if d.err == nil {
+		t.Error("expected error on negative number")
+	}
+
+	d.err = nil
+
+	_ = d.optionalNonnegative("bad")
+
+	if d.err == nil {
+		t.Error("expected error on non-numeric string")
 	}
 }

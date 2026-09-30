@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"time"
 )
 
 func TestMenuItemEmptyLabel(t *testing.T) {
@@ -20,7 +21,7 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = menuItemArg(MenuItem{Label: "", Key: "a", Commands: seq, Command: "", Separator: false, Disabled: false})
+	_, err = menuItemArg(MenuItem{Label: "", Key: "a", Commands: seq, Command: "", IsSeparator: false, Disabled: false})
 	if err == nil {
 		t.Fatal("expected error on MenuItem with empty Label and Separator=false")
 	}
@@ -30,7 +31,7 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 	}
 
 	// Empty label WITH Separator=true should succeed
-	args, err := menuItemArg(MenuItem{Label: "", Separator: true, Key: Key(""), Commands: CommandSequence{commands: nil}, Command: "", Disabled: false})
+	args, err := menuItemArg(MenuItem{Label: "", IsSeparator: true, Key: Key(""), Commands: CommandSequence{commands: nil}, Command: "", Disabled: false})
 	if err != nil {
 		t.Fatalf("expected Separator=true to succeed, got %v", err)
 	}
@@ -42,12 +43,12 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 
 func TestMenuItemWithCommandString(t *testing.T) {
 	args, err := menuItemArg(MenuItem{
-		Label:     "Run Shell",
-		Key:       "r",
-		Commands:  CommandSequence{commands: nil},
-		Command:   "run-shell -b 'echo hi'",
-		Separator: false,
-		Disabled:  false,
+		Label:       "Run Shell",
+		Key:         "r",
+		Commands:    CommandSequence{commands: nil},
+		Command:     "run-shell -b 'echo hi'",
+		IsSeparator: false,
+		Disabled:    false,
 	})
 	if err != nil {
 		t.Fatalf("expected MenuItem with Command to succeed, got %v", err)
@@ -65,12 +66,12 @@ func TestMenuItemWithCommandString(t *testing.T) {
 func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
 	// Keyless menu item (mouse/arrow navigation only)
 	keylessArgs, err := menuItemArg(MenuItem{
-		Label:     "Mouse Click Only",
-		Key:       "",
-		Commands:  CommandSequence{commands: nil},
-		Command:   "display-message clicked",
-		Separator: false,
-		Disabled:  false,
+		Label:       "Mouse Click Only",
+		Key:         "",
+		Commands:    CommandSequence{commands: nil},
+		Command:     "display-message clicked",
+		IsSeparator: false,
+		Disabled:    false,
 	})
 	if err != nil {
 		t.Fatalf("expected keyless MenuItem to succeed, got %v", err)
@@ -82,12 +83,12 @@ func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
 
 	// Section header: disabled item with empty key and empty command
 	headerArgs, err := menuItemArg(MenuItem{
-		Label:     "Section Header",
-		Key:       "",
-		Commands:  CommandSequence{commands: nil},
-		Command:   "",
-		Separator: false,
-		Disabled:  true,
+		Label:       "Section Header",
+		Key:         "",
+		Commands:    CommandSequence{commands: nil},
+		Command:     "",
+		IsSeparator: false,
+		Disabled:    true,
 	})
 	if err != nil {
 		t.Fatalf("expected section header MenuItem to succeed, got %v", err)
@@ -151,7 +152,7 @@ func TestPopupArgsOptions(t *testing.T) {
 
 func TestClosePopupTargetsAndGuardsClient(t *testing.T) {
 	s, response, log := mockScriptServer(t)
-	c := Client{h: s.newHandle("/dev/pts/7", ClientKind, mockServerIdentity(s))}
+	c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, mockServerIdentity(s))}
 	c.h.client = clientCheck{name: "/dev/pts/7", pid: 77, created: 100}
 
 	writeMockResponse(t, response, []byte(guardClientChanged))
@@ -298,7 +299,7 @@ func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
 
 func TestMenuSeparator(t *testing.T) {
 	sep := MenuSeparator()
-	if !sep.Separator {
+	if !sep.IsSeparator {
 		t.Fatal("expected MenuSeparator() to have Separator=true")
 	}
 
@@ -488,7 +489,7 @@ func TestClientRefreshValidation(t *testing.T) {
 	// Invalid PaneAction
 	pane, _ := s.PaneHandle("%1")
 	//nolint:exhaustruct_v5 // testing invalid PaneAction
-	err = c.Refresh(ctx, RefreshOptions{PaneActions: []PaneOutputTarget{{Pane: pane, Action: "invalid"}}})
+	err = c.Refresh(ctx, RefreshOptions{PaneActions: []PaneOutputSetting{{Pane: pane, Action: "invalid"}}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid PaneAction, got %v", err)
 	}
@@ -574,7 +575,7 @@ func TestConnectionSetPaneOutputValidation(t *testing.T) {
 		t.Errorf("expected ErrInvalidHandle on nil connection, got %v", err)
 	}
 
-	if err := nilConn.SetPaneOutputActions(ctx, PaneOutputTarget{Pane: pane, Action: PaneOutputPause}); !errors.Is(err, ErrInvalidHandle) {
+	if err := nilConn.SetPaneOutputActions(ctx, PaneOutputSetting{Pane: pane, Action: PaneOutputPause}); !errors.Is(err, ErrInvalidHandle) {
 		t.Errorf("expected ErrInvalidHandle on nil connection, got %v", err)
 	}
 
@@ -593,24 +594,132 @@ func TestConnectionSetPaneOutputValidation(t *testing.T) {
 	}
 }
 
-func TestConnectionWatchFormatWithValidation(t *testing.T) {
+func TestConnectionWatchFormatValidation(t *testing.T) {
 	var nilConn *Connection
 
 	ctx := t.Context()
 
-	if err := nilConn.WatchFormatWith(ctx, "sub", TargetSession(), "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
+	if err := nilConn.WatchFormat(ctx, "sub", TargetSession(), "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument on nil connection, got %v", err)
 	}
 
 	//nolint:exhaustruct_v5 // test connection
 	conn := &Connection{identity: ServerIdentity{Generation: 1}}
-	if err := conn.WatchFormatWith(ctx, "sub", nil, "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
+	if err := conn.WatchFormat(ctx, "sub", nil, "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument on nil target, got %v", err)
 	}
 
 	//nolint:exhaustruct_v5 // mismatched origin
 	paneOther := Pane{h: handle{id: "%1", origin: ServerIdentity{Generation: 2}}}
-	if err := conn.WatchFormatWith(ctx, "sub", paneOther, "#{pane_id}"); !errors.Is(err, ErrInvalidHandle) {
+	if err := conn.WatchFormat(ctx, "sub", paneOther, "#{pane_id}"); !errors.Is(err, ErrInvalidHandle) {
 		t.Errorf("expected ErrInvalidHandle on mismatched pane origin, got %v", err)
+	}
+}
+
+func TestPopupBorderValid(t *testing.T) {
+	validBorders := []PopupBorder{
+		PopupBorderSingle,
+		PopupBorderDouble,
+		PopupBorderHeavy,
+		PopupBorderRounded,
+		PopupBorderSimple,
+		PopupBorderPadded,
+		PopupBorderNone,
+	}
+
+	for _, b := range validBorders {
+		if !b.Valid() {
+			t.Errorf("expected %q to be valid", b)
+		}
+	}
+
+	invalidBorders := []PopupBorder{"", "invalid", "triple", "custom"}
+	for _, b := range invalidBorders {
+		if b.Valid() {
+			t.Errorf("expected %q to be invalid", b)
+		}
+	}
+}
+
+func TestMessagesValidation(t *testing.T) {
+	ctx := t.Context()
+
+	var nilServer *Server
+
+	if _, err := nilServer.Messages(ctx, MessagesOptions{Jobs: false, Terminal: false}); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on nilServer.Messages, got: %v", err)
+	}
+
+	var invalidClient Client
+
+	if _, err := invalidClient.Messages(ctx, MessagesOptions{Jobs: false, Terminal: false}); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on invalidClient.Messages, got: %v", err)
+	}
+}
+
+func TestPromptHistoryValidation(t *testing.T) {
+	ctx := t.Context()
+
+	var nilServer *Server
+
+	if _, err := nilServer.PromptHistory(ctx, "command"); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on nilServer.PromptHistory, got: %v", err)
+	}
+
+	if err := nilServer.ClearPromptHistory(ctx, "command"); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on nilServer.ClearPromptHistory, got: %v", err)
+	}
+
+	s := localServer(t)
+
+	if _, err := s.PromptHistory(ctx, "\x00invalid"); !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument on PromptHistory with NUL byte, got: %v", err)
+	}
+
+	if err := s.ClearPromptHistory(ctx, "\x00invalid"); !errors.Is(err, ErrInvalidArgument) {
+		t.Errorf("expected ErrInvalidArgument on ClearPromptHistory with NUL byte, got: %v", err)
+	}
+}
+
+func TestMessageWithRoundsDurationUpToMilliseconds(t *testing.T) {
+	tests := []struct {
+		duration time.Duration
+		want     string
+	}{
+		{time.Nanosecond, `\042-d\042 \0421\042`},
+		{1500 * time.Microsecond, `\042-d\042 \0422\042`},
+		{200 * time.Millisecond, `\042-d\042 \042200\042`},
+		{0, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.duration.String(), func(t *testing.T) {
+			s, response, log := mockScriptServer(t)
+			c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, mockServerIdentity(s))}
+			c.h.client = clientCheck{name: "/dev/pts/7", pid: 77, created: 100}
+
+			writeMockResponse(t, response, []byte(guardOK))
+
+			if err := c.MessageWith(t.Context(), "hello", MessageOptions{Duration: tt.duration}); err != nil {
+				t.Fatal(err)
+			}
+
+			args, err := os.ReadFile(log)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tt.want == "" {
+				if bytes.Contains(args, []byte(`\042-d\042`)) {
+					t.Fatalf("zero duration sent -d: %q", args)
+				}
+
+				return
+			}
+
+			if !bytes.Contains(args, []byte(tt.want)) {
+				t.Fatalf("display-message args = %q, want %s", args, tt.want)
+			}
+		})
 	}
 }

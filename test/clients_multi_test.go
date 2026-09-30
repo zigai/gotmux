@@ -43,7 +43,7 @@ func attachCancelable(t *testing.T, ctx context.Context, server *tmux.Server, se
 	go func() {
 		defer close(finished)
 
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, options)
+		done <- session.Attach(attachCtx, tmux.Streams{In: slave, Out: slave, Err: slave}, options)
 	}()
 
 	// Registered after openPTY's cleanup, so it runs first: Attach must stop
@@ -262,7 +262,7 @@ func TestIntegrationMenuAndPopupReturnOnCancellation(t *testing.T) {
 	t.Run("Menu", func(t *testing.T) {
 		client, _, output := uiClient(t, ctx, server, session)
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@cancel-effect", "ran")
-		items := []tmux.MenuItem{{Label: "TGO_CANCEL_MENU", Key: "x", Commands: testSequence(t, command), Separator: false, Disabled: false}}
+		items := []tmux.MenuItem{{Label: "TGO_CANCEL_MENU", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
 
 		menuCtx, cancel := context.WithCancel(ctx)
 		result := make(chan error, 1)
@@ -457,7 +457,7 @@ func TestIntegrationMenuAndPopupOutliveCommandTimeout(t *testing.T) {
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         tmux.LogNone,
+		LogLevel:         tmux.LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -500,7 +500,7 @@ func TestIntegrationMenuAndPopupOutliveCommandTimeout(t *testing.T) {
 
 	t.Run("Menu", func(t *testing.T) {
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@late-choice", "chosen")
-		items := []tmux.MenuItem{{Label: "TGO_LATE_MENU", Key: "x", Commands: testSequence(t, command), Separator: false, Disabled: false}}
+		items := []tmux.MenuItem{{Label: "TGO_LATE_MENU", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
 		result := make(chan error, 1)
 
 		go func() {

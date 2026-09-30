@@ -18,7 +18,7 @@ import (
 func assertEnvironment(t *testing.T, ctx context.Context, scope tmux.EnvironmentScope, name string, hidden bool, value string, present, removed bool) {
 	t.Helper()
 
-	got, err := scope.Get(ctx, name, hidden)
+	got, err := scope.GetWith(ctx, name, tmux.GetEnvironmentOptions{Hidden: hidden})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func assertEnvironment(t *testing.T, ctx context.Context, scope tmux.Environment
 		t.Fatalf("%s: got %+v (%q,%v), want value %q present=%v removed=%v hidden=%v", name, got, actual, ok, value, present, removed, hidden)
 	}
 
-	if !present && got.Value.State() != tmux.Unavailable {
+	if !present && got.Value.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("%s: missing state %v", name, got.Value.State())
 	}
 }

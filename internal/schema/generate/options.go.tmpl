@@ -19,50 +19,50 @@ func (v {{$type}}) valid() bool {
 {{end}}
 {{range $scope, $options := .Fields}}
 // Get reads a scalar option by its tmux name, preserving local and effective values.
-func (o {{$scope}}) Get(ctx context.Context, name string) (OptionValue[string], error) { return o.target.read(ctx,name) }
+func (o {{$scope}}) Get(ctx context.Context, name string) (OptionValue[string], error) { return o.target.read(ctx,"{{$scope}}.Get",name) }
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o {{$scope}}) Set(ctx context.Context, name,value string) error { return o.target.set(ctx,name,value,false) }
+func (o {{$scope}}) Set(ctx context.Context, name,value string) error { return o.target.set(ctx,"{{$scope}}.Set",name,value,false) }
 // SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
-func (o {{$scope}}) SetWith(ctx context.Context, name string, opts SetOptionOptions) error { return o.target.setWith(ctx,name,opts) }
+func (o {{$scope}}) SetWith(ctx context.Context, name string, opts SetOptionOptions) error { return o.target.setWith(ctx,"{{$scope}}.Set",name,opts) }
 // Unset removes the local value of an option by its tmux name.
-func (o {{$scope}}) Unset(ctx context.Context, name string) error { return o.target.set(ctx,name,"",true) }
+func (o {{$scope}}) Unset(ctx context.Context, name string) error { return o.target.set(ctx,"{{$scope}}.Unset",name,"",true) }
 // UnsetWith removes an option with custom options (such as -U for cascading unset from window to panes).
-func (o {{$scope}}) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return o.target.unsetWith(ctx,name,opts) }
+func (o {{$scope}}) UnsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return o.target.unsetWith(ctx,"{{$scope}}.Unset",name,opts) }
 // List queries all options set in this scope.
-func (o {{$scope}}) List(ctx context.Context) ([]OptionEntry, error) { return o.target.list(ctx, ListOptionOptions{}) }
+func (o {{$scope}}) List(ctx context.Context) ([]OptionEntry, error) { return o.target.list(ctx,"{{$scope}}.List", ListOptionOptions{}) }
 // ListWith queries options set in this scope with custom options (such as -A for inherited or -H for hooks).
-func (o {{$scope}}) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) { return o.target.list(ctx, opts) }
+func (o {{$scope}}) ListWith(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) { return o.target.list(ctx,"{{$scope}}.List", opts) }
 // User reads the value of a user-defined option (prefixed with @) in this scope.
-func (o {{$scope}}) User(ctx context.Context, name string) (OptionValue[string],error) { return userGet(ctx,o.target,name) }
+func (o {{$scope}}) User(ctx context.Context, name string) (OptionValue[string],error) { return userGet(ctx,"{{$scope}}.User",o.target,name) }
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o {{$scope}}) SetUser(ctx context.Context,name,value string) error { return userSet(ctx,o.target,name,value,false) }
+func (o {{$scope}}) SetUser(ctx context.Context,name,value string) error { return userSet(ctx,"{{$scope}}.SetUser",o.target,name,value,false) }
 // SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
-func (o {{$scope}}) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error { return userSetWith(ctx,o.target,name,opts) }
+func (o {{$scope}}) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error { return userSetWith(ctx,"{{$scope}}.SetUser",o.target,name,opts) }
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.
-func (o {{$scope}}) UnsetUser(ctx context.Context,name string) error { return userSet(ctx,o.target,name,"",true) }
+func (o {{$scope}}) UnsetUser(ctx context.Context,name string) error { return userSet(ctx,"{{$scope}}.UnsetUser",o.target,name,"",true) }
 // UnsetUserWith unsets a user-defined option (prefixed with @) with custom options.
-func (o {{$scope}}) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return userUnsetWith(ctx,o.target,name,opts) }
-func (o {{$scope}}) Array(ctx context.Context,name string) ([]ArrayEntry,error) { return o.target.array(ctx,name) }
+func (o {{$scope}}) UnsetUserWith(ctx context.Context, name string, opts UnsetOptionOptions) error { return userUnsetWith(ctx,"{{$scope}}.UnsetUser",o.target,name,opts) }
+func (o {{$scope}}) Array(ctx context.Context,name string) ([]ArrayEntry,error) { return o.target.array(ctx,"{{$scope}}.Array",name) }
 // UpdateArray applies a batch of index updates and deletions to the named array option.
-func (o {{$scope}}) UpdateArray(ctx context.Context,name string,updates []ArrayUpdate) (ArrayUpdateResult,error) { return o.target.updateArray(ctx,name,updates) }
+func (o {{$scope}}) UpdateArray(ctx context.Context,name string,updates []ArrayUpdate) (ArrayUpdateResult,error) { return o.target.updateArray(ctx,"{{$scope}}.UpdateArray",name,updates) }
 {{range $options}}
 // {{.Method}} observes {{.Name}}; inherited origins may be unavailable.
 func (o {{$scope}}) {{.Method}}(ctx context.Context) (OptionValue[{{.Type}}],error) {
- {{if eq .Type "string"}}return o.target.read(ctx,{{printf "%q" .Name}}){{else}}
- v,err := o.target.read(ctx,{{printf "%q" .Name}})
+ {{if eq .Type "string"}}return o.target.read(ctx,"{{$scope}}.{{.Method}}",{{printf "%q" .Name}}){{else}}
+ v,err := o.target.read(ctx,"{{$scope}}.{{.Method}}",{{printf "%q" .Name}})
  if err != nil { return OptionValue[{{.Type}}]{},err }
  r,err := convertOption(v,{{if eq .Type "int"}}parseOptionInt{{else if eq .Type "bool"}}parseOptionBool{{else}}func(s string)({{.Type}},error){ return {{.Type}}(s),nil }{{end}})
- if err != nil { return OptionValue[{{.Type}}]{},afterError({{printf "%q" .Method}},err) }
+ if err != nil { return OptionValue[{{.Type}}]{},afterError("{{$scope}}.{{.Method}}",err) }
  return r,nil
  {{end}}
 }
 // Set{{.Method}} sets the {{.Name}} option in this scope.
 func(o {{$scope}}) Set{{.Method}}(ctx context.Context,value {{.Type}}) error {
- {{if eq .Type "int"}}if value < {{.Min}} || value > {{.Max}} { return opError("Set{{.Method}}",invalid("range")) }
- {{else if index $.Enums .Type}}if !value.valid() { return opError("Set{{.Method}}",invalid("enum value")) }
- {{else if eq .Type "Key"}}if !value.Valid() { return opError("Set{{.Method}}",invalid("key value")) }{{end}}
- return o.target.set(ctx,{{printf "%q" .Name}},{{if eq .Type "int"}}strconv.Itoa(value){{else if eq .Type "bool"}}boolOption(value){{else if eq .Type "string"}}value{{else}}string(value){{end}},false)
+ {{if eq .Type "int"}}if value < {{.Min}} || value > {{.Max}} { return opError("{{$scope}}.Set{{.Method}}",invalid("range")) }
+ {{else if index $.Enums .Type}}if !value.valid() { return opError("{{$scope}}.Set{{.Method}}",invalid("enum value")) }
+ {{else if eq .Type "Key"}}if !value.Valid() { return opError("{{$scope}}.Set{{.Method}}",invalid("key value")) }{{end}}
+ return o.target.set(ctx,"{{$scope}}.Set{{.Method}}",{{printf "%q" .Name}},{{if eq .Type "int"}}strconv.Itoa(value){{else if eq .Type "bool"}}boolOption(value){{else if eq .Type "string"}}value{{else}}string(value){{end}},false)
 }
 // Unset{{.Method}} unsets the {{.Name}} option in this scope, restoring inherited defaults.
-func(o {{$scope}}) Unset{{.Method}}(ctx context.Context) error { return o.target.set(ctx,{{printf "%q" .Name}},"",true) }
+func(o {{$scope}}) Unset{{.Method}}(ctx context.Context) error { return o.target.set(ctx,"{{$scope}}.Unset{{.Method}}",{{printf "%q" .Name}},"",true) }
 {{end}}{{end}}

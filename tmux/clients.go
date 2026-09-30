@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/zigai/gotmux/internal/wire"
 )
@@ -54,20 +55,20 @@ const (
 )
 
 const (
-	// ScrollNone indicates no manual viewport adjustment.
-	ScrollNone ScrollDirection = iota
+	// ScrollDirectionNone indicates no manual viewport adjustment.
+	ScrollDirectionNone ScrollDirection = iota
 
-	// ScrollUp moves the visible portion of the window up (-U flag).
-	ScrollUp
+	// ScrollDirectionUp moves the visible portion of the window up (-U flag).
+	ScrollDirectionUp
 
-	// ScrollDown moves the visible portion of the window down (-D flag).
-	ScrollDown
+	// ScrollDirectionDown moves the visible portion of the window down (-D flag).
+	ScrollDirectionDown
 
-	// ScrollLeft moves the visible portion of the window left (-L flag).
-	ScrollLeft
+	// ScrollDirectionLeft moves the visible portion of the window left (-L flag).
+	ScrollDirectionLeft
 
-	// ScrollRight moves the visible portion of the window right (-R flag).
-	ScrollRight
+	// ScrollDirectionRight moves the visible portion of the window right (-R flag).
+	ScrollDirectionRight
 )
 
 const (
@@ -123,8 +124,8 @@ type (
 	// PaneOutputAction specifies a flow-control action for pane output in control mode (refresh-client -A).
 	PaneOutputAction string
 
-	// PaneOutputTarget pairs a target pane with a flow-control action for batch operations.
-	PaneOutputTarget struct {
+	// PaneOutputSetting pairs a target pane with a flow-control action for batch operations.
+	PaneOutputSetting struct {
 		Pane   Pane
 		Action PaneOutputAction
 	}
@@ -156,7 +157,7 @@ type (
 		Scroll ScrollAdjustment
 
 		// PaneActions triggers flow-control actions on control clients (-A flag).
-		PaneActions []PaneOutputTarget
+		PaneActions []PaneOutputSetting
 
 		// PaneReports forwards terminal feature/color reports from control clients (-r flag).
 		PaneReports []PaneReport
@@ -241,8 +242,8 @@ type (
 
 		// Command is an optional raw command string executed when selected, used if Commands is empty.
 		Command string
-		// Separator indicates this item is a visual separator line rather than a selectable option.
-		Separator bool
+		// IsSeparator indicates this item is a visual separator line rather than a selectable option.
+		IsSeparator bool
 
 		// Disabled indicates the item is visible but greyed out and unselectable.
 		Disabled bool
@@ -274,9 +275,10 @@ type (
 
 	// MessageOptions configures displaying a status line message on a client.
 	MessageOptions struct {
-		// Duration specifies how long the message is displayed in milliseconds (-d flag).
-		// Must be greater than or equal to 0. A zero value uses tmux's default display time.
-		Duration int
+		// Duration specifies how long the message is displayed (-d flag), sent to tmux
+		// in whole milliseconds and rounded up. Must not be negative. Zero uses tmux's
+		// default display time.
+		Duration time.Duration
 	}
 
 	// DisplayMessageOptions is retained as an alias for [MessageOptions].
@@ -351,12 +353,12 @@ func (f ClientFlag) Negate() ClientFlag {
 
 func MenuSeparator() MenuItem {
 	return MenuItem{
-		Label:     "",
-		Key:       "",
-		Commands:  CommandSequence{commands: nil},
-		Command:   "",
-		Separator: true,
-		Disabled:  false,
+		Label:       "",
+		Key:         "",
+		Commands:    CommandSequence{commands: nil},
+		Command:     "",
+		IsSeparator: true,
+		Disabled:    false,
 	}
 }
 
@@ -389,7 +391,7 @@ func (f ClientFlag) Valid() bool {
 func (c Client) Switch(ctx context.Context, s Session, opts SwitchOptions) error {
 	opCtx, op, err := beginHandles(ctx, &c.h, &s.h)
 	if err != nil {
-		return opError("SwitchClient", err)
+		return opError("Client.Switch", err)
 	}
 	defer op.close()
 
@@ -404,38 +406,40 @@ func (c Client) Switch(ctx context.Context, s Session, opts SwitchOptions) error
 
 	_, err = c.h.server.execute(opCtx, op, emptyPlan(command("switch-client", args...)), c.h.guard(), nil)
 
-	return opError("switch-client", err)
+	return opError("Client.Switch", err)
 }
 
 // Detach detaches this client terminal from the tmux server (detach-client).
-func (c Client) Detach(ctx context.Context) error { return c.h.act(ctx, "detach-client", "-t", c.h.id) }
+func (c Client) Detach(ctx context.Context) error {
+	return c.h.act(ctx, "Client.Detach", "detach-client", "-t", c.h.id)
+}
 
 // LockScreen locks this client terminal (lock-client).
 func (c Client) LockScreen(ctx context.Context) error {
-	return c.h.act(ctx, "lock-client", "-t", c.h.id)
+	return c.h.act(ctx, "Client.LockScreen", "lock-client", "-t", c.h.id)
 }
 
 // Suspend suspends this client terminal (suspend-client).
 func (c Client) Suspend(ctx context.Context) error {
-	return c.h.act(ctx, "suspend-client", "-t", c.h.id)
+	return c.h.act(ctx, "Client.Suspend", "suspend-client", "-t", c.h.id)
 }
 
 func (c Client) refreshScrollArgs(scroll ScrollAdjustment) ([]string, error) {
-	if scroll.Direction == ScrollNone {
+	if scroll.Direction == ScrollDirectionNone {
 		return nil, nil
 	}
 
 	var flag string
 
 	switch scroll.Direction {
-	case ScrollNone:
-	case ScrollUp:
+	case ScrollDirectionNone:
+	case ScrollDirectionUp:
 		flag = "-U"
-	case ScrollDown:
+	case ScrollDirectionDown:
 		flag = "-D"
-	case ScrollLeft:
+	case ScrollDirectionLeft:
 		flag = "-L"
-	case ScrollRight:
+	case ScrollDirectionRight:
 		flag = "-R"
 	default:
 		return nil, invalid("scroll direction")
@@ -480,7 +484,7 @@ func (c Client) refreshWindowSizeArgs(sizes []WindowSizeOverride) ([]string, err
 	return args, nil
 }
 
-func (c Client) refreshActionsAndReportsArgs(actions []PaneOutputTarget, reports []PaneReport) ([]string, error) {
+func (c Client) refreshActionsAndReportsArgs(actions []PaneOutputSetting, reports []PaneReport) ([]string, error) {
 	var args []string
 
 	for _, pa := range actions {
@@ -540,7 +544,7 @@ func (c Client) refreshSizeArgs(size Size) ([]string, error) {
 
 func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
 	if !opts.Size.valid() {
-		return opError("RefreshClient", invalid("size"))
+		return opError("Client.Refresh", invalid("size"))
 	}
 
 	args := []string{"-t", c.h.id}
@@ -554,35 +558,35 @@ func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
 
 	scrollArgs, err := c.refreshScrollArgs(opts.Scroll)
 	if err != nil {
-		return opError("RefreshClient", err)
+		return opError("Client.Refresh", err)
 	}
 
 	args = append(args, scrollArgs...)
 
 	clipArgs, err := c.refreshClipboardArgs(opts.Clipboard, opts.ClipboardPane)
 	if err != nil {
-		return opError("RefreshClient", err)
+		return opError("Client.Refresh", err)
 	}
 
 	args = append(args, clipArgs...)
 
 	szArgs, err := c.refreshSizeArgs(opts.Size)
 	if err != nil {
-		return opError("RefreshClient", err)
+		return opError("Client.Refresh", err)
 	}
 
 	args = append(args, szArgs...)
 
 	winArgs, err := c.refreshWindowSizeArgs(opts.WindowSizes)
 	if err != nil {
-		return opError("RefreshClient", err)
+		return opError("Client.Refresh", err)
 	}
 
 	args = append(args, winArgs...)
 
 	for _, f := range opts.Flags {
 		if !f.Valid() {
-			return opError("RefreshClient", invalid("client flag"))
+			return opError("Client.Refresh", invalid("client flag"))
 		}
 	}
 
@@ -592,12 +596,12 @@ func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
 
 	actArgs, err := c.refreshActionsAndReportsArgs(opts.PaneActions, opts.PaneReports)
 	if err != nil {
-		return opError("RefreshClient", err)
+		return opError("Client.Refresh", err)
 	}
 
 	args = append(args, actArgs...)
 
-	return c.h.act(ctx, "refresh-client", args...)
+	return c.h.act(ctx, "Client.Refresh", "refresh-client", args...)
 }
 
 // SetWindowSize overrides the dimensions of a specific window on this control client (-C @win:size).
@@ -640,100 +644,102 @@ func (c Client) Scroll(ctx context.Context, dir ScrollDirection, amount int) err
 // accepted the display request, not that the user read or dismissed it.
 func (c Client) Message(ctx context.Context, text string) error {
 	if !wire.ValidString(text) {
-		return opError("Message", invalid("message"))
+		return opError("Client.Message", invalid("message"))
 	}
 
 	if c.h.server != nil && c.h.server.conn != nil {
-		return opError("Message", ErrTransportUnsupported)
+		return opError("Client.Message", ErrTransportUnsupported)
 	}
 
-	return c.h.act(ctx, "display-message", "-c", c.h.id, "--", wire.LiteralFormat(text))
+	return c.h.act(ctx, "Client.Message", "display-message", "-c", c.h.id, "--", wire.LiteralFormat(text))
 }
 
 // MessageWith requests a status message on this client with custom display options.
 // Completion means tmux accepted the display request, not that the user read or dismissed it.
 func (c Client) MessageWith(ctx context.Context, text string, opts MessageOptions) error {
 	if !wire.ValidString(text) {
-		return opError("MessageWith", invalid("message"))
+		return opError("Client.Message", invalid("message"))
 	}
 
 	if opts.Duration < 0 {
-		return opError("MessageWith", invalid("duration"))
+		return opError("Client.Message", invalid("duration"))
 	}
 
 	if c.h.server != nil && c.h.server.conn != nil {
-		return opError("MessageWith", ErrTransportUnsupported)
+		return opError("Client.Message", ErrTransportUnsupported)
 	}
 
 	args := []string{"-c", c.h.id}
+
 	if opts.Duration > 0 {
-		args = append(args, "-d", strconv.Itoa(opts.Duration))
+		millis := (opts.Duration + time.Millisecond - 1) / time.Millisecond
+		args = append(args, "-d", strconv.FormatInt(int64(millis), 10))
 	}
 
 	args = append(args, "--", wire.LiteralFormat(text))
 
-	return c.h.act(ctx, "display-message", args...)
+	return c.h.act(ctx, "Client.Message", "display-message", args...)
 }
 
 // Message requests a status message on the client currently viewing this pane (display-message -t).
 // Completion means tmux accepted the display request, not that the user read or dismissed it.
 func (p Pane) Message(ctx context.Context, text string) error {
 	if !wire.ValidString(text) {
-		return opError("Message", invalid("message"))
+		return opError("Pane.Message", invalid("message"))
 	}
 
 	if p.h.server != nil && p.h.server.conn != nil {
-		return opError("Message", ErrTransportUnsupported)
+		return opError("Pane.Message", ErrTransportUnsupported)
 	}
 
 	if err := p.h.check(); err != nil {
-		return opError("Message", err)
+		return opError("Pane.Message", err)
 	}
 
-	return p.h.act(ctx, "display-message", "-t", p.h.id, "--", wire.LiteralFormat(text))
+	return p.h.act(ctx, "Pane.Message", "display-message", "-t", p.h.id, "--", wire.LiteralFormat(text))
 }
 
 // Message requests a status message on the active client attached to this server (display-message).
 // Completion means tmux accepted the display request, not that the user read or dismissed it.
 func (s *Server) Message(ctx context.Context, text string) error {
 	if s == nil {
-		return opError("Message", ErrInvalidHandle)
+		return opError("Server.Message", ErrInvalidHandle)
 	}
 
 	if !wire.ValidString(text) {
-		return opError("Message", invalid("message"))
+		return opError("Server.Message", invalid("message"))
 	}
 
 	if s.conn != nil {
-		return opError("Message", ErrTransportUnsupported)
+		return opError("Server.Message", ErrTransportUnsupported)
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return opError("Message", err)
+		return opError("Server.Message", err)
 	}
 	defer op.close()
 
 	_, err = s.execute(opCtx, op, emptyPlan(command("display-message", "--", wire.LiteralFormat(text))), nil, nil)
 
-	return opError("Message", err)
+	return opError("Server.Message", err)
 }
 
 // Messages returns log messages, background jobs, or terminal capabilities from the server (show-messages).
 func (s *Server) Messages(ctx context.Context, opts MessagesOptions) ([]string, error) {
 	if s == nil {
-		return nil, opError("Messages", ErrInvalidHandle)
+		return nil, opError("Server.Messages", ErrInvalidHandle)
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Server.Messages", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Server.Messages", err)
 	}
 
 	var args []string
@@ -747,7 +753,7 @@ func (s *Server) Messages(ctx context.Context, opts MessagesOptions) ([]string, 
 
 	r, err := s.execute(opCtx, op, plainPlan(command("show-messages", args...)), newGuard(info.Identity), nil)
 	if err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Server.Messages", err)
 	}
 
 	var lines []string
@@ -761,12 +767,12 @@ func (s *Server) Messages(ctx context.Context, opts MessagesOptions) ([]string, 
 // Messages returns log messages or terminal capabilities for this specific client (show-messages -t).
 func (c Client) Messages(ctx context.Context, opts MessagesOptions) ([]string, error) {
 	if err := c.h.check(); err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Client.Messages", err)
 	}
 
 	opCtx, op, err := c.h.server.begin(ctx)
 	if err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Client.Messages", err)
 	}
 	defer op.close()
 
@@ -781,7 +787,7 @@ func (c Client) Messages(ctx context.Context, opts MessagesOptions) ([]string, e
 
 	r, err := c.h.server.execute(opCtx, op, plainPlan(command("show-messages", args...)), c.h.guard(), nil)
 	if err != nil {
-		return nil, opError("Messages", err)
+		return nil, opError("Client.Messages", err)
 	}
 
 	var lines []string
@@ -799,27 +805,27 @@ func (c Client) Messages(ctx context.Context, opts MessagesOptions) ([]string, e
 // returns nil. No exit status or user choice is inferred.
 func (c Client) Popup(ctx context.Context, opts PopupOptions) error {
 	if ctx == nil {
-		return opError("Popup", invalid("nil context"))
+		return opError("Client.Popup", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {
-		return opError("Popup", err)
+		return opError("Client.Popup", err)
 	}
 
 	if c.h.server.conn != nil {
-		return opError("Popup", ErrTransportUnsupported)
+		return opError("Client.Popup", ErrTransportUnsupported)
 	}
 
 	args, err := popupArgs(c.h.id, opts)
 	if err != nil {
-		return opError("Popup", err)
+		return opError("Client.Popup", err)
 	}
 
-	return popupResult(c.h.actCallerBounded(ctx, "display-popup", args...))
+	return popupResult(c.h.actCallerBounded(ctx, "Client.Popup", "display-popup", args...))
 }
 
 func (c Client) ClosePopup(ctx context.Context) error {
-	return c.h.act(ctx, "display-popup", "-C", "-c", c.h.id)
+	return c.h.act(ctx, "Client.ClosePopup", "display-popup", "-C", "-c", c.h.id)
 }
 
 // Popup displays an interactive modal popup overlay targeting this pane (-t flag).
@@ -828,23 +834,23 @@ func (c Client) ClosePopup(ctx context.Context) error {
 // A popup closed before its program ends returns nil. No exit status or user choice is inferred.
 func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
 	if ctx == nil {
-		return opError("Popup", invalid("nil context"))
+		return opError("Pane.Popup", invalid("nil context"))
 	}
 
 	if err := p.h.check(); err != nil {
-		return opError("Popup", err)
+		return opError("Pane.Popup", err)
 	}
 
 	if p.h.server.conn != nil {
-		return opError("Popup", ErrTransportUnsupported)
+		return opError("Pane.Popup", ErrTransportUnsupported)
 	}
 
 	args, err := popupArgsWithTarget("-t", p.h.id, opts)
 	if err != nil {
-		return opError("Popup", err)
+		return opError("Pane.Popup", err)
 	}
 
-	return popupResult(p.h.actCallerBounded(ctx, "display-popup", args...))
+	return popupResult(p.h.actCallerBounded(ctx, "Pane.Popup", "display-popup", args...))
 }
 
 // Menu displays an interactive popup menu on this client.
@@ -855,20 +861,20 @@ func (p Pane) Popup(ctx context.Context, opts PopupOptions) error {
 // Fails with [ErrTransportUnsupported] over control mode.
 func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) error {
 	if ctx == nil {
-		return opError("Menu", invalid("nil context"))
+		return opError("Client.Menu", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {
-		return opError("Menu", err)
+		return opError("Client.Menu", err)
 	}
 
 	if c.h.server.conn != nil {
-		return opError("Menu", ErrTransportUnsupported)
+		return opError("Client.Menu", ErrTransportUnsupported)
 	}
 
 	args, err := menuArgs(c.h.id, opts)
 	if err != nil {
-		return opError("Menu", err)
+		return opError("Client.Menu", err)
 	}
 
 	node := leaf(command("display-menu", args...))
@@ -876,7 +882,7 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 	for _, item := range items {
 		itemArgs, itemErr := menuItemArg(item)
 		if itemErr != nil {
-			return opError("Menu", itemErr)
+			return opError("Client.Menu", itemErr)
 		}
 
 		node.args = append(node.args, itemArgs...)
@@ -884,13 +890,13 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 
 	opCtx, op, err := c.h.server.beginCallerBounded(ctx)
 	if err != nil {
-		return opError("Menu", err)
+		return opError("Client.Menu", err)
 	}
 	defer op.close()
 
 	_, err = c.h.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, c.h.guard(), nil)
 
-	return opError("Menu", err)
+	return opError("Client.Menu", err)
 }
 
 // Menu displays an interactive popup menu targeting this pane (-t flag).
@@ -901,20 +907,20 @@ func (c Client) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) er
 // Fails with [ErrTransportUnsupported] over control mode.
 func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) error {
 	if ctx == nil {
-		return opError("Menu", invalid("nil context"))
+		return opError("Pane.Menu", invalid("nil context"))
 	}
 
 	if err := p.h.check(); err != nil {
-		return opError("Menu", err)
+		return opError("Pane.Menu", err)
 	}
 
 	if p.h.server.conn != nil {
-		return opError("Menu", ErrTransportUnsupported)
+		return opError("Pane.Menu", ErrTransportUnsupported)
 	}
 
 	args, err := menuArgsWithTarget("-t", p.h.id, opts)
 	if err != nil {
-		return opError("Menu", err)
+		return opError("Pane.Menu", err)
 	}
 
 	node := leaf(command("display-menu", args...))
@@ -922,7 +928,7 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) erro
 	for _, item := range items {
 		itemArgs, itemErr := menuItemArg(item)
 		if itemErr != nil {
-			return opError("Menu", itemErr)
+			return opError("Pane.Menu", itemErr)
 		}
 
 		node.args = append(node.args, itemArgs...)
@@ -930,13 +936,13 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) erro
 
 	opCtx, op, err := p.h.server.beginCallerBounded(ctx)
 	if err != nil {
-		return opError("Menu", err)
+		return opError("Pane.Menu", err)
 	}
 	defer op.close()
 
 	_, err = p.h.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, p.h.guard(), nil)
 
-	return opError("Menu", err)
+	return opError("Pane.Menu", err)
 }
 
 // Prompt displays an interactive command prompt in this client's status line.
@@ -945,45 +951,45 @@ func (p Pane) Menu(ctx context.Context, items []MenuItem, opts MenuOptions) erro
 // Fails with [ErrTransportUnsupported] over control mode.
 func (c Client) Prompt(ctx context.Context, template PromptTemplate, opts PromptOptions) error {
 	if ctx == nil {
-		return opError("Prompt", invalid("nil context"))
+		return opError("Client.Prompt", invalid("nil context"))
 	}
 
 	if err := c.h.check(); err != nil {
-		return opError("Prompt", err)
+		return opError("Client.Prompt", err)
 	}
 
 	if c.h.server.conn != nil {
-		return opError("Prompt", ErrTransportUnsupported)
+		return opError("Client.Prompt", ErrTransportUnsupported)
 	}
 
 	args, err := promptArgs(c.h.id, template, opts)
 	if err != nil {
-		return opError("Prompt", err)
+		return opError("Client.Prompt", err)
 	}
 
-	return c.h.act(ctx, "command-prompt", args...)
+	return c.h.act(ctx, "Client.Prompt", "command-prompt", args...)
 }
 
 // PromptHistory returns the prompt history lines from tmux (show-prompt-history).
 // promptType optionally restricts history to a specific prompt type ("command", "search").
 func (s *Server) PromptHistory(ctx context.Context, promptType string) ([]string, error) {
 	if s == nil {
-		return nil, opError("PromptHistory", ErrInvalidHandle)
+		return nil, opError("Server.PromptHistory", ErrInvalidHandle)
 	}
 
 	if promptType != "" && !wire.ValidString(promptType) {
-		return nil, opError("PromptHistory", invalid("prompt type"))
+		return nil, opError("Server.PromptHistory", invalid("prompt type"))
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("PromptHistory", err)
+		return nil, opError("Server.PromptHistory", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("PromptHistory", err)
+		return nil, opError("Server.PromptHistory", err)
 	}
 
 	var args []string
@@ -993,7 +999,7 @@ func (s *Server) PromptHistory(ctx context.Context, promptType string) ([]string
 
 	r, err := s.execute(opCtx, op, plainPlan(command("show-prompt-history", args...)), newGuard(info.Identity), nil)
 	if err != nil {
-		return nil, opError("PromptHistory", err)
+		return nil, opError("Server.PromptHistory", err)
 	}
 
 	var lines []string
@@ -1008,11 +1014,11 @@ func (s *Server) PromptHistory(ctx context.Context, promptType string) ([]string
 // promptType optionally restricts clearing to a specific prompt type ("command", "search").
 func (s *Server) ClearPromptHistory(ctx context.Context, promptType string) error {
 	if s == nil {
-		return opError("ClearPromptHistory", ErrInvalidHandle)
+		return opError("Server.ClearPromptHistory", ErrInvalidHandle)
 	}
 
 	if promptType != "" && !wire.ValidString(promptType) {
-		return opError("ClearPromptHistory", invalid("prompt type"))
+		return opError("Server.ClearPromptHistory", invalid("prompt type"))
 	}
 
 	var args []string
@@ -1020,37 +1026,37 @@ func (s *Server) ClearPromptHistory(ctx context.Context, promptType string) erro
 		args = append(args, "-T", promptType)
 	}
 
-	return s.endpointAction(ctx, "clear-prompt-history", args...)
+	return s.endpointAction(ctx, "Server.ClearPromptHistory", "clear-prompt-history", args...)
 }
 
 // ChooseTree enters tmux's interactive chooser on a verified target pane; its
 // acceptance only means the mode was installed, not that a choice was made.
 func (p Pane) ChooseTree(ctx context.Context) error {
 	if p.h.server != nil && p.h.server.conn != nil {
-		return opError("ChooseTree", ErrTransportUnsupported)
+		return opError("Pane.ChooseTree", ErrTransportUnsupported)
 	}
 
-	return p.h.act(ctx, "choose-tree", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.ChooseTree", "choose-tree", "-t", p.h.id)
 }
 
 // ChooseBuffer enters tmux's interactive buffer selection menu on this pane.
 // Acceptance means the mode was installed; it does not indicate whether a buffer was chosen.
 func (p Pane) ChooseBuffer(ctx context.Context) error {
 	if p.h.server != nil && p.h.server.conn != nil {
-		return opError("ChooseBuffer", ErrTransportUnsupported)
+		return opError("Pane.ChooseBuffer", ErrTransportUnsupported)
 	}
 
-	return p.h.act(ctx, "choose-buffer", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.ChooseBuffer", "choose-buffer", "-t", p.h.id)
 }
 
 // DisplayPanes temporarily overlays numeric indicators on all panes in this client's window,
 // allowing the user to select a pane by number.
 func (c Client) DisplayPanes(ctx context.Context) error {
 	if c.h.server != nil && c.h.server.conn != nil {
-		return opError("DisplayPanes", ErrTransportUnsupported)
+		return opError("Client.DisplayPanes", ErrTransportUnsupported)
 	}
 
-	return c.h.act(ctx, "display-panes", "-t", c.h.id)
+	return c.h.act(ctx, "Client.DisplayPanes", "display-panes", "-t", c.h.id)
 }
 
 // WatchFormat registers a format subscription watch on this control connection.
@@ -1111,78 +1117,72 @@ func TargetAllWindows() SubscriptionTarget { return wildcardTarget("@*") }
 // TargetSession returns a [SubscriptionTarget] matching the attached session (empty target between colons).
 func TargetSession() SubscriptionTarget { return wildcardTarget("") }
 
-// WatchFormatWith registers a format subscription watch on any supported target:
+// WatchFormat registers a format subscription watch on any supported target:
 // a [Pane], [Window], [Session], [TargetAllPanes], [TargetAllWindows], or [TargetSession].
 //
 // Changes to the evaluated format expression are emitted asynchronously as
 // [SubscriptionEvent] notifications over the event stream.
-func (c *Connection) WatchFormatWith(ctx context.Context, name string, target SubscriptionTarget, expr Format) error {
+func (c *Connection) WatchFormat(ctx context.Context, name string, target SubscriptionTarget, expr Format) error {
 	if c == nil || !validFormatName(name) || !wire.ValidString(string(expr)) {
-		return opError("WatchFormatWith", invalid("subscription"))
+		return opError("Connection.WatchFormat", invalid("subscription"))
 	}
 
 	if target == nil {
-		return opError("WatchFormatWith", invalid("subscription target"))
+		return opError("Connection.WatchFormat", invalid("subscription target"))
 	}
 
 	spec, g, err := target.subscriptionTarget(c)
 	if err != nil {
-		return opError("WatchFormatWith", err)
+		return opError("Connection.WatchFormat", err)
 	}
 
 	opCtx, op, err := c.server.begin(ctx)
 	if err != nil {
-		return opError("WatchFormatWith", err)
+		return opError("Connection.WatchFormat", err)
 	}
 	defer op.close()
 
 	arg := name + ":" + spec + ":" + string(expr)
 	_, err = c.server.execute(opCtx, op, emptyPlan(command("refresh-client", "-B", arg)), g, nil)
 
-	return opError("WatchFormatWith", err)
+	return opError("Connection.WatchFormat", err)
 }
 
 // popupResult maps a popup closed early (exit 129, no stderr) to nil.
 func popupResult(err error) error {
 	ce, ok := errors.AsType[*CommandError](err)
-	if ok && ce.Result.ExitCode == 129 && len(ce.Result.Stderr) == 0 && ce.Timeout == NoTimeout {
+	if ok && ce.Result.ExitCode == 129 && len(ce.Result.Stderr) == 0 && ce.Timeout == TimeoutSourceNone {
 		return nil
 	}
 
 	return err
 }
 
-// WatchFormat registers a format subscription watch on the specified pane.
-// It is equivalent to WatchFormatWith(ctx, name, pane, expr).
-func (c *Connection) WatchFormat(ctx context.Context, name string, pane Pane, expr Format) error {
-	return c.WatchFormatWith(ctx, name, pane, expr)
-}
-
-// UnwatchFormat cancels a format subscription watch previously registered via [Connection.WatchFormat] or [Connection.WatchFormatWith].
+// UnwatchFormat cancels a format subscription watch previously registered via [Connection.WatchFormat].
 func (c *Connection) UnwatchFormat(ctx context.Context, name string) error {
 	if c == nil || !validFormatName(name) {
-		return opError("UnwatchFormat", invalid("subscription"))
+		return opError("Connection.UnwatchFormat", invalid("subscription"))
 	}
 
-	return c.server.endpointAction(ctx, "refresh-client", "-B", name)
+	return c.server.endpointAction(ctx, "Connection.UnwatchFormat", "refresh-client", "-B", name)
 }
 
 // SetPaneOutputAction applies a specific flow-control action (on, off, pause, continue)
 // to the specified pane on this control connection (refresh-client -A).
 func (c *Connection) SetPaneOutputAction(ctx context.Context, pane Pane, action PaneOutputAction) error {
 	if c == nil {
-		return opError("SetPaneOutputAction", ErrInvalidHandle)
+		return opError("Connection.SetPaneOutputAction", ErrInvalidHandle)
 	}
 
 	if !pane.h.origin.Equal(c.identity) {
-		return opError("SetPaneOutputAction", ErrInvalidHandle)
+		return opError("Connection.SetPaneOutputAction", ErrInvalidHandle)
 	}
 
 	if !action.Valid() {
-		return opError("SetPaneOutputAction", invalid("pane output action"))
+		return opError("Connection.SetPaneOutputAction", invalid("pane output action"))
 	}
 
-	return c.server.endpointAction(ctx, "refresh-client", "-A", pane.h.id+":"+string(action))
+	return c.server.endpointAction(ctx, "Connection.SetPaneOutputAction", "refresh-client", "-A", pane.h.id+":"+string(action))
 }
 
 // SetPaneOutput controls whether terminal output events ([PaneOutputEvent]) for the specified pane
@@ -1196,9 +1196,9 @@ func (c *Connection) SetPaneOutput(ctx context.Context, pane Pane, enabled bool)
 }
 
 // SetPaneOutputActions applies flow-control actions to multiple panes in a single refresh-client command.
-func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOutputTarget) error {
+func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOutputSetting) error {
 	if c == nil {
-		return opError("SetPaneOutputActions", ErrInvalidHandle)
+		return opError("Connection.SetPaneOutputActions", ErrInvalidHandle)
 	}
 
 	if len(targets) == 0 {
@@ -1208,17 +1208,17 @@ func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOu
 	args := make([]string, 0, len(targets)*actionArgMultiplier)
 	for _, t := range targets {
 		if !t.Pane.h.origin.Equal(c.identity) {
-			return opError("SetPaneOutputActions", ErrInvalidHandle)
+			return opError("Connection.SetPaneOutputActions", ErrInvalidHandle)
 		}
 
 		if !t.Action.Valid() {
-			return opError("SetPaneOutputActions", invalid("pane output action"))
+			return opError("Connection.SetPaneOutputActions", invalid("pane output action"))
 		}
 
 		args = append(args, "-A", t.Pane.h.id+":"+string(t.Action))
 	}
 
-	return c.server.endpointAction(ctx, "refresh-client", args...)
+	return c.server.endpointAction(ctx, "Connection.SetPaneOutputActions", "refresh-client", args...)
 }
 
 // Refresh applies client refresh operations to this connection's owned client (refresh-client).
@@ -1466,7 +1466,7 @@ func menuStyleArgs(opts MenuOptions) []string {
 }
 
 func menuItemArg(item MenuItem) ([]wireArg, error) {
-	if item.Separator {
+	if item.IsSeparator {
 		return []wireArg{{text: "", nested: nil}}, nil
 	}
 

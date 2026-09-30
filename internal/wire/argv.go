@@ -21,9 +21,9 @@ type (
 	}
 )
 
-// Argv escapes only the special trailing-semicolon rule in cmd_parse_from_arguments.
+// EscapeArg escapes only the special trailing-semicolon rule in cmd_parse_from_arguments.
 // It is NOT shell quoting. Already-present backslashes are preserved.
-func Argv(s string) string {
+func EscapeArg(s string) string {
 	if strings.HasSuffix(s, ";") {
 		return s[:len(s)-1] + `\;`
 	}
@@ -84,21 +84,27 @@ func (q QuoteWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func Quoted(w io.Writer, s string) error {
+func WriteQuoted(w io.Writer, s string) error {
 	if _, err := io.WriteString(w, `"`); err != nil {
-		return err //nolint:wrapcheck // Quoted writes to io.Writer and propagates underlying writer errors directly
+		return err //nolint:wrapcheck // WriteQuoted writes to io.Writer and propagates underlying writer errors directly
 	}
 
 	if _, err := io.WriteString(QuoteWriter{W: w}, s); err != nil {
-		return err //nolint:wrapcheck // Quoted writes to io.Writer and propagates underlying writer errors directly
+		return err //nolint:wrapcheck // WriteQuoted writes to io.Writer and propagates underlying writer errors directly
 	}
 
 	_, err := io.WriteString(w, `"`)
 
-	return err //nolint:wrapcheck // Quoted writes to io.Writer and propagates underlying writer errors directly
+	return err //nolint:wrapcheck // WriteQuoted writes to io.Writer and propagates underlying writer errors directly
 }
 
-func Quote(s string) (string, error) { var b strings.Builder; e := Quoted(&b, s); return b.String(), e }
+func Quote(s string) (string, error) {
+	var b strings.Builder
+
+	e := WriteQuoted(&b, s)
+
+	return b.String(), e
+}
 
 func (c *Counter) Write(b []byte) (int, error) {
 	if c.Err != nil {

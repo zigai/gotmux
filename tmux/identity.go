@@ -155,7 +155,7 @@ func (g *guard) unwrap(r Result, err error) (Result, error) {
 	for _, c := range cases {
 		if bytes.HasPrefix(r.Stdout, []byte(c.prefix)) {
 			r.Stdout = bytes.Clone(r.Stdout[len(c.prefix):])
-			return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: errors.Join(c.cause, err)}
+			return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: errors.Join(c.cause, err)}
 		}
 	}
 
@@ -173,11 +173,11 @@ func (g *guard) unwrap(r Result, err error) (Result, error) {
 
 	if err != nil {
 		if len(g.links) > 0 && errors.Is(err, ErrNotFound) {
-			return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: notSentOutcome(), Timeout: NoTimeout, Err: errors.Join(ErrLinkChanged, err)}
+			return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: errors.Join(ErrLinkChanged, err)}
 		}
 
 		return r, err
 	}
 
-	return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: ErrProtocol}
+	return r, &CommandError{Command: "guard", Result: cloneResult(r), Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrProtocol}
 }

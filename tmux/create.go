@@ -230,63 +230,63 @@ func (b PaneBorderLines) Valid() bool {
 
 // NewSession creates a new session on the server and returns a verified [Session] handle.
 //
-// If opts.Start is [AllowStart] (the default) and no daemon is running, this starts a new
-// background tmux daemon. If opts.Start is [ExistingOnly], it fails with [ErrNoServer] if
+// If opts.Start is [StartPolicyAllowStart] (the default) and no daemon is running, this starts a new
+// background tmux daemon. If opts.Start is [StartPolicyExistingOnly], it fails with [ErrNoServer] if
 // the daemon is not running.
 func (s *Server) NewSession(ctx context.Context, opts NewSessionOptions) (Session, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return Session{}, opError("NewSession", err)
+		return Session{}, opError("Server.NewSession", err)
 	}
 	defer op.close()
 
 	if err = sessionName(opts.Name, true); err != nil {
-		return Session{}, opError("NewSession", err)
+		return Session{}, opError("Server.NewSession", err)
 	}
 
-	if opts.Start > ExistingOnly || !opts.Size.valid() {
-		return Session{}, opError("NewSession", invalid("startup policy or size"))
+	if opts.Start > StartPolicyExistingOnly || !opts.Size.valid() {
+		return Session{}, opError("Server.NewSession", invalid("startup policy or size"))
 	}
 
 	args, err := newSessionArgs(opts)
 	if err != nil {
-		return Session{}, opError("NewSession", err)
+		return Session{}, opError("Server.NewSession", err)
 	}
 
 	sg, err := s.resolveStartGuard(opCtx, op, opts.Start)
 	if err != nil {
-		return Session{}, opError("NewSession", err)
+		return Session{}, opError("Server.NewSession", err)
 	}
 
-	args, err = s.exactGroupArgs(opCtx, op, sg, args, opts.Group)
+	args, err = s.exactGroupArgs(opCtx, "Server.NewSession", op, sg, args, opts.Group)
 	if err != nil {
-		return Session{}, opError("NewSession", err)
+		return Session{}, opError("Server.NewSession", err)
 	}
 
 	p := newSessionPlan(args, sg)
 
 	r, err := s.execute(opCtx, op, p, sg.guard, nil)
 	if string(r.Stdout) == unsupportedStartupVersion {
-		return Session{}, opError("NewSession", unsupported("answering tmux version requires recognized stable 3.6+"))
+		return Session{}, opError("Server.NewSession", unsupported("answering tmux version requires recognized stable 3.6+"))
 	}
 
 	if err != nil {
-		return Session{}, creationError("NewSession", err, r.Stdout, SessionKind)
+		return Session{}, creationError("NewSession", err, r.Stdout, ObjectKindSession)
 	}
 
-	sess, err := s.parseCreatedSession(r.Stdout, sg.guard)
+	sess, err := s.parseCreatedSession("Server.NewSession", r.Stdout, sg.guard)
 	if err != nil {
 		return Session{}, err
 	}
 
 	if err = opCtx.Err(); err != nil {
-		return sess, afterError("NewSession", err, createdFromHandle(sess.h))
+		return sess, afterError("Server.NewSession", err, createdFromHandle(sess.h))
 	}
 
 	return sess, nil
 }
 
-func (s *Server) exactGroupArgs(ctx context.Context, op *operation, sg startGuard, args []string, name string) ([]string, error) {
+func (s *Server) exactGroupArgs(ctx context.Context, label string, op *operation, sg startGuard, args []string, name string) ([]string, error) {
 	if name == "" {
 		return args, nil
 	}
@@ -295,7 +295,7 @@ func (s *Server) exactGroupArgs(ctx context.Context, op *operation, sg startGuar
 		return nil, ErrNotFound
 	}
 
-	target, err := s.exactGroupTarget(ctx, op, sg.guard.identity, name)
+	target, err := s.exactGroupTarget(ctx, label, op, sg.guard.identity, name)
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +310,8 @@ func (s *Server) exactGroupArgs(ctx context.Context, op *operation, sg startGuar
 	return args, nil
 }
 
-func (s *Server) exactGroupTarget(ctx context.Context, op *operation, id ServerIdentity, name string) (string, error) {
-	sessions, err := s.sessions(ctx, op, id, QueryOptions{Filter: "", ExtraFields: nil})
+func (s *Server) exactGroupTarget(ctx context.Context, label string, op *operation, id ServerIdentity, name string) (string, error) {
+	sessions, err := s.sessions(ctx, label, op, id, QueryOptions{Filter: "", ExtraFields: nil})
 	if err != nil {
 		return "", err
 	}
@@ -341,41 +341,41 @@ func (s *Server) exactGroupTarget(ctx context.Context, op *operation, id ServerI
 // occupies a specific slot index within this session's window list.
 func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLink, error) {
 	if err := s.h.check(); err != nil {
-		return WindowLink{}, opError("NewWindow", err)
+		return WindowLink{}, opError("Session.NewWindow", err)
 	}
 
 	opCtx, op, err := s.h.server.begin(ctx)
 	if err != nil {
-		return WindowLink{}, opError("NewWindow", err)
+		return WindowLink{}, opError("Session.NewWindow", err)
 	}
 	defer op.close()
 
 	args, err := newWindowArgs(s.h.id, opts)
 	if err != nil {
-		return WindowLink{}, opError("NewWindow", err)
+		return WindowLink{}, opError("Session.NewWindow", err)
 	}
 
 	r, err := s.h.server.execute(opCtx, op, recordsPlan(command("new-window", args...)), s.h.guard(), nil)
 	if err != nil {
-		return WindowLink{}, creationError("NewWindow", err, r.Stdout, WindowKind)
+		return WindowLink{}, creationError("NewWindow", err, r.Stdout, ObjectKindWindow)
 	}
 
-	rows, err := parseRaw(r.Stdout, fieldsFor(WindowKind), "window")
+	rows, err := parseRaw(r.Stdout, fieldsFor(ObjectKindWindow), "window")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = decodeError("window", "record count", wire.ErrRecord)
 		}
 
-		return WindowLink{}, afterError("NewWindow", err, recoverCreated(r.Stdout, WindowKind)...)
+		return WindowLink{}, afterError("Session.NewWindow", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
 	}
 
 	_, link, err := s.h.server.decodeWindow(rows[0], s.h.expectedOrigin())
 	if err != nil {
-		return WindowLink{}, afterError("NewWindow", err, recoverCreated(r.Stdout, WindowKind)...)
+		return WindowLink{}, afterError("Session.NewWindow", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
 	}
 
 	if err = opCtx.Err(); err != nil {
-		return link.Handle(), afterError("NewWindow", err, createdFromHandle(link.link.h))
+		return link.Handle(), afterError("Session.NewWindow", err, createdFromHandle(link.link.h))
 	}
 
 	return link.Handle(), nil
@@ -384,45 +384,45 @@ func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLi
 // Split divides the target pane into two panes according to opts and returns a handle to the new pane.
 func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 	if err := p.h.check(); err != nil {
-		return Pane{}, opError("Split", err)
+		return Pane{}, opError("Pane.Split", err)
 	}
 
 	opCtx, op, err := p.h.server.begin(ctx)
 	if err != nil {
-		return Pane{}, opError("Split", err)
+		return Pane{}, opError("Pane.Split", err)
 	}
 	defer op.close()
 
 	if opts.Direction > Horizontal {
-		return Pane{}, opError("Split", invalid("direction"))
+		return Pane{}, opError("Pane.Split", invalid("direction"))
 	}
 
 	args, err := splitArgs(p.h.id, opts)
 	if err != nil {
-		return Pane{}, opError("Split", err)
+		return Pane{}, opError("Pane.Split", err)
 	}
 
 	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("split-window", args...)), p.h.guard(), nil)
 	if err != nil {
-		return Pane{}, creationError("Split", err, r.Stdout, PaneKind)
+		return Pane{}, creationError("Split", err, r.Stdout, ObjectKindPane)
 	}
 
-	rows, err := parseRaw(r.Stdout, fieldsFor(PaneKind), "pane")
+	rows, err := parseRaw(r.Stdout, fieldsFor(ObjectKindPane), "pane")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = decodeError("pane", "record count", wire.ErrRecord)
 		}
 
-		return Pane{}, afterError("Split", err, recoverCreated(r.Stdout, PaneKind)...)
+		return Pane{}, afterError("Pane.Split", err, recoverCreated(r.Stdout, ObjectKindPane)...)
 	}
 
 	v, err := p.h.server.decodePane(rows[0], p.h.expectedOrigin())
 	if err != nil {
-		return Pane{}, afterError("Split", err, recoverCreated(r.Stdout, PaneKind)...)
+		return Pane{}, afterError("Pane.Split", err, recoverCreated(r.Stdout, ObjectKindPane)...)
 	}
 
 	if err = opCtx.Err(); err != nil {
-		return v.Handle(), afterError("Split", err, createdFromHandle(v.h))
+		return v.Handle(), afterError("Pane.Split", err, createdFromHandle(v.h))
 	}
 
 	return v.Handle(), nil
@@ -446,21 +446,21 @@ func createNewPane(ctx context.Context, h handle, opName string, targetID string
 
 	r, err := h.server.execute(opCtx, op, recordsPlan(command("new-pane", args...)), h.guard(), nil)
 	if err != nil {
-		return Pane{}, creationError(opName, err, r.Stdout, PaneKind)
+		return Pane{}, creationError(opName, err, r.Stdout, ObjectKindPane)
 	}
 
-	rows, err := parseRaw(r.Stdout, fieldsFor(PaneKind), "pane")
+	rows, err := parseRaw(r.Stdout, fieldsFor(ObjectKindPane), "pane")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = decodeError("pane", "record count", wire.ErrRecord)
 		}
 
-		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
+		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, ObjectKindPane)...)
 	}
 
 	v, err := h.server.decodePane(rows[0], h.expectedOrigin())
 	if err != nil {
-		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, PaneKind)...)
+		return Pane{}, afterError(opName, err, recoverCreated(r.Stdout, ObjectKindPane)...)
 	}
 
 	if err = opCtx.Err(); err != nil {
@@ -472,12 +472,12 @@ func createNewPane(ctx context.Context, h handle, opName string, targetID string
 
 // NewPane creates a new (potentially floating or modal) pane targeting this window (new-pane).
 func (w Window) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
-	return createNewPane(ctx, w.h, "NewPane", w.h.id, opts)
+	return createNewPane(ctx, w.h, "Window.NewPane", w.h.id, opts)
 }
 
 // NewPane creates a new (potentially floating or modal) pane targeting this pane (new-pane).
 func (p Pane) NewPane(ctx context.Context, opts NewPaneOptions) (Pane, error) {
-	return createNewPane(ctx, p.h, "NewPane", p.h.id, opts)
+	return createNewPane(ctx, p.h, "Pane.NewPane", p.h.id, opts)
 }
 
 func creationError(name string, err error, data []byte, kind ObjectKind) error {
@@ -485,7 +485,7 @@ func creationError(name string, err error, data []byte, kind ObjectKind) error {
 
 	outcome.Created = append(outcome.Created, recoverCreated(data, kind)...)
 	if name == "NewSession" && errors.Is(err, ErrAlreadyExists) && len(data) == 0 && len(outcome.Created) == 0 && rejectionComplete(err) {
-		outcome.Effect = Rejected
+		outcome.Effect = EffectRejected
 	}
 
 	return &OperationError{Operation: name, Outcome: outcome, Err: err}
@@ -494,7 +494,7 @@ func creationError(name string, err error, data []byte, kind ObjectKind) error {
 func rejectionComplete(err error) bool {
 	cmd, ok := errors.AsType[*CommandError](err)
 
-	return ok && cmd.Timeout == NoTimeout && !errors.Is(err, context.Canceled) &&
+	return ok && cmd.Timeout == TimeoutSourceNone && !errors.Is(err, context.Canceled) &&
 		!errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrOutputLimit) &&
 		!errors.Is(err, ErrProtocol) && !errors.Is(err, ErrClosed) &&
 		!errors.Is(err, ErrServerChanged) && !errors.Is(err, ErrNoServer)
@@ -511,7 +511,7 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-d", "-P", "-F", wire.RecordFormat(fieldsFor(SessionKind))}
+	args := []string{"-d", "-P", "-F", wire.RecordFormat(fieldsFor(ObjectKindSession))}
 	if opts.Name != "" {
 		args = append(args, "-s", wire.LiteralFormat(opts.Name))
 	}
@@ -549,14 +549,14 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 	return args, nil
 }
 
-func (s *Server) parseCreatedSession(data []byte, g *guard) (Session, error) {
-	rows, err := parseRaw(data, fieldsFor(SessionKind), "session")
+func (s *Server) parseCreatedSession(label string, data []byte, g *guard) (Session, error) {
+	rows, err := parseRaw(data, fieldsFor(ObjectKindSession), "session")
 	if err != nil || len(rows) != 1 {
 		if err == nil {
 			err = decodeError("session", "record count", wire.ErrRecord)
 		}
 
-		return Session{}, afterError("NewSession", err, recoverCreated(data, SessionKind)...)
+		return Session{}, afterError(label, err, recoverCreated(data, ObjectKindSession)...)
 	}
 
 	var expected *ServerIdentity
@@ -566,7 +566,7 @@ func (s *Server) parseCreatedSession(data []byte, g *guard) (Session, error) {
 
 	sess, err := s.decodeSession(rows[0], expected)
 	if err != nil {
-		return Session{}, afterError("NewSession", err, recoverCreated(data, SessionKind)...)
+		return Session{}, afterError(label, err, recoverCreated(data, ObjectKindSession)...)
 	}
 
 	return sess.Handle(), nil
@@ -588,7 +588,7 @@ func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start Sta
 	switch {
 	case err == nil:
 		return startGuard{guard: newGuard(info.Identity), allowStart: false}, nil
-	case errors.Is(err, ErrNoServer) && start == AllowStart && s.conn == nil && s.bound == nil:
+	case errors.Is(err, ErrNoServer) && start == StartPolicyAllowStart && s.conn == nil && s.bound == nil:
 		v, verErr := s.executableVersion(ctx, op)
 		if verErr != nil {
 			return startGuard{guard: nil, allowStart: false}, verErr
@@ -599,7 +599,7 @@ func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start Sta
 		}
 
 		return startGuard{guard: nil, allowStart: true}, nil
-	case errors.Is(err, ErrNoServer) && start == ExistingOnly:
+	case errors.Is(err, ErrNoServer) && start == StartPolicyExistingOnly:
 		return startGuard{guard: nil, allowStart: false}, ErrNoServer
 	default:
 		return startGuard{guard: nil, allowStart: false}, err
@@ -622,7 +622,7 @@ func newWindowArgs(sessionID string, opts NewWindowOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(WindowKind)), "-t", target}
+	args := []string{"-P", "-F", wire.RecordFormat(fieldsFor(ObjectKindWindow)), "-t", target}
 	if opts.Before {
 		args = append(args, "-b")
 	}
@@ -785,7 +785,7 @@ func splitArgs(paneID string, opts SplitOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(PaneKind)), "-t", paneID}
+	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(ObjectKindPane)), "-t", paneID}
 	args = append(args, splitLayoutFlags(opts)...)
 	args = append(args, styleArgs...)
 	args = append(args, size...)
@@ -839,13 +839,13 @@ func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
 	var field string
 
 	switch kind {
-	case SessionKind:
+	case ObjectKindSession:
 		field = "session_id"
-	case WindowKind:
+	case ObjectKindWindow:
 		field = "window_id"
-	case PaneKind:
+	case ObjectKindPane:
 		field = "pane_id"
-	case ClientKind, WindowLinkKind:
+	case ObjectKindClient, ObjectKindWindowLink:
 		return nil
 	default:
 		return nil
@@ -1057,7 +1057,7 @@ func newPaneArgs(targetID string, opts NewPaneOptions) ([]string, error) {
 		return nil, err
 	}
 
-	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(PaneKind)), "-t", targetID}
+	args := []string{"-P", "-F", splitRecordFormat(fieldsFor(ObjectKindPane)), "-t", targetID}
 	args = append(args, geoFlags...)
 	args = append(args, newPaneModalFlags(opts)...)
 	args = append(args, styleFlags...)

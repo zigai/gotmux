@@ -162,7 +162,7 @@ func (c *Connection) releaseRequest(r *controlRequest) { c.bytes.Release(r.bytes
 
 func (c *Connection) deliver(r *controlRequest, result Result, err error, effect Effect) {
 	if err != nil {
-		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: err}
+		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: err}
 	}
 
 	r.result <- controlReply{result: result, err: err}
@@ -172,10 +172,10 @@ func (c *Connection) deliver(r *controlRequest, result Result, err error, effect
 }
 
 func (c *Connection) performStartupHandshake(ctx context.Context, nonce string, g *guard) error {
-	startup, cancel := context.WithTimeout(ctx, c.original.config.Limits.CommandTimeout)
+	startupCtx, cancel := context.WithTimeout(ctx, c.original.config.Limits.CommandTimeout)
 	defer cancel()
 
-	result, err := c.collect(startup, nonce, c.original.config.Limits.OutputBytes, c.original.config.Limits.OutputBytes)
+	result, err := c.collect(startupCtx, nonce, c.original.config.Limits.OutputBytes, c.original.config.Limits.OutputBytes)
 
 	if g != nil {
 		_, err = g.unwrap(result, err)
@@ -194,7 +194,7 @@ func (c *Connection) drainRequests() {
 	for {
 		select {
 		case r := <-c.requests:
-			c.deliver(r, failedResult(), c.closedError(), NotSent)
+			c.deliver(r, failedResult(), c.closedError(), EffectNotSent)
 		default:
 			return
 		}
@@ -222,25 +222,25 @@ func buildRequestWire(r *controlRequest) (string, string, error) {
 
 func (c *Connection) dispatchRequest(r *controlRequest) bool {
 	if err := c.closedError(); err != nil {
-		c.deliver(r, failedResult(), err, NotSent)
+		c.deliver(r, failedResult(), err, EffectNotSent)
 		return true
 	}
 
 	select {
 	case <-r.done:
-		c.deliver(r, failedResult(), context.Canceled, NotSent)
+		c.deliver(r, failedResult(), context.Canceled, EffectNotSent)
 		return true
 	default:
 	}
 
 	if !r.state.CompareAndSwap(requestQueued, requestInFlight) {
-		c.deliver(r, failedResult(), context.Canceled, NotSent)
+		c.deliver(r, failedResult(), context.Canceled, EffectNotSent)
 		return true
 	}
 
 	wire, nonce, err := buildRequestWire(r)
 	if err != nil {
-		c.deliver(r, failedResult(), err, NotSent)
+		c.deliver(r, failedResult(), err, EffectNotSent)
 		return true
 	}
 
@@ -253,16 +253,16 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 
 	if _, err := io.WriteString(c.stdin, wire); err != nil {
 		c.stop(err, false)
-		c.deliver(r, failedResult(), err, Unknown)
+		c.deliver(r, failedResult(), err, EffectUnknown)
 
 		return false
 	}
 
 	result, err := c.collectRequest(r.done, nonce, r.stdout, r.stderr)
 
-	effect := Unknown
+	effect := EffectUnknown
 	if err == nil {
-		effect = Confirmed
+		effect = EffectConfirmed
 	}
 
 	c.deliver(r, result, err, effect)
@@ -292,7 +292,7 @@ func (c *Connection) dispatch(ctx context.Context, nonce string, g *guard) {
 func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (Result, error) {
 	failed := func(err error) (Result, error) {
 		r := failedResult()
-		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Timeout: NoTimeout, Err: err}
+		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: err}
 	}
 	if p.mode == replyRaw {
 		return failed(unsupportedControl("ambiguous raw/control output; explicitly use subprocess transport", ErrTransportUnsupported))
@@ -339,7 +339,7 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 	case <-ctx.Done():
 		return c.abortRequest(r, p, contextSource(op.callerDone, ctx.Err()), ctx.Err())
 	case <-c.stopCh:
-		return c.abortRequest(r, p, NoTimeout, c.closedError())
+		return c.abortRequest(r, p, TimeoutSourceNone, c.closedError())
 	}
 }
 
@@ -350,7 +350,7 @@ func (c *Connection) abortRequest(r *controlRequest, p plan, timeout TimeoutSour
 
 	if r.state.CompareAndSwap(requestQueued, requestCanceled) {
 		result := failedResult()
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
+		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
 	}
 
 	if v, ok := checkDeliveredOrState(r); ok {
@@ -359,7 +359,7 @@ func (c *Connection) abortRequest(r *controlRequest, p plan, timeout TimeoutSour
 
 	result := failedResult()
 
-	return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: Unknown, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
+	return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
 }
 
 func checkDeliveredOrState(r *controlRequest) (controlReply, bool) {

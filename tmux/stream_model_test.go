@@ -60,7 +60,7 @@ func newRapidEventStreamModel(rt *rapid.T) *rapidEventStreamModel {
 
 	life, end := context.WithCancel(context.Background())
 
-	s, err := c.Events(life, EventOptions{MaxBytes: 4096, MaxCount: 4, Overflow: FailOnOverflow})
+	s, err := c.Events(life, EventOptions{MaxBytes: 4096, MaxCount: 4, Overflow: OverflowPolicyFail})
 	if err != nil {
 		rt.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestCmpSnapshotCloneSemantics(t *testing.T) {
 		raw, _ := p.Raw("pane_title")
 		mode, _ := p.Mode.Get()
 
-		return view{p.ID, p.WindowID, p.Title, raw, mode, p.Mode.State(), p.Handle().Identity()}
+		return view{p.ID, p.WindowID, p.Title, raw, mode, p.Mode.State(), p.Handle().ServerIdentity()}
 	}
 	want := project(record)
 

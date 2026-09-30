@@ -113,9 +113,9 @@ func ParseRecords(data []byte, fieldCount int) ([][]string, error) {
 	return out, nil
 }
 
-// Octal decodes control output's exact \\ooo dialect; it never treats malformed
+// DecodeOctal decodes control output's exact \\ooo dialect; it never treats malformed
 // escapes as literal text or normalizes CR/LF/non-UTF-8 bytes.
-func Octal(data []byte, maxBytes int64) ([]byte, error) {
+func DecodeOctal(data []byte, maxBytes int64) ([]byte, error) {
 	if maxBytes < 0 || maxBytes > (1<<63-1)/4 || int64(len(data)) > maxBytes*4 {
 		return nil, ErrRecord
 	}

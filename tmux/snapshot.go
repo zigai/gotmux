@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	// Consistent indicates all observed cross-references resolved without contradiction (not an atomic transaction).
-	Consistent Consistency = iota
+	// ConsistencyComplete indicates all observed cross-references resolved without contradiction (not an atomic transaction).
+	ConsistencyComplete Consistency = iota
 
-	// Incomplete indicates concurrent graph churn occurred during collection, leaving dangling references.
-	Incomplete
+	// ConsistencyIncomplete indicates concurrent graph churn occurred during collection, leaving dangling references.
+	ConsistencyIncomplete
 )
 
 const maxMissingReferences = 128
@@ -78,7 +78,7 @@ func (v Snapshot) Clients() []ClientInfo {
 }
 
 // MissingReferences returns a slice of up to 128 dangling references detected during
-// snapshot graph validation if Consistency is [Incomplete].
+// snapshot graph validation if Consistency is [ConsistencyIncomplete].
 func (v Snapshot) MissingReferences() []MissingReference {
 	return append([]MissingReference{}, v.missing...)
 }
@@ -160,11 +160,11 @@ func (v Snapshot) ResolveClient(name ClientName) (Client, bool) {
 // Snapshot collects a point-in-time observation of the entire daemon's sessions,
 // windows, links, panes, and clients in a small number of batched queries.
 //
-// It validates cross-entity references and marks the snapshot [Consistent] or [Incomplete].
+// It validates cross-entity references and marks the snapshot [ConsistencyComplete] or [ConsistencyIncomplete].
 func (s *Server) Snapshot(ctx context.Context) (Snapshot, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 	defer op.close()
 
@@ -174,33 +174,33 @@ func (s *Server) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
 	out.Identity = info.Identity
 
-	out.sessions, err = s.sessions(opCtx, op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil})
+	out.sessions, err = s.sessions(opCtx, "Server.Snapshot", op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil})
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
-	out.windows, out.links, err = s.windows(opCtx, op, info.Identity, "")
+	out.windows, out.links, err = s.windows(opCtx, "Server.Snapshot", op, info.Identity, "")
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
-	out.panes, err = s.panes(opCtx, op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil}, "")
+	out.panes, err = s.panes(opCtx, "Server.Snapshot", op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil}, "")
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
-	out.clients, err = s.clients(opCtx, op, info.Identity)
+	out.clients, err = s.clients(opCtx, "Server.Snapshot", op, info.Identity)
 	if err != nil {
-		return Snapshot{}, opError("Snapshot", err)
+		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
 	if err = opCtx.Err(); err != nil {
-		return Snapshot{}, afterError("Snapshot", err)
+		return Snapshot{}, afterError("Server.Snapshot", err)
 	}
 
 	out.Finished = time.Now()
@@ -213,11 +213,11 @@ func (v *Snapshot) checkLinkReferences(sessions map[SessionID]bool, windows map[
 	for _, l := range v.links {
 		counts[l.SessionID]++
 		if !sessions[l.SessionID] {
-			add(MissingReference{Kind: WindowLinkKind, ID: l.Handle().target(), ReferencedKind: SessionKind, ReferencedID: string(l.SessionID), Reason: "missing session"})
+			add(MissingReference{Kind: ObjectKindWindowLink, ID: l.Handle().target(), ReferencedKind: ObjectKindSession, ReferencedID: string(l.SessionID), Reason: "missing session"})
 		}
 
 		if !windows[l.WindowID] {
-			add(MissingReference{Kind: WindowLinkKind, ID: l.Handle().target(), ReferencedKind: WindowKind, ReferencedID: string(l.WindowID), Reason: "missing window"})
+			add(MissingReference{Kind: ObjectKindWindowLink, ID: l.Handle().target(), ReferencedKind: ObjectKindWindow, ReferencedID: string(l.WindowID), Reason: "missing window"})
 		}
 	}
 }
@@ -226,7 +226,7 @@ func (v *Snapshot) checkPaneReferences(windows map[WindowID]bool, paneCounts map
 	for _, p := range v.panes {
 		paneCounts[p.WindowID]++
 		if !windows[p.WindowID] {
-			add(MissingReference{Kind: PaneKind, ID: string(p.ID), ReferencedKind: WindowKind, ReferencedID: string(p.WindowID), Reason: "missing window"})
+			add(MissingReference{Kind: ObjectKindPane, ID: string(p.ID), ReferencedKind: ObjectKindWindow, ReferencedID: string(p.WindowID), Reason: "missing window"})
 		}
 	}
 }
@@ -246,7 +246,7 @@ func (v *Snapshot) assess() {
 	}
 
 	add := func(m MissingReference) {
-		v.Consistency = Incomplete
+		v.Consistency = ConsistencyIncomplete
 
 		v.MissingCount++
 		if len(v.missing) < maxMissingReferences {
@@ -260,7 +260,7 @@ func (v *Snapshot) assess() {
 	for _, s := range v.sessions {
 		if counts[s.ID] != s.WindowCount {
 			add(MissingReference{
-				Kind:           SessionKind,
+				Kind:           ObjectKindSession,
 				ID:             string(s.ID),
 				ReferencedKind: ObjectKind(""),
 				ReferencedID:   "",
@@ -272,7 +272,7 @@ func (v *Snapshot) assess() {
 	for _, w := range v.windows {
 		if paneCounts[w.ID] != w.PaneCount {
 			add(MissingReference{
-				Kind:           WindowKind,
+				Kind:           ObjectKindWindow,
 				ID:             string(w.ID),
 				ReferencedKind: ObjectKind(""),
 				ReferencedID:   "",
@@ -283,7 +283,7 @@ func (v *Snapshot) assess() {
 
 	for _, c := range v.clients {
 		if sid, ok := c.SessionID.Get(); ok && !sessions[sid] {
-			add(MissingReference{Kind: ClientKind, ID: string(c.Name), ReferencedKind: SessionKind, ReferencedID: string(sid), Reason: "missing client session"})
+			add(MissingReference{Kind: ObjectKindClient, ID: string(c.Name), ReferencedKind: ObjectKindSession, ReferencedID: string(sid), Reason: "missing client session"})
 		}
 	}
 }

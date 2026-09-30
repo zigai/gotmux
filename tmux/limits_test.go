@@ -38,6 +38,27 @@ func standInServer(t *testing.T, limits Limits, script func(dir string) string) 
 	return s, dir
 }
 
+// gateOnCleanup returns a function that opens the gate a stand-in script in dir waits for. The
+// gate also opens when the test ends, before dir is removed, and wait then collects the gated
+// subprocesses, so a failing test never leaves them looping after the test binary exits.
+func gateOnCleanup(t *testing.T, dir string, wait func()) func() {
+	t.Helper()
+
+	gate := filepath.Join(dir, "gate")
+	open := func() {
+		if err := os.WriteFile(gate, nil, 0o600); err != nil {
+			t.Error(err)
+		}
+	}
+
+	t.Cleanup(func() {
+		open()
+		wait()
+	})
+
+	return open
+}
+
 func unprobedPane(t *testing.T, s *Server) Pane {
 	t.Helper()
 
@@ -126,11 +147,11 @@ func TestCommandTimeoutStopsTheCommand(t *testing.T) {
 			t.Fatalf("command ran for %v; CommandTimeout did not stop it", elapsed)
 		}
 
-		if got := timeoutSource(t, err); got != LibraryTimeout {
-			t.Fatalf("timeout source %v, want LibraryTimeout", got)
+		if got := timeoutSource(t, err); got != TimeoutSourceLibrary {
+			t.Fatalf("timeout source %v, want TimeoutSourceLibrary", got)
 		}
 
-		assertOutcome(t, err, Unknown)
+		assertOutcome(t, err, EffectUnknown)
 	})
 
 	t.Run("caller deadline first", func(t *testing.T) {
@@ -145,11 +166,11 @@ func TestCommandTimeoutStopsTheCommand(t *testing.T) {
 			t.Fatalf("got %v, want context.DeadlineExceeded", err)
 		}
 
-		if got := timeoutSource(t, err); got != CallerTimeout {
-			t.Fatalf("timeout source %v, want CallerTimeout", got)
+		if got := timeoutSource(t, err); got != TimeoutSourceCaller {
+			t.Fatalf("timeout source %v, want TimeoutSourceCaller", got)
 		}
 
-		assertOutcome(t, err, Unknown)
+		assertOutcome(t, err, EffectUnknown)
 	})
 }
 
@@ -175,7 +196,7 @@ func TestOutputLimitAfterStartIsUnknown(t *testing.T) {
 				t.Fatalf("returned more than OutputBytes: %v", err)
 			}
 
-			assertOutcome(t, err, Unknown)
+			assertOutcome(t, err, EffectUnknown)
 		})
 	}
 }
@@ -207,7 +228,7 @@ esac
 
 	limited, err := New(Config{
 		Binary: s.config.Binary, SocketPath: s.endpoint.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "",
-		Limits: limitsWith(0, int64(len(probe))+100, 0, 0), UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false,
+		Limits: limitsWith(0, int64(len(probe))+100, 0, 0), UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -242,13 +263,16 @@ func TestInputLimitSendsNothing(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{"oversized argument", func() error { _, e := s.RunWith(t.Context(), cmd, RunOptions{Start: AllowStart, Input: nil}); return e }},
+		{"oversized argument", func() error {
+			_, e := s.RunWith(t.Context(), cmd, RunOptions{Start: StartPolicyAllowStart, Input: nil})
+			return e
+		}},
 		{"oversized stdin", func() error {
-			_, e := s.RunWith(t.Context(), small, RunOptions{Start: AllowStart, Input: make([]byte, 128)})
+			_, e := s.RunWith(t.Context(), small, RunOptions{Start: StartPolicyAllowStart, Input: make([]byte, 128)})
 			return e
 		}},
 		{"oversized sequence stdin", func() error {
-			_, e := s.RunSequenceWith(t.Context(), seq, RunOptions{Start: AllowStart, Input: make([]byte, 128)})
+			_, e := s.RunSequenceWith(t.Context(), seq, RunOptions{Start: StartPolicyAllowStart, Input: make([]byte, 128)})
 			return e
 		}},
 		{"oversized pane text", func() error { return unprobedPane(t, s).SendText(t.Context(), strings.Repeat("a", 128)) }},
@@ -259,8 +283,8 @@ func TestInputLimitSendsNothing(t *testing.T) {
 				t.Fatalf("got %v, want ErrInputLimit", err)
 			}
 
-			if outcomeOf(err).Effect != NotSent {
-				t.Fatalf("effect %v, want NotSent", outcomeOf(err).Effect)
+			if outcomeOf(err).Effect != EffectNotSent {
+				t.Fatalf("effect %v, want EffectNotSent", outcomeOf(err).Effect)
 			}
 
 			if _, err := os.Stat(filepath.Join(dir, "ran")); !errors.Is(err, os.ErrNotExist) {
@@ -283,6 +307,8 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 
 	var wg sync.WaitGroup
 
+	openGate := gateOnCleanup(t, dir, wg.Wait)
+
 	errs := make(chan error, callers)
 	for range callers {
 		wg.Go(func() { errs <- p.Kill(context.Background()) })
@@ -300,14 +326,11 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 	defer cancel()
 
 	err := p.Kill(waiting)
-	if !errors.Is(err, context.DeadlineExceeded) || outcomeOf(err).Effect != NotSent {
-		t.Fatalf("caller waiting for admission: got %v (effect %v), want DeadlineExceeded and NotSent", err, outcomeOf(err).Effect)
+	if !errors.Is(err, context.DeadlineExceeded) || outcomeOf(err).Effect != EffectNotSent {
+		t.Fatalf("caller waiting for admission: got %v (effect %v), want DeadlineExceeded and EffectNotSent", err, outcomeOf(err).Effect)
 	}
 
-	if err := os.WriteFile(filepath.Join(dir, "gate"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
+	openGate()
 	wg.Wait()
 	close(errs)
 
@@ -345,15 +368,16 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 		t.Fatal(err)
 	}
 
+	wait := sync.OnceValue(cmd.Wait)
+	openGate := gateOnCleanup(t, dir, func() { _ = wait() })
+
 	waitForFiles(t, filepath.Join(dir, "started"), 1)
 	// Outlive CommandTimeout; if it applied, the process would be killed now.
 	time.Sleep(3 * commandTimeout)
 
-	if err := os.WriteFile(filepath.Join(dir, "gate"), nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	openGate()
 
-	if err := cmd.Wait(); err != nil {
+	if err := wait(); err != nil {
 		t.Fatalf("prepared command did not outlive CommandTimeout: %v", err)
 	}
 }
@@ -367,11 +391,11 @@ func TestDecodeFailureAfterCreationIsConfirmed(t *testing.T) {
 		rawID   string
 		create  func(*Server) error
 	}{
-		{"Split", paneFixture, PaneKind, "pane_width", "%7", func(s *Server) error {
+		{"Split", paneFixture, ObjectKindPane, "pane_width", "%7", func(s *Server) error {
 			_, e := unprobedPane(t, s).Split(context.Background(), SplitOptions{}) //nolint:exhaustruct_v5 // default split
 			return e
 		}},
-		{"NewWindow", windowFixture, WindowKind, "window_width", "@2", func(s *Server) error {
+		{"NewWindow", windowFixture, ObjectKindWindow, "window_width", "@2", func(s *Server) error {
 			session, e := s.SessionHandle("$0")
 			if e != nil {
 				return e
@@ -400,8 +424,8 @@ func TestDecodeFailureAfterCreationIsConfirmed(t *testing.T) {
 			err := tc.create(s)
 
 			var op *OperationError
-			if !errors.As(err, &op) || op.Outcome.Effect != Confirmed {
-				t.Fatalf("got %v, want an OperationError with effect Confirmed", err)
+			if !errors.As(err, &op) || op.Outcome.Effect != EffectConfirmed {
+				t.Fatalf("got %v, want an OperationError with effect EffectConfirmed", err)
 			}
 
 			if len(op.Outcome.Created) != 1 || op.Outcome.Created[0].Kind != tc.kind || op.Outcome.Created[0].RawID != tc.rawID {
@@ -453,15 +477,15 @@ esac
 
 			var opts NewSessionOptions
 
-			opts.Start = AllowStart
+			opts.Start = StartPolicyAllowStart
 			_, err := s.NewSession(context.Background(), opts)
 
 			_, statErr := os.Stat(filepath.Join(dir, "started"))
 			started := statErr == nil
 
 			if tc.refused {
-				if !errors.Is(err, ErrUnsupported) || outcomeOf(err).Effect != NotSent {
-					t.Fatalf("got %v (effect %v), want ErrUnsupported and NotSent", err, outcomeOf(err).Effect)
+				if !errors.Is(err, ErrUnsupported) || outcomeOf(err).Effect != EffectNotSent {
+					t.Fatalf("got %v (effect %v), want ErrUnsupported and EffectNotSent", err, outcomeOf(err).Effect)
 				}
 
 				if started {
@@ -541,8 +565,8 @@ func TestNamesTmuxWouldAlterAreRejected(t *testing.T) {
 		for _, name := range tc.names {
 			t.Run(tc.entry+"/"+strconv.Quote(name), func(t *testing.T) {
 				err := tc.call(name)
-				if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != NotSent {
-					t.Fatalf("got %v (effect %v), want ErrInvalidArgument and NotSent", err, outcomeOf(err).Effect)
+				if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent {
+					t.Fatalf("got %v (effect %v), want ErrInvalidArgument and EffectNotSent", err, outcomeOf(err).Effect)
 				}
 
 				if _, err := os.Stat(filepath.Join(dir, "ran")); !errors.Is(err, os.ErrNotExist) {

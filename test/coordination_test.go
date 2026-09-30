@@ -20,7 +20,7 @@ func TestIntegrationCoordinationWait(t *testing.T) {
 		t.Fatalf("deadline-free wait: %v", err)
 	}
 	// tmux retains a signal sent before a waiter, eliminating a timing race.
-	if err := server.Signal(ctx, "channel"); err != nil {
+	if err := server.Notify(ctx, "channel"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -35,7 +35,7 @@ func TestIntegrationCoordinationWait(t *testing.T) {
 		t.Fatalf("unsignaled wait: %v", err)
 	}
 	// Release any server-side waiter left by cancellation, then prove readmission.
-	if err := server.Signal(ctx, "unsignaled"); err != nil {
+	if err := server.Notify(ctx, "unsignaled"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -89,7 +89,7 @@ func TestIntegrationCoordinationCallerDeadlineBoundsWaits(t *testing.T) {
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         tmux.LogNone,
+		LogLevel:         tmux.LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -97,7 +97,7 @@ func TestIntegrationCoordinationCallerDeadlineBoundsWaits(t *testing.T) {
 	}
 
 	t.Run("WaitFor", func(t *testing.T) {
-		signal := time.AfterFunc(release, func() { _ = server.Signal(ctx, "late") })
+		signal := time.AfterFunc(release, func() { _ = server.Notify(ctx, "late") })
 		defer signal.Stop()
 
 		if err := short.WaitFor(ctx, "late"); err != nil {
@@ -138,8 +138,8 @@ func TestIntegrationCoordinationWaitsRefuseControlTransport(t *testing.T) {
 			err := tc.call()
 
 			var op *tmux.OperationError
-			if !errors.Is(err, tmux.ErrTransportUnsupported) || !errors.As(err, &op) || op.Outcome.Effect != tmux.NotSent {
-				t.Fatalf("got %v, want ErrTransportUnsupported with effect NotSent", err)
+			if !errors.Is(err, tmux.ErrTransportUnsupported) || !errors.As(err, &op) || op.Outcome.Effect != tmux.EffectNotSent {
+				t.Fatalf("got %v, want ErrTransportUnsupported with effect EffectNotSent", err)
 			}
 		})
 	}
@@ -170,7 +170,7 @@ func TestIntegrationSourceParseOnly(t *testing.T) {
 	}
 
 	value, err := session.Options().User(ctx, "@source-effect")
-	if err != nil || value.Local.State() != tmux.Unavailable {
+	if err != nil || value.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("parse-only had effects: %+v, %v", value, err)
 	}
 
@@ -232,7 +232,7 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 	}
 
 	steps := failure.Outcome.Steps
-	if steps[0].Effect != tmux.Confirmed || steps[1].Effect == tmux.Confirmed || steps[2].Effect != tmux.NotSent {
+	if steps[0].Effect != tmux.EffectConfirmed || steps[1].Effect == tmux.EffectConfirmed || steps[2].Effect != tmux.EffectNotSent {
 		t.Fatalf("partial effects: %+v", steps)
 	}
 
@@ -249,14 +249,14 @@ func TestIntegrationRunShellDelay(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	res, err := server.RunShell(ctx, "echo delay_test", tmux.RunShellOptions{
-		Delay: 0.05,
+		Delay: 50 * time.Millisecond,
 	})
 	if err != nil || res.ExitCode != 0 {
 		t.Fatalf("expected RunShell with Delay 0.05 to succeed, got err=%v, res=%+v", err, res)
 	}
 
 	_, err = server.RunShell(ctx, "echo delay_negative", tmux.RunShellOptions{
-		Delay: -1,
+		Delay: -time.Second,
 	})
 	if !errors.Is(err, tmux.ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for negative Delay, got: %v", err)
@@ -299,7 +299,7 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	}
 
 	val, err := session.Options().User(ctx, "@parse_only")
-	if err != nil || val.Local.State() != tmux.Unavailable {
+	if err != nil || val.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("ParseOnly option was unexpectedly set: %+v, %v", val, err)
 	}
 
@@ -339,7 +339,7 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 
 	var shellOptions tmux.RunShellOptions
 
-	shellOptions.Delay = 0.05
+	shellOptions.Delay = 50 * time.Millisecond
 
 	res, err := server.RunShell(ctx, shellScript, shellOptions)
 	if err != nil || res.ExitCode != 0 {

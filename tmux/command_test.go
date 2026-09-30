@@ -25,8 +25,8 @@ func TestParseCommandLine_Standard(t *testing.T) {
 		t.Errorf("expected ConfigFile /etc/tmux.conf, got %q", parsed.Config.ConfigFile)
 	}
 
-	if parsed.Action != ActionCommand {
-		t.Errorf("expected ActionCommand, got %v", parsed.Action)
+	if parsed.Action != CommandLineActionCommand {
+		t.Errorf("expected CommandLineActionCommand, got %v", parsed.Action)
 	}
 
 	cmd, ok := parsed.Command()
@@ -62,20 +62,20 @@ func TestParseCommandLine_FlagsOnly(t *testing.T) {
 		t.Fatalf("expected flags-only to succeed, got %v", err)
 	}
 
-	if parsedFlagsOnly.Action != ActionDefault {
-		t.Errorf("expected ActionDefault, got %v", parsedFlagsOnly.Action)
+	if parsedFlagsOnly.Action != CommandLineActionDefault {
+		t.Errorf("expected CommandLineActionDefault, got %v", parsedFlagsOnly.Action)
 	}
 
 	if parsedFlagsOnly.Config.UTF8 != UTF8Force {
 		t.Errorf("expected UTF8Force, got %v", parsedFlagsOnly.Config.UTF8)
 	}
 
-	if parsedFlagsOnly.Config.LogLevel != LogVerbose {
-		t.Errorf("expected LogVerbose, got %v", parsedFlagsOnly.Config.LogLevel)
+	if parsedFlagsOnly.Config.LogLevel != LogLevelVerbose {
+		t.Errorf("expected LogLevelVerbose, got %v", parsedFlagsOnly.Config.LogLevel)
 	}
 
 	if _, ok := parsedFlagsOnly.Command(); ok {
-		t.Error("expected Command() to return false on ActionDefault")
+		t.Error("expected Command() to return false on CommandLineActionDefault")
 	}
 }
 
@@ -85,8 +85,8 @@ func TestParseCommandLine_ShellAndForeground(t *testing.T) {
 		t.Fatalf("ParseCommandLine -c failed: %v", err)
 	}
 
-	if parsedShell.Action != ActionShell || parsedShell.ShellCommand != "echo hello" {
-		t.Errorf("expected ActionShell with 'echo hello', got action=%v, cmd=%q", parsedShell.Action, parsedShell.ShellCommand)
+	if parsedShell.Action != CommandLineActionShell || parsedShell.ShellCommand != "echo hello" {
+		t.Errorf("expected CommandLineActionShell with 'echo hello', got action=%v, cmd=%q", parsedShell.Action, parsedShell.ShellCommand)
 	}
 
 	parsedFg, err := ParseCommandLine([]string{"-D"})
@@ -94,31 +94,31 @@ func TestParseCommandLine_ShellAndForeground(t *testing.T) {
 		t.Fatalf("ParseCommandLine -D failed: %v", err)
 	}
 
-	if parsedFg.Action != ActionForeground {
-		t.Errorf("expected ActionForeground, got %v", parsedFg.Action)
+	if parsedFg.Action != CommandLineActionForeground {
+		t.Errorf("expected CommandLineActionForeground, got %v", parsedFg.Action)
 	}
 }
 
 func TestParseCommandLine_HelpAndVersion(t *testing.T) {
 	parsedHelp, err := ParseCommandLine([]string{"-h"})
-	if err != nil || parsedHelp.Action != ActionHelp {
-		t.Errorf("expected ActionHelp, got %v, err=%v", parsedHelp.Action, err)
+	if err != nil || parsedHelp.Action != CommandLineActionHelp {
+		t.Errorf("expected CommandLineActionHelp, got %v, err=%v", parsedHelp.Action, err)
 	}
 
 	parsedVer, err := ParseCommandLine([]string{"-V"})
-	if err != nil || parsedVer.Action != ActionVersion {
-		t.Errorf("expected ActionVersion, got %v, err=%v", parsedVer.Action, err)
+	if err != nil || parsedVer.Action != CommandLineActionVersion {
+		t.Errorf("expected CommandLineActionVersion, got %v, err=%v", parsedVer.Action, err)
 	}
 
 	// -h and -V take precedence over -C
 	parsedHelpControl, err := ParseCommandLine([]string{"-C", "-h"})
-	if err != nil || parsedHelpControl.Action != ActionHelp {
-		t.Errorf("expected ActionHelp with -C -h, got %v, err=%v", parsedHelpControl.Action, err)
+	if err != nil || parsedHelpControl.Action != CommandLineActionHelp {
+		t.Errorf("expected CommandLineActionHelp with -C -h, got %v, err=%v", parsedHelpControl.Action, err)
 	}
 
 	parsedVerControl, err := ParseCommandLine([]string{"-C", "-V"})
-	if err != nil || parsedVerControl.Action != ActionVersion {
-		t.Errorf("expected ActionVersion with -C -V, got %v, err=%v", parsedVerControl.Action, err)
+	if err != nil || parsedVerControl.Action != CommandLineActionVersion {
+		t.Errorf("expected CommandLineActionVersion with -C -V, got %v, err=%v", parsedVerControl.Action, err)
 	}
 }
 
@@ -140,12 +140,12 @@ func TestParseCommandLine_BundledAndFeatures(t *testing.T) {
 		t.Error("expected LoginShell=true")
 	}
 
-	if parsedBundle.Config.LogLevel != LogDebug {
-		t.Errorf("expected LogDebug, got %v", parsedBundle.Config.LogLevel)
+	if parsedBundle.Config.LogLevel != LogLevelDebug {
+		t.Errorf("expected LogLevelDebug, got %v", parsedBundle.Config.LogLevel)
 	}
 
-	if parsedBundle.StartPolicy != ExistingOnly {
-		t.Errorf("expected ExistingOnly, got %v", parsedBundle.StartPolicy)
+	if parsedBundle.StartPolicy != StartPolicyExistingOnly {
+		t.Errorf("expected StartPolicyExistingOnly, got %v", parsedBundle.StartPolicy)
 	}
 
 	parsedFeat, err := ParseCommandLine([]string{"-T", "256,RGB", "list-windows"})
@@ -160,13 +160,13 @@ func TestParseCommandLine_BundledAndFeatures(t *testing.T) {
 
 func TestParseCommandLine_ControlModes(t *testing.T) {
 	parsedC, err := ParseCommandLine([]string{"-C"})
-	if err != nil || parsedC.Action != ActionControl || parsedC.ControlNoEcho {
-		t.Errorf("expected ActionControl with ControlNoEcho=false, got %+v, err=%v", parsedC, err)
+	if err != nil || parsedC.Action != CommandLineActionControl || parsedC.ControlNoEcho {
+		t.Errorf("expected CommandLineActionControl with ControlNoEcho=false, got %+v, err=%v", parsedC, err)
 	}
 
 	parsedCC, err := ParseCommandLine([]string{"-CC"})
-	if err != nil || parsedCC.Action != ActionControl || !parsedCC.ControlNoEcho {
-		t.Errorf("expected ActionControl with ControlNoEcho=true, got %+v, err=%v", parsedCC, err)
+	if err != nil || parsedCC.Action != CommandLineActionControl || !parsedCC.ControlNoEcho {
+		t.Errorf("expected CommandLineActionControl with ControlNoEcho=true, got %+v, err=%v", parsedCC, err)
 	}
 }
 
@@ -176,8 +176,8 @@ func TestParseCommandLine_CommandSequence(t *testing.T) {
 		t.Fatalf("ParseCommandLine sequence failed: %v", err)
 	}
 
-	if parsedSeq.Action != ActionCommand {
-		t.Errorf("expected ActionCommand, got %v", parsedSeq.Action)
+	if parsedSeq.Action != CommandLineActionCommand {
+		t.Errorf("expected CommandLineActionCommand, got %v", parsedSeq.Action)
 	}
 
 	if len(parsedSeq.Commands.Commands()) != 2 {
@@ -313,7 +313,7 @@ func TestDiscoverSockets(t *testing.T) {
 		UTF8:             UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         LogNone,
+		LogLevel:         LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -333,7 +333,7 @@ func TestPrepareAttachTargetValidation(t *testing.T) {
 	s := localServer(t)
 
 	// Valid target string (session name)
-	streams := TerminalStreams{
+	streams := Streams{
 		In:  os.Stdin,
 		Out: os.Stdout,
 		Err: os.Stderr,
@@ -389,7 +389,7 @@ func TestRunWithValidation(t *testing.T) {
 
 	// Invalid command
 	badCmd := Command{name: "invalid name with space", args: nil}
-	if _, err := s.RunWith(t.Context(), badCmd, RunOptions{Start: AllowStart, Input: nil}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.RunWith(t.Context(), badCmd, RunOptions{Start: StartPolicyAllowStart, Input: nil}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid command, got %v", err)
 	}
 
@@ -406,7 +406,7 @@ func TestRunSequenceWithValidation(t *testing.T) {
 	// Empty sequence short-circuit
 	emptySeq := CommandSequence{commands: nil}
 
-	res, err := s.RunSequenceWith(t.Context(), emptySeq, RunOptions{Start: AllowStart, Input: nil})
+	res, err := s.RunSequenceWith(t.Context(), emptySeq, RunOptions{Start: StartPolicyAllowStart, Input: nil})
 	if err != nil {
 		t.Fatalf("expected empty sequence to succeed, got %v", err)
 	}
@@ -434,7 +434,7 @@ func TestControlModeUpfrontRejection(t *testing.T) {
 		t.Fatalf("expected ErrTransportUnsupported for Run on control server, got %v", err)
 	}
 
-	if _, err := s.RunWith(t.Context(), cmd, RunOptions{Start: AllowStart, Input: nil}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := s.RunWith(t.Context(), cmd, RunOptions{Start: StartPolicyAllowStart, Input: nil}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for RunWith on control server, got %v", err)
 	}
 
@@ -448,7 +448,7 @@ func TestControlModeUpfrontRejection(t *testing.T) {
 		t.Fatalf("expected ErrTransportUnsupported for empty RunSequence on control server, got %v", err)
 	}
 
-	if _, err := s.RunSequenceWith(t.Context(), emptySeq, RunOptions{Start: AllowStart, Input: nil}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := s.RunSequenceWith(t.Context(), emptySeq, RunOptions{Start: StartPolicyAllowStart, Input: nil}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for empty RunSequenceWith on control server, got %v", err)
 	}
 
@@ -477,7 +477,7 @@ func TestSourceTextValidation(t *testing.T) {
 		UTF8:             UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         LogNone,
+		LogLevel:         LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -497,25 +497,25 @@ func TestPrepareControlModeRejection(t *testing.T) {
 	cmd, _ := NewCommand("display-message", "hello")
 	seq, _ := Sequence(cmd)
 	streams := Streams{In: nil, Out: nil, Err: nil}
-	termStreams := TerminalStreams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	termStreams := Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 
-	if _, err := sControl.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareCommand on control server, got %v", err)
 	}
 
-	if _, err := sControl.PrepareSequence(t.Context(), seq, streams, CommandOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareSequence(t.Context(), seq, streams, CommandOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareSequence on control server, got %v", err)
 	}
 
-	if _, err := sControl.PrepareTerminal(t.Context(), cmd, termStreams, TerminalOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareTerminal(t.Context(), cmd, termStreams, TerminalOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareTerminal on control server, got %v", err)
 	}
 
-	if _, err := sControl.PrepareTerminalSequence(t.Context(), seq, termStreams, TerminalOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareTerminalSequence(t.Context(), seq, termStreams, TerminalOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareTerminalSequence on control server, got %v", err)
 	}
 
-	if _, err := sControl.PrepareDefaultTerminal(t.Context(), termStreams, TerminalOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareDefaultTerminal(t.Context(), termStreams, TerminalOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareDefaultTerminal on control server, got %v", err)
 	}
 
@@ -523,11 +523,11 @@ func TestPrepareControlModeRejection(t *testing.T) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareForegroundServer on control server, got %v", err)
 	}
 
-	if _, err := sControl.PrepareRootShell(t.Context(), "echo hi", streams, RootShellOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.PrepareRootShell(t.Context(), "echo hi", streams, RootShellOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for PrepareRootShell on control server, got %v", err)
 	}
 
-	if _, err := sControl.RunRootShell(t.Context(), "echo hi", RootShellOptions{Start: AllowStart}); !errors.Is(err, ErrTransportUnsupported) {
+	if _, err := sControl.RunRootShell(t.Context(), "echo hi", RootShellOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrTransportUnsupported) {
 		t.Fatalf("expected ErrTransportUnsupported for RunRootShell on control server, got %v", err)
 	}
 }
@@ -536,9 +536,9 @@ func TestPrepareCommandAndSequenceValidation(t *testing.T) {
 	s := localServer(t)
 	cmd, _ := NewCommand("display-message", "hello")
 	streams := Streams{In: nil, Out: nil, Err: nil}
-	termStreams := TerminalStreams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	termStreams := Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 
-	prepCmd, err := s.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: AllowStart})
+	prepCmd, err := s.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("PrepareCommand failed for valid command: %v", err)
 	}
@@ -548,16 +548,16 @@ func TestPrepareCommandAndSequenceValidation(t *testing.T) {
 	}
 
 	badCmd := Command{name: "invalid command", args: nil}
-	if _, err := s.PrepareCommand(t.Context(), badCmd, streams, CommandOptions{Start: AllowStart}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.PrepareCommand(t.Context(), badCmd, streams, CommandOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid command, got %v", err)
 	}
 
 	emptySeq := CommandSequence{commands: nil}
-	if _, err := s.PrepareSequence(t.Context(), emptySeq, streams, CommandOptions{Start: AllowStart}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.PrepareSequence(t.Context(), emptySeq, streams, CommandOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for empty sequence, got %v", err)
 	}
 
-	if _, err := s.PrepareTerminalSequence(t.Context(), emptySeq, termStreams, TerminalOptions{Start: AllowStart}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.PrepareTerminalSequence(t.Context(), emptySeq, termStreams, TerminalOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for empty terminal sequence, got %v", err)
 	}
 }
@@ -567,7 +567,7 @@ func TestPrepareStartPolicyValidation(t *testing.T) {
 	cmd, _ := NewCommand("display-message", "hello")
 	seq, _ := Sequence(cmd)
 	streams := Streams{In: nil, Out: nil, Err: nil}
-	termStreams := TerminalStreams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	termStreams := Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 
 	if _, err := s.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: StartPolicy(99)}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid StartPolicy on PrepareCommand, got %v", err)
@@ -589,13 +589,13 @@ func TestPrepareStartPolicyValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for invalid StartPolicy on PrepareDefaultTerminal, got %v", err)
 	}
 
-	prepExisting, err := s.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: ExistingOnly})
+	prepExisting, err := s.PrepareCommand(t.Context(), cmd, streams, CommandOptions{Start: StartPolicyExistingOnly})
 	if err != nil {
 		t.Fatalf("PrepareCommand failed: %v", err)
 	}
 
 	if !slices.Contains(prepExisting.Args, "-N") {
-		t.Errorf("expected -N in PrepareCommand args for ExistingOnly, got %v", prepExisting.Args)
+		t.Errorf("expected -N in PrepareCommand args for StartPolicyExistingOnly, got %v", prepExisting.Args)
 	}
 }
 
@@ -616,7 +616,7 @@ func TestPrepareRootShellValidation(t *testing.T) {
 	s := localServer(t)
 	streams := Streams{In: nil, Out: nil, Err: nil}
 
-	shCmd, err := s.PrepareRootShell(t.Context(), "echo root", streams, RootShellOptions{Start: AllowStart})
+	shCmd, err := s.PrepareRootShell(t.Context(), "echo root", streams, RootShellOptions{Start: StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("PrepareRootShell failed: %v", err)
 	}
@@ -634,7 +634,7 @@ func TestPrepareRootShellValidation(t *testing.T) {
 		t.Fatalf("expected -c 'echo root' in PrepareRootShell args, got %v", shCmd.Args)
 	}
 
-	if _, err := s.PrepareRootShell(t.Context(), "bad\x00cmd", streams, RootShellOptions{Start: AllowStart}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.PrepareRootShell(t.Context(), "bad\x00cmd", streams, RootShellOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for PrepareRootShell with NUL, got %v", err)
 	}
 
@@ -642,20 +642,20 @@ func TestPrepareRootShellValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for invalid StartPolicy on PrepareRootShell, got %v", err)
 	}
 
-	shExisting, err := s.PrepareRootShell(t.Context(), "echo hi", streams, RootShellOptions{Start: ExistingOnly})
+	shExisting, err := s.PrepareRootShell(t.Context(), "echo hi", streams, RootShellOptions{Start: StartPolicyExistingOnly})
 	if err != nil {
 		t.Fatalf("PrepareRootShell failed: %v", err)
 	}
 
 	if !slices.Contains(shExisting.Args, "-N") {
-		t.Errorf("expected -N in PrepareRootShell args for ExistingOnly, got %v", shExisting.Args)
+		t.Errorf("expected -N in PrepareRootShell args for StartPolicyExistingOnly, got %v", shExisting.Args)
 	}
 }
 
 func TestRunRootShellValidation(t *testing.T) {
 	s := localServer(t)
 
-	if _, err := s.RunRootShell(t.Context(), "bad\x00cmd", RootShellOptions{Start: AllowStart}); !errors.Is(err, ErrInvalidArgument) {
+	if _, err := s.RunRootShell(t.Context(), "bad\x00cmd", RootShellOptions{Start: StartPolicyAllowStart}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for RunRootShell with NUL, got %v", err)
 	}
 
@@ -666,7 +666,7 @@ func TestRunRootShellValidation(t *testing.T) {
 
 func TestAttachOptionsValidation(t *testing.T) {
 	s := localServer(t)
-	termStreams := TerminalStreams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
+	termStreams := Streams{In: os.Stdin, Out: os.Stdout, Err: os.Stderr}
 
 	if _, err := s.PrepareAttachTarget(t.Context(), "dev", termStreams, AttachOptions{ReadOnly: false, PreserveEnvironment: false, Detach: DetachMode(99), Dir: "", Flags: nil}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid DetachMode, got %v", err)
@@ -757,12 +757,12 @@ func TestNilServerMethods(t *testing.T) {
 	}{
 		{"Run", func() error { _, e := s.Run(context.Background(), c); return e }},
 		{"RunWith", func() error {
-			_, e := s.RunWith(context.Background(), c, RunOptions{Start: AllowStart, Input: nil})
+			_, e := s.RunWith(context.Background(), c, RunOptions{Start: StartPolicyAllowStart, Input: nil})
 			return e
 		}},
 		{"RunSequence", func() error { _, e := s.RunSequence(context.Background(), seq); return e }},
 		{"RunSequenceWith", func() error {
-			_, e := s.RunSequenceWith(context.Background(), seq, RunOptions{Start: AllowStart, Input: nil})
+			_, e := s.RunSequenceWith(context.Background(), seq, RunOptions{Start: StartPolicyAllowStart, Input: nil})
 			return e
 		}},
 		{"SourceText", func() error {

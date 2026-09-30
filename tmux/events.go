@@ -536,7 +536,7 @@ func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event
 		tail = data
 	}
 
-	data, err := wire.Octal([]byte(tail), maxBytes)
+	data, err := wire.DecodeOctal([]byte(tail), maxBytes)
 	if err != nil {
 		return nil, ErrProtocol
 	}

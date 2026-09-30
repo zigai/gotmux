@@ -68,7 +68,7 @@ func assertHook(t *testing.T, ctx context.Context, session tmux.Session, name st
 			t.Fatalf("removed hook remains: %+v", hook)
 		}
 
-		if hook.Scope != tmux.SessionScope {
+		if hook.Scope != tmux.ScopeSession {
 			t.Fatalf("scope = %v", hook.Scope)
 		}
 
@@ -228,7 +228,7 @@ func TestUnindexedHookList(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sub, err := server.UsingSubprocess()
+	sub, err := server.ViaSubprocess()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -425,9 +425,9 @@ func assertUnbindAll(t *testing.T, ctx context.Context, server *tmux.Server, tab
 func soleBinding(t *testing.T, ctx context.Context, server *tmux.Server, key tmux.Key) tmux.BindingInfo {
 	t.Helper()
 
-	bindings, err := server.BindingsWith(ctx, tmux.BindingsOptions{Table: "root", Key: key})
+	bindings, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: "root", Key: key})
 	if err != nil || len(bindings) != 1 || bindings[0].Key != key {
-		t.Fatalf("BindingsWith(root, %s) = %+v, %v; want one binding for the key", key, bindings, err)
+		t.Fatalf("FindBindings(root, %s) = %+v, %v; want one binding for the key", key, bindings, err)
 	}
 
 	return bindings[0]

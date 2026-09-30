@@ -63,7 +63,7 @@ func TestMalformedRecords(t *testing.T) {
 func TestQuotedWords(t *testing.T) {
 	for _, text := range []string{"", "a b", "a\tb\n", `;'"\$#{}[]`, "\\;", "--", "\xff\xfe", "${HOME}", "$(touch never)", "`date`", "~", "~/file", "~root"} {
 		var b strings.Builder
-		if err := Quoted(&b, text); err != nil {
+		if err := WriteQuoted(&b, text); err != nil {
 			t.Fatal(err)
 		}
 
@@ -74,7 +74,7 @@ func TestQuotedWords(t *testing.T) {
 	}
 
 	var b strings.Builder
-	if err := Quoted(&b, "x\x00y"); err == nil {
+	if err := WriteQuoted(&b, "x\x00y"); err == nil {
 		t.Fatal("NUL accepted")
 	}
 }
@@ -124,10 +124,10 @@ func TestParseWordsRefusesSyntaxTmuxEvaluates(t *testing.T) {
 	}
 }
 
-func TestArgvTrailingSemicolon(t *testing.T) {
+func TestEscapeArgTrailingSemicolon(t *testing.T) {
 	// Reference cmd_parse_from_arguments behavior from the pinned tmux parser.
 	for _, input := range []string{";", "x;", `x\;`, `x\\;`, `a;b`, `\`, "", ";;"} {
-		encoded := Argv(input)
+		encoded := EscapeArg(input)
 
 		decoded := encoded
 		if strings.HasSuffix(encoded, ";") {
@@ -144,23 +144,23 @@ func TestArgvTrailingSemicolon(t *testing.T) {
 	}
 }
 
-func TestOctal(t *testing.T) {
-	got, err := Octal([]byte(`a\000\012\015\134\377`), 6)
+func TestDecodeOctal(t *testing.T) {
+	got, err := DecodeOctal([]byte(`a\000\012\015\134\377`), 6)
 	if err != nil || !bytes.Equal(got, []byte{'a', 0, '\n', '\r', '\\', 255}) {
 		t.Fatalf("%q %v", got, err)
 	}
 
 	for _, s := range []string{`\`, `\12`, `\12x`, `\400`, `\999`} {
-		if _, err := Octal([]byte(s), 100); err == nil {
+		if _, err := DecodeOctal([]byte(s), 100); err == nil {
 			t.Errorf("accepted %q", s)
 		}
 	}
 
-	if _, err := Octal([]byte("abc"), 2); err == nil {
+	if _, err := DecodeOctal([]byte("abc"), 2); err == nil {
 		t.Fatal("overflow accepted")
 	}
 
-	if _, err := Octal(nil, -1); err == nil {
+	if _, err := DecodeOctal(nil, -1); err == nil {
 		t.Fatal("negative limit")
 	}
 }
@@ -217,7 +217,7 @@ func FuzzRecords(f *testing.F) {
 	})
 }
 
-func FuzzQuoted(f *testing.F) {
+func FuzzWriteQuoted(f *testing.F) {
 	f.Add(`a;$HOME "x"`)
 	f.Add("\xff\n")
 	f.Fuzz(func(t *testing.T, s string) {
@@ -226,7 +226,7 @@ func FuzzQuoted(f *testing.F) {
 		}
 
 		var b strings.Builder
-		if err := Quoted(&b, s); err != nil {
+		if err := WriteQuoted(&b, s); err != nil {
 			t.Fatal(err)
 		}
 
@@ -237,14 +237,14 @@ func FuzzQuoted(f *testing.F) {
 	})
 }
 
-func FuzzOctal(f *testing.F) {
+func FuzzDecodeOctal(f *testing.F) {
 	f.Add([]byte(`\000\377`))
 	f.Fuzz(func(t *testing.T, b []byte) {
 		if len(b) > 8192 {
 			return
 		}
 
-		out, _ := Octal(b, 2048)
+		out, _ := DecodeOctal(b, 2048)
 		if len(out) > 2048 {
 			t.Fatal("limit")
 		}

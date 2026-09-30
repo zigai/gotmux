@@ -68,7 +68,7 @@ func TestIntegrationTypedOptionKey(t *testing.T) {
 	}
 
 	key, err = session.Options().Prefix(ctx)
-	if err != nil || key.Local.State() != tmux.Unavailable {
+	if err != nil || key.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("unset key: %+v, %v", key, err)
 	}
 }

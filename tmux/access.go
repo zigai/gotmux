@@ -29,35 +29,41 @@ type (
 
 	// AccessOptions configures server socket access permissions (server-access -a).
 	AccessOptions struct {
-		// Group specifies that the target is a UNIX group name rather than a user (-g flag).
-		Group bool
+		// IsGroup specifies that the target is a UNIX group name rather than a user (-g flag).
+		IsGroup bool
 
 		// ReadOnly restricts the user or group to read-only access (-r flag).
 		// If false, read-write access is granted (-w flag).
 		ReadOnly bool
+	}
+
+	// RevokeAccessOptions configures [Server.RevokeAccess].
+	RevokeAccessOptions struct {
+		// IsGroup specifies that the name is a UNIX group rather than a user (-g flag).
+		IsGroup bool
 	}
 )
 
 // AccessList returns the current list of users and groups permitted to access the server socket (server-access -l).
 func (s *Server) AccessList(ctx context.Context) ([]AccessEntry, error) {
 	if s == nil {
-		return nil, opError("AccessList", ErrInvalidHandle)
+		return nil, opError("Server.AccessList", ErrInvalidHandle)
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("AccessList", err)
+		return nil, opError("Server.AccessList", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("AccessList", err)
+		return nil, opError("Server.AccessList", err)
 	}
 
 	r, err := s.execute(opCtx, op, plainPlan(command("server-access", "-l")), newGuard(info.Identity), nil)
 	if err != nil {
-		return nil, opError("AccessList", err)
+		return nil, opError("Server.AccessList", err)
 	}
 
 	var entries []AccessEntry
@@ -130,15 +136,15 @@ func parseAccessLine(line string) (AccessEntry, bool) {
 // GrantAccess grants or modifies socket access for a user or group (server-access -a).
 func (s *Server) GrantAccess(ctx context.Context, name string, opts AccessOptions) error {
 	if s == nil {
-		return opError("GrantAccess", ErrInvalidHandle)
+		return opError("Server.GrantAccess", ErrInvalidHandle)
 	}
 
 	if name == "" || !wire.ValidString(name) {
-		return opError("GrantAccess", invalid("name"))
+		return opError("Server.GrantAccess", invalid("name"))
 	}
 
 	var args []string
-	if opts.Group {
+	if opts.IsGroup {
 		args = append(args, "-g")
 	}
 
@@ -150,26 +156,26 @@ func (s *Server) GrantAccess(ctx context.Context, name string, opts AccessOption
 
 	args = append(args, "--", name)
 
-	return s.endpointAction(ctx, "server-access", args...)
+	return s.endpointAction(ctx, "Server.GrantAccess", "server-access", args...)
 }
 
 // RevokeAccess revokes socket access for a user or group (server-access -d).
 // If the user is currently attached, tmux automatically detaches their clients.
-func (s *Server) RevokeAccess(ctx context.Context, name string, isGroup bool) error {
+func (s *Server) RevokeAccess(ctx context.Context, name string, opts RevokeAccessOptions) error {
 	if s == nil {
-		return opError("RevokeAccess", ErrInvalidHandle)
+		return opError("Server.RevokeAccess", ErrInvalidHandle)
 	}
 
 	if name == "" || !wire.ValidString(name) {
-		return opError("RevokeAccess", invalid("name"))
+		return opError("Server.RevokeAccess", invalid("name"))
 	}
 
 	args := []string{"-d"}
-	if isGroup {
+	if opts.IsGroup {
 		args = append(args, "-g")
 	}
 
 	args = append(args, "--", name)
 
-	return s.endpointAction(ctx, "server-access", args...)
+	return s.endpointAction(ctx, "Server.RevokeAccess", "server-access", args...)
 }

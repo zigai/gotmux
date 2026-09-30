@@ -109,25 +109,25 @@ func (b BufferInfo) Ref() BufferRef {
 func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Buffers", err)
+		return nil, opError("Server.Buffers", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Buffers", err)
+		return nil, opError("Server.Buffers", err)
 	}
 
 	fields := schema.WithIdentity([]string{"buffer_name", "buffer_size", "buffer_created"})
 
 	r, err := s.execute(opCtx, op, recordsPlan(command("list-buffers", "-F", wire.RecordFormat(fields))), newGuard(info.Identity), nil)
 	if err != nil {
-		return nil, opError("Buffers", err)
+		return nil, opError("Server.Buffers", err)
 	}
 
 	rows, err := parseRaw(r.Stdout, fields, "buffer")
 	if err != nil {
-		return nil, afterError("Buffers", err)
+		return nil, afterError("Server.Buffers", err)
 	}
 
 	out := []BufferInfo{}
@@ -149,7 +149,7 @@ func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 		}
 
 		if d.err != nil {
-			return nil, afterError("Buffers", d.err)
+			return nil, afterError("Server.Buffers", d.err)
 		}
 
 		out = append(out, v)
@@ -158,27 +158,27 @@ func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 	return out, nil
 }
 
-func (s *Server) bufferOperation(ctx context.Context, name string, b BufferRef, extra []string, input []byte, output bool) (Result, error) {
+func (s *Server) bufferOperation(ctx context.Context, label string, name string, b BufferRef, extra []string, input []byte, output bool) (Result, error) {
 	args, err := b.args()
 	if err != nil {
-		return failedResult(), opError(name, err)
+		return failedResult(), opError(label, err)
 	}
 
 	args = append(args, extra...)
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), opError(name, err)
+		return failedResult(), opError(label, err)
 	}
 	defer op.close()
 
 	if int64(len(input)) > op.input {
-		return failedResult(), opError(name, ErrInputLimit)
+		return failedResult(), opError(label, ErrInputLimit)
 	}
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return failedResult(), opError(name, err)
+		return failedResult(), opError(label, err)
 	}
 
 	p := emptyPlan(command(name, args...))
@@ -193,45 +193,45 @@ func (s *Server) bufferOperation(ctx context.Context, name string, b BufferRef, 
 
 	r, err := s.execute(opCtx, op, p, g, input)
 
-	return r, opError(name, err)
+	return r, opError(label, err)
 }
 
 // WriteBuffer loads binary data into the target paste buffer via stdin.
 // Rejects zero-length data with [ErrUnsupported] because tmux treats empty stdin as a no-op.
-// Over control mode, binary writes must use [Connection.AuxiliaryServer].
+// Over control mode, binary writes must use [Connection.SubprocessServer].
 func (s *Server) WriteBuffer(ctx context.Context, b BufferRef, data []byte) error {
 	if len(data) == 0 {
-		return opError("WriteBuffer", unsupported("zero-length buffer replacement is not representable in stock tmux"))
+		return opError("Server.WriteBuffer", unsupported("zero-length buffer replacement is not representable in stock tmux"))
 	}
 
-	_, err := s.bufferOperation(ctx, "load-buffer", b, []string{"--", "-"}, data, false)
+	_, err := s.bufferOperation(ctx, "Server.WriteBuffer", "load-buffer", b, []string{"--", "-"}, data, false)
 
 	return err
 }
 
 // ReadBuffer reads and returns the complete raw byte contents of the target buffer.
 func (s *Server) ReadBuffer(ctx context.Context, b BufferRef) ([]byte, error) {
-	r, err := s.bufferOperation(ctx, "show-buffer", b, nil, nil, true)
+	r, err := s.bufferOperation(ctx, "Server.ReadBuffer", "show-buffer", b, nil, nil, true)
 	return r.Stdout, err
 }
 
 // DeleteBuffer deletes the specified paste buffer from tmux's buffer stack.
 func (s *Server) DeleteBuffer(ctx context.Context, b BufferRef) error {
-	_, err := s.bufferOperation(ctx, "delete-buffer", b, nil, nil, false)
+	_, err := s.bufferOperation(ctx, "Server.DeleteBuffer", "delete-buffer", b, nil, nil, false)
 	return err
 }
 
 // RenameBuffer renames a paste buffer from oldName to newName.
 func (s *Server) RenameBuffer(ctx context.Context, oldName, newName string) error {
 	if oldName == "" || !wire.ValidString(oldName) {
-		return opError("RenameBuffer", invalid("old buffer name"))
+		return opError("Server.RenameBuffer", invalid("old buffer name"))
 	}
 
 	if newName == "" || !wire.ValidString(newName) {
-		return opError("RenameBuffer", invalid("new buffer name"))
+		return opError("Server.RenameBuffer", invalid("new buffer name"))
 	}
 
-	return s.endpointAction(ctx, "set-buffer", "-b", oldName, "-n", newName)
+	return s.endpointAction(ctx, "Server.RenameBuffer", "set-buffer", "-b", oldName, "-n", newName)
 }
 
 // SetBuffer sets the contents of the named paste buffer to data, overwriting any existing buffer.
@@ -242,15 +242,15 @@ func (s *Server) SetBuffer(ctx context.Context, name string, data []byte) error 
 // SetBufferWith sets the contents of the named paste buffer to data according to opts.
 func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, opts SetBufferOptions) error {
 	if name == "" || !wire.ValidString(name) {
-		return opError("SetBufferWith", invalid("buffer name"))
+		return opError("Server.SetBuffer", invalid("buffer name"))
 	}
 
 	if !wire.ValidString(string(data)) {
-		return opError("SetBufferWith", invalid("buffer data"))
+		return opError("Server.SetBuffer", invalid("buffer data"))
 	}
 
 	if !opts.Append && len(data) == 0 {
-		return opError("SetBufferWith", unsupported("zero-length buffer replacement is not representable in stock tmux"))
+		return opError("Server.SetBuffer", unsupported("zero-length buffer replacement is not representable in stock tmux"))
 	}
 
 	if opts.Append && len(data) == 0 {
@@ -265,16 +265,16 @@ func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, op
 
 	args = append(args, "-b", name, "--", string(data))
 
-	return s.endpointAction(ctx, "set-buffer", args...)
+	return s.endpointAction(ctx, "Server.SetBuffer", "set-buffer", args...)
 }
 
 // LoadBufferFile loads the contents of a filesystem file into the target buffer.
 func (s *Server) LoadBufferFile(ctx context.Context, b BufferRef, path string) error {
 	if path == "" || path == "-" || !wire.ValidString(path) {
-		return opError("LoadBufferFile", invalid("path"))
+		return opError("Server.LoadBufferFile", invalid("path"))
 	}
 
-	_, err := s.bufferOperation(ctx, "load-buffer", b, []string{"--", wire.LiteralFormat(path)}, nil, false)
+	_, err := s.bufferOperation(ctx, "Server.LoadBufferFile", "load-buffer", b, []string{"--", wire.LiteralFormat(path)}, nil, false)
 
 	return err
 }
@@ -283,7 +283,7 @@ func (s *Server) LoadBufferFile(ctx context.Context, b BufferRef, path string) e
 // optionally appending if appendFile is true.
 func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, appendFile bool) error {
 	if path == "" || path == "-" || !wire.ValidString(path) {
-		return opError("SaveBufferFile", invalid("path"))
+		return opError("Server.SaveBufferFile", invalid("path"))
 	}
 
 	args := []string{}
@@ -292,7 +292,7 @@ func (s *Server) SaveBufferFile(ctx context.Context, b BufferRef, path string, a
 	}
 
 	args = append(args, "--", wire.LiteralFormat(path))
-	_, err := s.bufferOperation(ctx, "save-buffer", b, args, nil, false)
+	_, err := s.bufferOperation(ctx, "Server.SaveBufferFile", "save-buffer", b, args, nil, false)
 
 	return err
 }
@@ -352,18 +352,18 @@ func pasteFlags(opts PasteOptions) ([]string, error) {
 func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, opts PasteOptions) error {
 	args, err := b.args()
 	if err != nil {
-		return opError("PasteBuffer", err)
+		return opError("Pane.PasteBuffer", err)
 	}
 
 	flags, err := pasteFlags(opts)
 	if err != nil {
-		return opError("PasteBuffer", err)
+		return opError("Pane.PasteBuffer", err)
 	}
 
 	args = append(args, "-t", p.h.id)
 	args = append(args, flags...)
 
-	return p.h.act(ctx, "paste-buffer", args...)
+	return p.h.act(ctx, "Pane.PasteBuffer", "paste-buffer", args...)
 }
 
 // Paste pastes the contents of the most recently created or modified buffer into this pane using default options.
@@ -374,12 +374,12 @@ func (p Pane) Paste(ctx context.Context) error {
 // PasteWith pastes buffer contents into this pane according to opts.
 func (p Pane) PasteWith(ctx context.Context, opts PasteOptions) error {
 	if opts.Buffer != "" && !wire.ValidString(opts.Buffer) {
-		return opError("PasteWith", invalid("buffer name"))
+		return opError("Pane.Paste", invalid("buffer name"))
 	}
 
 	flags, err := pasteFlags(opts)
 	if err != nil {
-		return opError("PasteWith", err)
+		return opError("Pane.Paste", err)
 	}
 
 	args := []string{"-t", p.h.id}
@@ -389,5 +389,5 @@ func (p Pane) PasteWith(ctx context.Context, opts PasteOptions) error {
 		args = append(args, "-b", opts.Buffer)
 	}
 
-	return p.h.act(ctx, "paste-buffer", args...)
+	return p.h.act(ctx, "Pane.Paste", "paste-buffer", args...)
 }

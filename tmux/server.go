@@ -153,30 +153,31 @@ func (s *Server) Limits() Limits {
 }
 
 // Transport reports whether operations on this server execute via independent
-// short-lived [Subprocess] calls or over a persistent [Control] wire connection.
+// short-lived [TransportSubprocess] calls or over a persistent [TransportControl] wire connection.
 func (s *Server) Transport() Transport {
 	if s != nil && s.conn != nil {
-		return Control
+		return TransportControl
 	}
 
-	return Subprocess
+	return TransportSubprocess
 }
 
-// UsingSubprocess explicitly selects subprocess execution while retaining any
-// daemon identity and control-connection lifetime binding.
-func (s *Server) UsingSubprocess() (*Server, error) {
+// ViaSubprocess returns a copy of this server that runs commands through a separate
+// tmux subprocess instead of a control connection. It keeps any daemon identity and
+// control-connection lifetime binding.
+func (s *Server) ViaSubprocess() (*Server, error) {
 	if s == nil || s.runner == nil {
-		return nil, opError("UsingSubprocess", ErrInvalidHandle)
+		return nil, opError("Server.ViaSubprocess", ErrInvalidHandle)
 	}
 
 	if s.lifetime != nil {
 		if err := s.lifetime.closedError(); err != nil {
-			return nil, opError("UsingSubprocess", err)
+			return nil, opError("Server.ViaSubprocess", err)
 		}
 	}
 
 	if s.conn != nil {
-		return s.conn.AuxiliaryServer(), nil
+		return s.conn.SubprocessServer(), nil
 	}
 
 	return s, nil
@@ -197,14 +198,14 @@ func (s *Server) Support() TransportSupport {
 //
 // It requires an active running daemon and fails with [ErrNoServer] if no daemon is listening.
 func (s *Server) RecreateSocket(ctx context.Context) error {
-	return s.signalDaemon(ctx, "RecreateSocket", syscall.SIGUSR1)
+	return s.signalDaemon(ctx, "Server.RecreateSocket", syscall.SIGUSR1)
 }
 
 // ToggleLogging sends SIGUSR2 to the active tmux daemon process toggling debug logging on or off.
 //
 // It requires an active running daemon and fails with [ErrNoServer] if no daemon is listening.
 func (s *Server) ToggleLogging(ctx context.Context) error {
-	return s.signalDaemon(ctx, "ToggleLogging", syscall.SIGUSR2)
+	return s.signalDaemon(ctx, "Server.ToggleLogging", syscall.SIGUSR2)
 }
 
 func (s *Server) signalDaemon(ctx context.Context, opName string, sig syscall.Signal) error {
@@ -251,11 +252,11 @@ func (s *Server) baseArgs(allowStart bool) []string {
 	}
 
 	switch s.config.LogLevel {
-	case LogVerbose:
+	case LogLevelVerbose:
 		args = append(args, "-v")
-	case LogDebug:
+	case LogLevelDebug:
 		args = append(args, "-vv")
-	case LogNone:
+	case LogLevelNone:
 	}
 
 	if len(s.config.TerminalFeatures) > 0 {
@@ -314,7 +315,7 @@ func validateRootConfig(cfg *Config) error {
 		return invalid("utf8 mode")
 	}
 
-	if cfg.LogLevel > LogDebug {
+	if cfg.LogLevel > LogLevelDebug {
 		return invalid("log level")
 	}
 
@@ -362,7 +363,7 @@ func resolveEndpoint(cfg Config, vars map[string]string, dir string, env []strin
 
 		endpoint.SocketName = cfg.SocketName
 	case vars["TMUX"] != "":
-		hint, err := ParseEnvironment(Environment{TMUX: vars["TMUX"], TMUXPane: vars["TMUX_PANE"]})
+		hint, err := ParseTmuxVars(TmuxVars{TMUX: vars["TMUX"], TMUXPane: vars["TMUX_PANE"]})
 		if err != nil {
 			return endpoint, nil, err
 		}

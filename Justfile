@@ -57,22 +57,22 @@ fuzz target="all" time="":
     if [ "$tgt" = "all" ]; then
         sweep_dur="${dur:-10s}"
         printf 'Starting fuzz sweep across all 13 targets (%s each)...\n' "$sweep_dur"
-        for t in FuzzRecords FuzzQuoted FuzzOctal; do
+        for t in FuzzRecords FuzzWriteQuoted FuzzDecodeOctal; do
             run_target "$t" "./internal/wire" "$sweep_dur"
         done
-        for t in FuzzControlFrames FuzzEmbeddedFrameDelimiters FuzzParseEnvironment FuzzParseCommandLine FuzzParseSequence FuzzParseBinding FuzzParseBindingNote FuzzKeyValid FuzzParseOptionName FuzzDecodeEvent; do
+        for t in FuzzControlFrames FuzzEmbeddedFrameDelimiters FuzzParseTmuxVars FuzzParseCommandLine FuzzParseSequence FuzzParseBinding FuzzParseBindingNote FuzzKeyValid FuzzParseOptionName FuzzDecodeEvent; do
             run_target "$t" "./tmux" "$sweep_dur"
         done
     else
         case "$tgt" in
-            FuzzRecords|FuzzQuoted|FuzzOctal)
+            FuzzRecords|FuzzWriteQuoted|FuzzDecodeOctal)
                 run_target "$tgt" "./internal/wire" "$dur"
                 ;;
-            FuzzControlFrames|FuzzEmbeddedFrameDelimiters|FuzzParseEnvironment|FuzzParseCommandLine|FuzzParseSequence|FuzzParseBinding|FuzzParseBindingNote|FuzzKeyValid|FuzzParseOptionName|FuzzDecodeEvent)
+            FuzzControlFrames|FuzzEmbeddedFrameDelimiters|FuzzParseTmuxVars|FuzzParseCommandLine|FuzzParseSequence|FuzzParseBinding|FuzzParseBindingNote|FuzzKeyValid|FuzzParseOptionName|FuzzDecodeEvent)
                 run_target "$tgt" "./tmux" "$dur"
                 ;;
             *)
-                printf 'Unknown fuzz target: %s\nRun "just fuzz" to sweep all targets, or pick: FuzzRecords, FuzzQuoted, FuzzOctal, FuzzControlFrames, FuzzEmbeddedFrameDelimiters, FuzzParseEnvironment, FuzzParseCommandLine, FuzzParseSequence, FuzzParseBinding, FuzzParseBindingNote, FuzzKeyValid, FuzzParseOptionName, FuzzDecodeEvent\n' "$tgt" >&2
+                printf 'Unknown fuzz target: %s\nRun "just fuzz" to sweep all targets, or pick: FuzzRecords, FuzzWriteQuoted, FuzzDecodeOctal, FuzzControlFrames, FuzzEmbeddedFrameDelimiters, FuzzParseTmuxVars, FuzzParseCommandLine, FuzzParseSequence, FuzzParseBinding, FuzzParseBindingNote, FuzzKeyValid, FuzzParseOptionName, FuzzDecodeEvent\n' "$tgt" >&2
                 exit 1
                 ;;
         esac

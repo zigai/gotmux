@@ -133,18 +133,18 @@ func supportedVersion(v Version) error {
 func (s *Server) Version(ctx context.Context) (Version, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return Version{}, opError("Version", err)
+		return Version{}, opError("Server.Version", err)
 	}
 	defer op.close()
 
 	if s.bound != nil {
 		info, err := s.probe(opCtx, op)
-		return info.Version, opError("Version", err)
+		return info.Version, opError("Server.Version", err)
 	}
 
 	v, err := s.executableVersion(opCtx, op)
 
-	return v, opError("Version", err)
+	return v, opError("Server.Version", err)
 }
 
 // Usage returns the native tmux command-line usage syntax by invoking "tmux -h".
@@ -152,18 +152,18 @@ func (s *Server) Version(ctx context.Context) (Version, error) {
 func (s *Server) Usage(ctx context.Context) (string, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return "", opError("Usage", err)
+		return "", opError("Server.Usage", err)
 	}
 	defer op.close()
 
 	r, err := s.executeProcess(opCtx, op, []string{"-h"}, nil)
 	if err != nil {
-		return "", opError("Usage", err)
+		return "", opError("Server.Usage", err)
 	}
 
 	usage := strings.TrimSpace(string(r.Stdout))
 	if usage == "" {
-		return "", opError("Usage", decodeError("usage", "usage", ErrProtocol))
+		return "", opError("Server.Usage", decodeError("usage", "usage", ErrProtocol))
 	}
 
 	return usage, nil
@@ -189,13 +189,13 @@ func (s *Server) executableVersion(ctx context.Context, op *operation) (Version,
 func (s *Server) Capabilities(ctx context.Context) (Capabilities, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return Capabilities{}, opError("Capabilities", err)
+		return Capabilities{}, opError("Server.Capabilities", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return Capabilities{}, opError("Capabilities", err)
+		return Capabilities{}, opError("Server.Capabilities", err)
 	}
 
 	c := Capabilities{
@@ -208,18 +208,18 @@ func (s *Server) Capabilities(ctx context.Context) (Capabilities, error) {
 
 	r, err := s.execute(opCtx, op, recordsPlan(command("list-commands", "-F", wire.RecordFormat([]string{"command_list_name"}))), newGuard(info.Identity), nil)
 	if err != nil {
-		return Capabilities{}, opError("Capabilities", err)
+		return Capabilities{}, opError("Server.Capabilities", err)
 	}
 
 	rows, err := wire.ParseRecords(r.Stdout, 1)
 	if err != nil {
-		return Capabilities{}, afterError("Capabilities", decodeError("commands", "command_list_name", err))
+		return Capabilities{}, afterError("Server.Capabilities", decodeError("commands", "command_list_name", err))
 	}
 
 	c.Commands = make([]string, 0, len(rows))
 	for _, row := range rows {
 		if _, err := NewCommand(row[0]); err != nil {
-			return Capabilities{}, afterError("Capabilities", decodeError("commands", "command_list_name", err))
+			return Capabilities{}, afterError("Server.Capabilities", decodeError("commands", "command_list_name", err))
 		}
 
 		c.Commands = append(c.Commands, row[0])

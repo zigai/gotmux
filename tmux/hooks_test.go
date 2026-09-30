@@ -18,7 +18,7 @@ func TestHookAndBindingPayloadsNeverEvaluate(t *testing.T) {
 		t.Fatal("unknown syntax not preserved")
 	}
 
-	b := parseBinding(`bind-key -r -T prefix C-a send-keys "literal;" ; display-message done`, PrefixTable)
+	b := parseBinding(`bind-key -r -T prefix C-a send-keys "literal;" ; display-message done`, KeyTablePrefix)
 	if !b.Parsed || !b.Repeat || b.Key != "C-a" {
 		t.Fatal(b)
 	}
@@ -132,7 +132,7 @@ func FuzzParseBinding(f *testing.F) {
 			return
 		}
 
-		b := parseBinding(raw, PrefixTable)
+		b := parseBinding(raw, KeyTablePrefix)
 		if b.Parsed {
 			assertValidParsedBinding(t, b)
 		}

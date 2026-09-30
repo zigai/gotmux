@@ -36,16 +36,6 @@ type (
 	// DetachMode specifies how other attached clients should be handled during session attachment.
 	DetachMode uint8
 
-	// TerminalStreams supplies the file descriptors for an interactive terminal attachment.
-	// In and Out must refer to real terminal devices (validated via [term.IsTerminal]).
-	TerminalStreams struct {
-		In *os.File
-
-		Out *os.File
-
-		Err *os.File
-	}
-
 	// AttachOptions configures interactive terminal attachment to a session.
 	AttachOptions struct {
 		// ReadOnly attaches the client in read-only mode (-r flag), preventing input transmission.
@@ -66,17 +56,19 @@ type (
 	// CommandOptions configures prepared subprocess command execution.
 	CommandOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
-		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
-		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [StartPolicyExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
 		Start StartPolicy
 	}
 
 	// Streams supplies caller-owned operating system file descriptors for standard input,
-	// standard output, and standard error of a prepared subprocess command.
+	// standard output, and standard error of a tmux subprocess.
 	//
-	// Unlike [TerminalStreams], the streams do not need to refer to real terminal devices,
-	// permitting ordinary files, pipes, and sockets.
-	// Any stream field left nil is detached (connected to /dev/null).
+	// Terminal attachment ([Session.Attach], the PrepareAttach methods, and the
+	// PrepareTerminal methods) requires all three, with In and Out referring to real
+	// terminal devices (validated via [term.IsTerminal]); otherwise it fails with
+	// [ErrInvalidArgument]. The other Prepare methods accept ordinary files, pipes, and
+	// sockets, and connect a nil field to /dev/null.
 	Streams struct {
 		// In is connected to the child process's standard input.
 		In *os.File
@@ -90,16 +82,16 @@ type (
 	// TerminalOptions configures interactive terminal command preparation.
 	TerminalOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
-		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
-		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [StartPolicyExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
 		Start StartPolicy
 	}
 
 	// RootShellOptions configures root shell compatibility command execution (-c flag).
 	RootShellOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
-		// When [AllowStart] (the zero value), daemon auto-spawn is permitted.
-		// When [ExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
+		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
+		// When [StartPolicyExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
 		Start StartPolicy
 	}
 )
@@ -165,7 +157,7 @@ func attachArgs(target string, opts AttachOptions) ([]string, error) {
 	return append(args, attachFlags(opts)...), nil
 }
 
-func validateTerminals(t TerminalStreams) error {
+func validateTerminals(t Streams) error {
 	if t.In == nil || t.Out == nil || t.Err == nil {
 		return invalid("terminal streams")
 	}
@@ -188,9 +180,9 @@ func validateTerminals(t TerminalStreams) error {
 // checks. Tmux manages terminal mode setup and restoration.
 //
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
-func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams TerminalStreams, opts AttachOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
 	if !session.Valid() {
-		return nil, opError("PrepareAttach", invalid("session"))
+		return nil, opError("Server.PrepareAttach", invalid("session"))
 	}
 
 	return s.PrepareAttachTarget(ctx, string(session), streams, opts)
@@ -201,23 +193,23 @@ func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams T
 // It validates streams; the caller manages Start, Wait, signals, cancellation, and exit codes.
 //
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
-func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams TerminalStreams, opts AttachOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
 	if !wire.ValidString(target) {
-		return nil, opError("PrepareAttachTarget", invalid("target"))
+		return nil, opError("Server.PrepareAttachTarget", invalid("target"))
 	}
 
 	subArgs, err := attachArgs(target, opts)
 	if err != nil {
-		return nil, opError("PrepareAttachTarget", err)
+		return nil, opError("Server.PrepareAttachTarget", err)
 	}
 
 	argv := append(s.baseArgs(false), subArgs...)
 
-	return s.prepareTerminalArgs(ctx, "PrepareAttachTarget", argv, streams)
+	return s.prepareTerminalArgs(ctx, "Server.PrepareAttachTarget", argv, streams)
 }
 
 // PrepareAttach returns an unstarted [exec.Cmd] for interactive terminal attachment to this session.
-func (s Session) PrepareAttach(ctx context.Context, streams TerminalStreams, opts AttachOptions) (*exec.Cmd, error) {
+func (s Session) PrepareAttach(ctx context.Context, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
 	if err := s.h.check(); err != nil {
 		return nil, opError("Session.PrepareAttach", err)
 	}
@@ -229,39 +221,39 @@ func (s Session) PrepareAttach(ctx context.Context, streams TerminalStreams, opt
 // The daemon identity is checked in the same command queue as attachment.
 // Tmux owns terminal setup; the original terminal state is restored on return,
 // including when cancellation terminates the local client. No command timeout applies.
-// Control-bound sessions must explicitly select UsingSubprocess first.
-func (s Session) Attach(ctx context.Context, streams TerminalStreams, opts AttachOptions) (err error) {
+// Control-bound sessions must explicitly select ViaSubprocess first.
+func (s Session) Attach(ctx context.Context, streams Streams, opts AttachOptions) (err error) {
 	if err = s.h.check(); err != nil {
-		return opError("Attach", err)
+		return opError("Session.Attach", err)
 	}
 
 	if ctx == nil {
-		return opError("Attach", invalid("nil context"))
+		return opError("Session.Attach", invalid("nil context"))
 	}
 
 	if s.h.server.conn != nil {
-		return opError("Attach", ErrTransportUnsupported)
+		return opError("Session.Attach", ErrTransportUnsupported)
 	}
 
 	if err = validateTerminals(streams); err != nil {
-		return opError("Attach", err)
+		return opError("Session.Attach", err)
 	}
 
 	argv, err := s.attachmentArgs(opts)
 	if err != nil {
-		return opError("Attach", err)
+		return opError("Session.Attach", err)
 	}
 
 	state, err := term.GetState(int(streams.In.Fd()))
 	if err != nil {
-		return opError("Attach", err)
+		return opError("Session.Attach", err)
 	}
-	defer func() { err = errors.Join(err, opError("Attach", term.Restore(int(streams.In.Fd()), state))) }()
+	defer func() { err = errors.Join(err, opError("Session.Attach", term.Restore(int(streams.In.Fd()), state))) }()
 
-	child, closeLifetime := attachmentContext(ctx, s.h.server.lifetime)
+	attachCtx, closeLifetime := attachmentContext(ctx, s.h.server.lifetime)
 	defer closeLifetime()
 
-	return opError("Attach", s.runAttachment(child, streams.In, argv))
+	return opError("Session.Attach", s.runAttachment(attachCtx, streams.In, argv))
 }
 
 func (s Session) attachmentArgs(opts AttachOptions) ([]string, error) {
@@ -289,9 +281,9 @@ func (s Session) attachmentArgs(opts AttachOptions) ([]string, error) {
 
 // The returned cleanup cancels and joins the connection-lifetime watcher.
 func attachmentContext(ctx context.Context, lifetime *Connection) (context.Context, context.CancelFunc) {
-	child, cancel := context.WithCancel(ctx)
+	attachCtx, cancel := context.WithCancel(ctx)
 	if lifetime == nil {
-		return child, cancel
+		return attachCtx, cancel
 	}
 
 	done := make(chan struct{})
@@ -301,16 +293,16 @@ func attachmentContext(ctx context.Context, lifetime *Connection) (context.Conte
 		select {
 		case <-lifetime.stopCh:
 			cancel()
-		case <-child.Done():
+		case <-attachCtx.Done():
 		}
 	}()
 
-	return child, func() { cancel(); <-done }
+	return attachCtx, func() { cancel(); <-done }
 }
 
 func (s Session) runAttachment(ctx context.Context, terminal *os.File, argv []string) error {
-	child, cancel := context.WithCancelCause(ctx)
-	cmd := s.h.server.runner.command(child, argv)
+	cmdCtx, cancel := context.WithCancelCause(ctx)
+	cmd := s.h.server.runner.command(cmdCtx, argv)
 	// The tmux server renders directly to the terminal supplied on stdin.
 	// Stdout/stderr carry command diagnostics and the identity-rejection marker.
 	overflow := func() { cancel(ErrOutputLimit) }
@@ -319,14 +311,14 @@ func (s Session) runAttachment(ctx context.Context, terminal *os.File, argv []st
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = terminal, stdout, stderr
 	err := cmd.Run()
 	result := Result{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: -1}
-	effect := NotSent
+	effect := EffectNotSent
 
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
-		effect = Unknown
+		effect = EffectUnknown
 	}
 
-	err = errors.Join(err, context.Cause(child), classifyStderr(result.Stderr))
+	err = errors.Join(err, context.Cause(cmdCtx), classifyStderr(result.Stderr))
 	if errors.Is(err, exec.ErrWaitDelay) {
 		err = errors.Join(err, ErrShutdownIncomplete)
 	}
@@ -363,7 +355,7 @@ func (s *Server) prepareSubprocessCheck(ctx context.Context, opName string) erro
 	return nil
 }
 
-func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []string, streams TerminalStreams) (*exec.Cmd, error) {
+func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []string, streams Streams) (*exec.Cmd, error) {
 	if err := s.prepareSubprocessCheck(ctx, opName); err != nil {
 		return nil, err
 	}
@@ -373,9 +365,7 @@ func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []
 	}
 
 	cmd := s.runner.command(ctx, argv)
-	cmd.Stdin = streams.In
-	cmd.Stdout = streams.Out
-	cmd.Stderr = streams.Err
+	applyStreams(cmd, streams)
 
 	return cmd, nil
 }
@@ -436,37 +426,37 @@ func validateSequenceCommands(commands []Command) error {
 // in an interactive terminal (such as new-session -A, attach-session, or custom window creation).
 // It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
-func (s *Server) PrepareTerminal(ctx context.Context, c Command, streams TerminalStreams, opts TerminalOptions) (*exec.Cmd, error) {
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
+func (s *Server) PrepareTerminal(ctx context.Context, c Command, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
 	if !c.Valid() {
-		return nil, opError("PrepareTerminal", invalid("command"))
+		return nil, opError("Server.PrepareTerminal", invalid("command"))
 	}
 
-	argv, err := s.prepareRawArgv("PrepareTerminal", []Command{c}, opts.Start)
+	argv, err := s.prepareRawArgv("Server.PrepareTerminal", []Command{c}, opts.Start)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.prepareTerminalArgs(ctx, "PrepareTerminal", argv, streams)
+	return s.prepareTerminalArgs(ctx, "Server.PrepareTerminal", argv, streams)
 }
 
 // PrepareTerminalSequence returns an unstarted [exec.Cmd] for executing an ordered sequence of
 // tmux commands in an interactive terminal.
 // It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
-func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequence, streams TerminalStreams, opts TerminalOptions) (*exec.Cmd, error) {
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
+func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequence, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
 	commands := seq.commands
 	if err := validateSequenceCommands(commands); err != nil {
-		return nil, opError("PrepareTerminalSequence", err)
+		return nil, opError("Server.PrepareTerminalSequence", err)
 	}
 
-	argv, err := s.prepareRawArgv("PrepareTerminalSequence", commands, opts.Start)
+	argv, err := s.prepareRawArgv("Server.PrepareTerminalSequence", commands, opts.Start)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.prepareTerminalArgs(ctx, "PrepareTerminalSequence", argv, streams)
+	return s.prepareTerminalArgs(ctx, "Server.PrepareTerminalSequence", argv, streams)
 }
 
 // PrepareDefaultTerminal returns an unstarted [exec.Cmd] for invoking tmux with no commands
@@ -475,16 +465,16 @@ func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequenc
 // Tmux honors the native default-client-command option (typically new-session), creating or
 // attaching to a session. The server handle remains side-effect free; the caller owns the process lifecycle.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
-func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams TerminalStreams, opts TerminalOptions) (*exec.Cmd, error) {
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
+func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
 	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
-		return nil, opError("PrepareDefaultTerminal", err)
+		return nil, opError("Server.PrepareDefaultTerminal", err)
 	}
 
 	argv := s.baseArgs(allowStart)
 
-	return s.prepareTerminalArgs(ctx, "PrepareDefaultTerminal", argv, streams)
+	return s.prepareTerminalArgs(ctx, "Server.PrepareDefaultTerminal", argv, streams)
 }
 
 // PrepareCommand returns an unstarted [exec.Cmd] for executing a single tmux command
@@ -494,17 +484,17 @@ func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams TerminalStr
 // nor subject to [Limits.CommandTimeout]. The caller owns the process lifecycle (calling
 // Start, Wait, managing signals, and closing the supplied stream files).
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
 func (s *Server) PrepareCommand(ctx context.Context, c Command, streams Streams, opts CommandOptions) (*exec.Cmd, error) {
-	if err := s.prepareSubprocessCheck(ctx, "PrepareCommand"); err != nil {
+	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareCommand"); err != nil {
 		return nil, err
 	}
 
 	if !c.Valid() {
-		return nil, opError("PrepareCommand", invalid("command"))
+		return nil, opError("Server.PrepareCommand", invalid("command"))
 	}
 
-	argv, err := s.prepareRawArgv("PrepareCommand", []Command{c}, opts.Start)
+	argv, err := s.prepareRawArgv("Server.PrepareCommand", []Command{c}, opts.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -521,18 +511,18 @@ func (s *Server) PrepareCommand(ctx context.Context, c Command, streams Streams,
 // Unlike [Server.RunSequence] and [Server.RunSequenceWith], execution is neither buffered into memory
 // nor subject to [Limits.CommandTimeout]. The caller owns the process lifecycle.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
 func (s *Server) PrepareSequence(ctx context.Context, seq CommandSequence, streams Streams, opts CommandOptions) (*exec.Cmd, error) {
-	if err := s.prepareSubprocessCheck(ctx, "PrepareSequence"); err != nil {
+	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareSequence"); err != nil {
 		return nil, err
 	}
 
 	commands := seq.commands
 	if err := validateSequenceCommands(commands); err != nil {
-		return nil, opError("PrepareSequence", err)
+		return nil, opError("Server.PrepareSequence", err)
 	}
 
-	argv, err := s.prepareRawArgv("PrepareSequence", commands, opts.Start)
+	argv, err := s.prepareRawArgv("Server.PrepareSequence", commands, opts.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -550,9 +540,9 @@ func (s *Server) PrepareSequence(ctx context.Context, seq CommandSequence, strea
 // lifecycle, standard streams, signals, and termination. No command timeout applies, and no
 // automatic daemon termination occurs outside the caller's process.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
 func (s *Server) PrepareForegroundServer(ctx context.Context) (*exec.Cmd, error) {
-	if err := s.prepareSubprocessCheck(ctx, "PrepareForegroundServer"); err != nil {
+	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareForegroundServer"); err != nil {
 		return nil, err
 	}
 
@@ -567,17 +557,17 @@ func (s *Server) PrepareForegroundServer(ctx context.Context) (*exec.Cmd, error)
 // Unlike [Server.RunShell] (which executes run-shell inside tmux), this uses native tmux -c,
 // honoring default-shell semantics and start policy without rewriting to a tmux command.
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
 func (s *Server) PrepareRootShell(ctx context.Context, shellCommand string, streams Streams, opts RootShellOptions) (*exec.Cmd, error) {
-	if err := s.prepareSubprocessCheck(ctx, "PrepareRootShell"); err != nil {
+	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareRootShell"); err != nil {
 		return nil, err
 	}
 
 	if !wire.ValidString(shellCommand) {
-		return nil, opError("PrepareRootShell", invalid("shell command"))
+		return nil, opError("Server.PrepareRootShell", invalid("shell command"))
 	}
 
-	argv, err := s.rootShellArgv("PrepareRootShell", shellCommand, opts.Start)
+	argv, err := s.rootShellArgv("Server.PrepareRootShell", shellCommand, opts.Start)
 	if err != nil {
 		return nil, err
 	}
@@ -591,37 +581,37 @@ func (s *Server) PrepareRootShell(ctx context.Context, shellCommand string, stre
 // RunRootShell executes a shell command via tmux's root shell compatibility path (-c shell-command),
 // capturing standard output and standard error into a bounded [Result].
 //
-// Fails with [ErrTransportUnsupported] on control-bound or auxiliary servers.
+// Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
 func (s *Server) RunRootShell(ctx context.Context, shellCommand string, opts RootShellOptions) (Result, error) {
-	if err := s.prepareSubprocessCheck(ctx, "RunRootShell"); err != nil {
+	if err := s.prepareSubprocessCheck(ctx, "Server.RunRootShell"); err != nil {
 		return failedResult(), err
 	}
 
 	if !wire.ValidString(shellCommand) {
-		return failedResult(), opError("RunRootShell", invalid("shell command"))
+		return failedResult(), opError("Server.RunRootShell", invalid("shell command"))
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), opError("RunRootShell", err)
+		return failedResult(), opError("Server.RunRootShell", err)
 	}
 	defer op.close()
 
-	argv, err := s.rootShellArgv("RunRootShell", shellCommand, opts.Start)
+	argv, err := s.rootShellArgv("Server.RunRootShell", shellCommand, opts.Start)
 	if err != nil {
 		return failedResult(), err
 	}
 
 	res, started, err := s.runner.run(opCtx, argv, nil, max(op.output, 0), max(op.stderr, 0))
 	if err != nil {
-		effect := NotSent
+		effect := EffectNotSent
 		if started {
-			effect = Unknown
+			effect = EffectUnknown
 		}
 
 		err = errors.Join(err, classifyStderr(res.Stderr))
 
-		return res, opError("RunRootShell", &CommandError{
+		return res, opError("Server.RunRootShell", &CommandError{
 			Command: "root-shell",
 			Result:  res,
 			Outcome: Outcome{Effect: effect, Steps: nil, Created: nil},

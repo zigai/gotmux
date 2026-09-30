@@ -63,7 +63,7 @@ func uiClient(t *testing.T, ctx context.Context, server *tmux.Server, session tm
 
 	go func() {
 		var options tmux.AttachOptions
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, options)
+		done <- session.Attach(attachCtx, tmux.Streams{In: slave, Out: slave, Err: slave}, options)
 	}()
 
 	t.Cleanup(func() {
@@ -110,7 +110,7 @@ func TestIntegrationClientMenu(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 	command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-effect", "selected")
-	items := []tmux.MenuItem{{Label: "TGO_MENU_READY", Key: "x", Commands: testSequence(t, command), Separator: false, Disabled: false}}
+	items := []tmux.MenuItem{{Label: "TGO_MENU_READY", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
 	result := make(chan error, 1)
 
 	go func() {
@@ -136,7 +136,7 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 	t.Run("MouseFalseDismissal", func(t *testing.T) {
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-not-selected", "ran")
 		items := []tmux.MenuItem{
-			{Label: "TGO_MENU_ITEM_1", Key: "1", Commands: testSequence(t, command), Separator: false, Disabled: false},
+			{Label: "TGO_MENU_ITEM_1", Key: "1", Commands: testSequence(t, command), IsSeparator: false, Disabled: false},
 		}
 
 		result := make(chan error, 1)
@@ -171,7 +171,7 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 	t.Run("MouseTrueSelection", func(t *testing.T) {
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-mouse-effect", "selected")
 		items := []tmux.MenuItem{
-			{Label: "TGO_MENU_ITEM_M", Key: "m", Commands: testSequence(t, command), Separator: false, Disabled: false},
+			{Label: "TGO_MENU_ITEM_M", Key: "m", Commands: testSequence(t, command), IsSeparator: false, Disabled: false},
 			tmux.MenuSeparator(),
 		}
 
@@ -392,7 +392,7 @@ func TestIntegrationUIControls(t *testing.T) {
 	client, terminal, output := uiClient(t, ctx, server, session)
 
 	// 1. Client.MessageWith with Duration
-	if err := client.MessageWith(ctx, "hello from ui controls test", tmux.MessageOptions{Duration: 200}); err != nil {
+	if err := client.MessageWith(ctx, "hello from ui controls test", tmux.MessageOptions{Duration: 200 * time.Millisecond}); err != nil {
 		t.Fatalf("MessageWith failed: %v", err)
 	}
 

@@ -127,15 +127,15 @@ func (h handle) valid() bool {
 	}
 
 	switch h.kind {
-	case SessionKind:
+	case ObjectKindSession:
 		return SessionID(h.id).Valid()
-	case WindowKind:
+	case ObjectKindWindow:
 		return WindowID(h.id).Valid()
-	case PaneKind:
+	case ObjectKindPane:
 		return PaneID(h.id).Valid()
-	case ClientKind:
+	case ObjectKindClient:
 		return ClientName(h.id).Valid()
-	case WindowLinkKind:
+	case ObjectKindWindowLink:
 		return false
 	default:
 		return false
@@ -208,7 +208,7 @@ func (h handle) guard() *guard {
 	}
 
 	g := newGuard(h.origin)
-	if h.kind == ClientKind {
+	if h.kind == ObjectKindClient {
 		g.clients = []clientCheck{h.client}
 	}
 
@@ -219,29 +219,29 @@ func (h handle) equal(other handle) bool {
 	return h.valid() && other.valid() && h.kind == other.kind && h.id == other.id && h.origin.Equal(other.origin) && h.client == other.client
 }
 
-func (h handle) act(ctx context.Context, name string, args ...string) error {
-	return h.actWithin(ctx, true, name, args...)
+func (h handle) act(ctx context.Context, label string, name string, args ...string) error {
+	return h.actWithin(ctx, label, true, name, args...)
 }
 
 // actCallerBounded is act bounded only by the caller's context.
-func (h handle) actCallerBounded(ctx context.Context, name string, args ...string) error {
-	return h.actWithin(ctx, false, name, args...)
+func (h handle) actCallerBounded(ctx context.Context, label string, name string, args ...string) error {
+	return h.actWithin(ctx, label, false, name, args...)
 }
 
-func (h handle) actWithin(ctx context.Context, commandTimeout bool, name string, args ...string) error {
+func (h handle) actWithin(ctx context.Context, label string, commandTimeout bool, name string, args ...string) error {
 	if err := h.check(); err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 
 	opCtx, op, err := h.server.beginWithin(ctx, commandTimeout)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 	defer op.close()
 
 	_, err = h.server.execute(opCtx, op, emptyPlan(command(name, args...)), h.guard(), nil)
 
-	return opError(name, err)
+	return opError(label, err)
 }
 
 func (h handle) withOrigin(id string, kind ObjectKind) handle {
@@ -258,8 +258,8 @@ func (s Session) Valid() bool { return s.h.valid() }
 // Equal reports whether two handles refer to the same session on the exact same daemon lifetime.
 func (s Session) Equal(other Session) bool { return s.h.equal(other.h) }
 
-// Identity returns the server identity where this session handle was created or observed.
-func (s Session) Identity() ServerIdentity { return s.h.origin }
+// ServerIdentity returns the identity of the server where this session handle was created or observed.
+func (s Session) ServerIdentity() ServerIdentity { return s.h.origin }
 
 // ID returns the canonical tmux window ID string (e.g. "@1").
 func (w Window) ID() WindowID { return WindowID(w.h.id) }
@@ -271,8 +271,8 @@ func (w Window) Valid() bool { return w.h.valid() }
 // Equal reports whether two handles refer to the same window on the exact same daemon lifetime.
 func (w Window) Equal(other Window) bool { return w.h.equal(other.h) }
 
-// Identity returns the server identity where this window handle was created or observed.
-func (w Window) Identity() ServerIdentity { return w.h.origin }
+// ServerIdentity returns the identity of the server where this window handle was created or observed.
+func (w Window) ServerIdentity() ServerIdentity { return w.h.origin }
 
 // ID returns the canonical tmux pane ID string (e.g. "%2").
 func (p Pane) ID() PaneID { return PaneID(p.h.id) }
@@ -284,8 +284,8 @@ func (p Pane) Valid() bool { return p.h.valid() }
 // Equal reports whether two handles refer to the same pane on the exact same daemon lifetime.
 func (p Pane) Equal(other Pane) bool { return p.h.equal(other.h) }
 
-// Identity returns the server identity where this pane handle was created or observed.
-func (p Pane) Identity() ServerIdentity { return p.h.origin }
+// ServerIdentity returns the identity of the server where this pane handle was created or observed.
+func (p Pane) ServerIdentity() ServerIdentity { return p.h.origin }
 
 // Name returns the client terminal name (e.g. "/dev/pts/1").
 func (c Client) Name() ClientName { return ClientName(c.h.id) }
@@ -296,13 +296,13 @@ func (c Client) Valid() bool { return c.h.valid() }
 // Equal reports whether two handles refer to the same client on the exact same daemon lifetime.
 func (c Client) Equal(other Client) bool { return c.h.equal(other.h) }
 
-// Identity returns the server identity where this client handle was created or observed.
-func (c Client) Identity() ServerIdentity { return c.h.origin }
+// ServerIdentity returns the identity of the server where this client handle was created or observed.
+func (c Client) ServerIdentity() ServerIdentity { return c.h.origin }
 
 // Valid reports whether this link has valid window handle provenance, a valid session ID,
 // and a non-negative slot index. It does NOT perform I/O to query daemon state.
 func (l WindowLink) Valid() bool {
-	return l.h.valid() && l.h.kind == WindowKind && l.session.Valid() && l.index >= 0
+	return l.h.valid() && l.h.kind == ObjectKindWindow && l.session.Valid() && l.index >= 0
 }
 
 // Equal reports whether two window links refer to the same (session, index, window)
@@ -314,8 +314,8 @@ func (l WindowLink) Equal(other WindowLink) bool {
 // Index returns the 0-based slot index where this window is linked in the session.
 func (l WindowLink) Index() int { return l.index }
 
-// Identity returns the server identity where this window link was created or observed.
-func (l WindowLink) Identity() ServerIdentity { return l.h.origin }
+// ServerIdentity returns the identity of the server where this window link was created or observed.
+func (l WindowLink) ServerIdentity() ServerIdentity { return l.h.origin }
 
 // Window returns the underlying [Window] handle for this link.
 func (l WindowLink) Window() Window {
@@ -332,16 +332,18 @@ func (l WindowLink) Session() Session {
 		return Session{h: zeroHandle}
 	}
 
-	return Session{h: l.h.withOrigin(string(l.session), SessionKind)}
+	return Session{h: l.h.withOrigin(string(l.session), ObjectKindSession)}
 }
 
-// UsingSubprocess preserves the observed slot and connection lifetime.
-func (l WindowLink) UsingSubprocess() (WindowLink, error) {
+// ViaSubprocess returns a copy of this handle that runs commands through a separate
+// tmux subprocess instead of the control connection. It keeps the observed slot and
+// connection lifetime.
+func (l WindowLink) ViaSubprocess() (WindowLink, error) {
 	if err := l.check(); err != nil {
-		return WindowLink{}, opError("UsingSubprocess", err)
+		return WindowLink{}, opError("WindowLink.ViaSubprocess", err)
 	}
 
-	h, err := l.h.usingSubprocess()
+	h, err := l.h.usingSubprocess("WindowLink.ViaSubprocess")
 	if err != nil {
 		return WindowLink{}, err
 	}
@@ -369,20 +371,20 @@ func (l WindowLink) guard() *guard {
 	return &guard{identity: id, links: []linkCheck{{session: l.session, index: l.index, window: WindowID(l.h.id)}}, clients: nil}
 }
 
-func (l WindowLink) act(ctx context.Context, name string, args ...string) error {
+func (l WindowLink) act(ctx context.Context, label string, name string, args ...string) error {
 	if err := l.check(); err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 
 	opCtx, op, err := l.h.server.begin(ctx)
 	if err != nil {
-		return opError(name, err)
+		return opError(label, err)
 	}
 	defer op.close()
 
 	_, err = l.h.server.execute(opCtx, op, emptyPlan(command(name, args...)), l.guard(), nil)
 
-	return opError(name, err)
+	return opError(label, err)
 }
 
 // beginHandles binds only the operation's handle copies, retaining any verified
@@ -439,14 +441,14 @@ func sharedHandleIdentity(ctx context.Context, op *operation, a, b *handle) (Ser
 	return info.Identity, err
 }
 
-func (h handle) usingSubprocess() (handle, error) {
+func (h handle) usingSubprocess(label string) (handle, error) {
 	if err := h.check(); err != nil {
-		return handle{}, opError("UsingSubprocess", err)
+		return handle{}, opError(label, err)
 	}
 
-	server, err := h.server.UsingSubprocess()
+	server, err := h.server.ViaSubprocess()
 	if err != nil {
-		return handle{}, opError("UsingSubprocess", err)
+		return handle{}, opError(label, err)
 	}
 
 	h.server = server
@@ -454,27 +456,35 @@ func (h handle) usingSubprocess() (handle, error) {
 	return h, nil
 }
 
-// UsingSubprocess preserves this handle's daemon identity and connection lifetime.
-func (p Pane) UsingSubprocess() (Pane, error) {
-	h, err := p.h.usingSubprocess()
+// ViaSubprocess returns a copy of this handle that runs commands through a separate
+// tmux subprocess instead of the control connection. It keeps the handle's daemon
+// identity and connection lifetime.
+func (p Pane) ViaSubprocess() (Pane, error) {
+	h, err := p.h.usingSubprocess("Pane.ViaSubprocess")
 	return Pane{h: h}, err
 }
 
-// UsingSubprocess preserves this handle's daemon identity and connection lifetime.
-func (s Session) UsingSubprocess() (Session, error) {
-	h, err := s.h.usingSubprocess()
+// ViaSubprocess returns a copy of this handle that runs commands through a separate
+// tmux subprocess instead of the control connection. It keeps the handle's daemon
+// identity and connection lifetime.
+func (s Session) ViaSubprocess() (Session, error) {
+	h, err := s.h.usingSubprocess("Session.ViaSubprocess")
 	return Session{h: h}, err
 }
 
-// UsingSubprocess preserves this handle's daemon identity and connection lifetime.
-func (w Window) UsingSubprocess() (Window, error) {
-	h, err := w.h.usingSubprocess()
+// ViaSubprocess returns a copy of this handle that runs commands through a separate
+// tmux subprocess instead of the control connection. It keeps the handle's daemon
+// identity and connection lifetime.
+func (w Window) ViaSubprocess() (Window, error) {
+	h, err := w.h.usingSubprocess("Window.ViaSubprocess")
 	return Window{h: h}, err
 }
 
-// UsingSubprocess preserves this handle's daemon identity and connection lifetime.
-func (c Client) UsingSubprocess() (Client, error) {
-	h, err := c.h.usingSubprocess()
+// ViaSubprocess returns a copy of this handle that runs commands through a separate
+// tmux subprocess instead of the control connection. It keeps the handle's daemon
+// identity and connection lifetime.
+func (c Client) ViaSubprocess() (Client, error) {
+	h, err := c.h.usingSubprocess("Client.ViaSubprocess")
 	return Client{h: h}, err
 }
 
@@ -490,7 +500,7 @@ func (w Window) SelectWith(ctx context.Context, opts SelectWindowOptions) error 
 		args = append(args, "-l")
 	}
 
-	return w.h.act(ctx, "select-window", args...)
+	return w.h.act(ctx, "Window.Select", "select-window", args...)
 }
 
 // SelectWith gives user focus to this pane within its window using the specified options.
@@ -505,7 +515,7 @@ func (p Pane) SelectWith(ctx context.Context, opts SelectPaneOptions) error {
 		args = append(args, "-l")
 	}
 
-	return p.h.act(ctx, "select-pane", args...)
+	return p.h.act(ctx, "Pane.Select", "select-pane", args...)
 }
 
 // Clients queries all client terminals currently attached to this session, returning
@@ -521,7 +531,7 @@ func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
 	}
 	defer op.close()
 
-	rows, err := s.h.server.listRaw(opCtx, op, ClientKind, s.h.origin, QueryOptions{Filter: "", ExtraFields: nil}, s.h.id)
+	rows, err := s.h.server.listRaw(opCtx, "Session.Clients", op, ObjectKindClient, s.h.origin, QueryOptions{Filter: "", ExtraFields: nil}, s.h.id)
 	if err != nil {
 		return nil, opError("Session.Clients", err)
 	}
@@ -530,7 +540,7 @@ func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
 	for _, m := range rows {
 		v, err := s.h.server.decodeClient(m, &s.h.origin)
 		if err != nil {
-			return nil, afterError("Clients", err)
+			return nil, afterError("Session.Clients", err)
 		}
 
 		out = append(out, v)
@@ -553,7 +563,7 @@ func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
 	}
 	defer op.close()
 
-	fields, err := queryFields(fieldsFor(PaneKind), nil)
+	fields, err := queryFields(fieldsFor(ObjectKindPane), nil)
 	if err != nil {
 		return nil, opError("Session.Panes", err)
 	}
@@ -569,7 +579,7 @@ func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
 
 	rows, err := s.h.server.parseOrRetry(opCtx, op, p, g, r, fields, "pane")
 	if err != nil {
-		return nil, afterError("Panes", err)
+		return nil, afterError("Session.Panes", err)
 	}
 
 	out := make([]PaneInfo, 0, len(rows))
@@ -579,7 +589,7 @@ func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
 	for _, m := range rows {
 		v, err := s.h.server.decodePane(m, &s.h.origin)
 		if err != nil {
-			return nil, afterError("Panes", err)
+			return nil, afterError("Session.Panes", err)
 		}
 
 		if !seen[v.ID] {

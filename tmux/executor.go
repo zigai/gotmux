@@ -45,17 +45,17 @@ func (s *Server) beginWithin(ctx context.Context, commandTimeout bool) (context.
 	}
 
 	var (
-		child  context.Context
+		opCtx  context.Context
 		cancel context.CancelFunc
 	)
 
 	if commandTimeout {
-		child, cancel = context.WithTimeout(ctx, s.config.Limits.CommandTimeout)
+		opCtx, cancel = context.WithTimeout(ctx, s.config.Limits.CommandTimeout)
 	} else {
-		child, cancel = context.WithCancel(ctx)
+		opCtx, cancel = context.WithCancel(ctx)
 	}
 
-	return child, &operation{
+	return opCtx, &operation{
 		callerDone: ctx.Done(),
 		close:      cancel,
 		output:     s.config.Limits.OutputBytes,
@@ -77,9 +77,9 @@ func (s *Server) executeProcess(ctx context.Context, op *operation, args []strin
 		err = errors.Join(klass, err)
 	}
 
-	effect := NotSent
+	effect := EffectNotSent
 	if started {
-		effect = Unknown
+		effect = EffectUnknown
 	}
 
 	return result, &CommandError{Command: "process", Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
@@ -165,7 +165,7 @@ func (s *Server) execute(ctx context.Context, op *operation, p plan, g *guard, i
 	}
 
 	if err = ctx.Err(); err != nil {
-		return r, &CommandError{Command: cmdName, Result: cloneResult(r), Outcome: Outcome{Effect: Confirmed, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
+		return r, &CommandError{Command: cmdName, Result: cloneResult(r), Outcome: Outcome{Effect: EffectConfirmed, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
 	}
 
 	return r, nil

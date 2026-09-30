@@ -24,13 +24,13 @@ exec "$@"`
 )
 
 const (
-	// AllowStart permits tmux to start a new background server daemon if one is not
+	// StartPolicyAllowStart permits tmux to start a new background server daemon if one is not
 	// already running on the selected socket endpoint.
-	AllowStart StartPolicy = iota
+	StartPolicyAllowStart StartPolicy = iota
 
-	// ExistingOnly requires an already running daemon. If no daemon is listening,
+	// StartPolicyExistingOnly requires an already running daemon. If no daemon is listening,
 	// operations will fail with [ErrNoServer] rather than starting a replacement.
-	ExistingOnly
+	StartPolicyExistingOnly
 )
 
 const (

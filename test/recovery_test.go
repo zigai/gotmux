@@ -22,7 +22,7 @@ func outcomeOf(err error) tmux.Outcome {
 		return ce.Outcome
 	}
 
-	return tmux.Outcome{Effect: tmux.NotSent}
+	return tmux.Outcome{Effect: tmux.EffectNotSent}
 }
 
 func TestDaemonReplacement(t *testing.T) {
@@ -41,7 +41,7 @@ func TestDaemonReplacement(t *testing.T) {
 	}
 
 	paneA := firstPane(t, serverA, ctx)
-	staleEnv := currentEnvironment(infoA.Identity, sessionA.ID(), paneA.ID())
+	staleEnv := currentVars(infoA.Identity, sessionA.ID(), paneA.ID())
 
 	killDaemon(t, infoA.Identity.PID)
 
@@ -59,7 +59,7 @@ func TestDaemonReplacement(t *testing.T) {
 				env.TMUXPane = ""
 			}
 
-			current, err := serverB.CurrentWithEnv(ctx, env)
+			current, err := serverB.CurrentFrom(ctx, env)
 			if !errors.Is(err, tmux.ErrServerChanged) {
 				t.Fatalf("stale environment resolved replacement daemon: %+v, %v", current, err)
 			}
@@ -87,8 +87,8 @@ func TestDaemonReplacement(t *testing.T) {
 		{name: "stale-verified-target", source: unprobed, target: paneA},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			err := test.source.Swap(ctx, test.target, false)
-			if !errors.Is(err, tmux.ErrServerChanged) || outcomeOf(err).Effect != tmux.NotSent {
+			err := test.source.Swap(ctx, test.target, tmux.SwapPaneOptions{Select: false})
+			if !errors.Is(err, tmux.ErrServerChanged) || outcomeOf(err).Effect != tmux.EffectNotSent {
 				t.Errorf("mixed handles lost stale daemon guard: %v", err)
 			}
 
@@ -124,15 +124,15 @@ func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerId
 		t.Fatalf("tmux.New for Server B failed: %v", err)
 	}
 
-	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "replacement", Start: tmux.AllowStart})
+	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "replacement", Start: tmux.StartPolicyAllowStart})
 	if session.Valid() {
-		identity := session.Identity()
+		identity := session.ServerIdentity()
 
 		t.Cleanup(func() {
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 
-			if err := server.KillIfIdentity(cleanupCtx, identity); err != nil && !errors.Is(err, tmux.ErrNoServer) {
+			if err := server.KillMatching(cleanupCtx, identity); err != nil && !errors.Is(err, tmux.ErrNoServer) {
 				t.Errorf("kill Server B: %v", err)
 			}
 		})
@@ -142,7 +142,7 @@ func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerId
 		t.Fatalf("failed to start Server B: %v", err)
 	}
 
-	if session.Identity().PID == old.PID {
+	if session.ServerIdentity().PID == old.PID {
 		t.Fatalf("Server B reports Server A's PID %d", old.PID)
 	}
 
@@ -157,8 +157,8 @@ func assertStaleMutationRefused(t *testing.T, ctx context.Context, stale tmux.Se
 		t.Fatalf("expected ErrServerChanged from a stale handle, got: %v", err)
 	}
 
-	if outcome := outcomeOf(err); outcome.Effect != tmux.NotSent {
-		t.Fatalf("expected outcome effect NotSent, got: %v", outcome.Effect)
+	if outcome := outcomeOf(err); outcome.Effect != tmux.EffectNotSent {
+		t.Fatalf("expected outcome effect EffectNotSent, got: %v", outcome.Effect)
 	}
 
 	windows, err := replacement.Windows(ctx)

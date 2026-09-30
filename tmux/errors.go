@@ -8,34 +8,38 @@ import (
 )
 
 const (
-	// NotSent indicates the command was never dispatched to tmux; no server state changed.
-	NotSent Effect = iota
+	// EffectUnspecified is the zero value: no effect was recorded. Treat it like
+	// [EffectUnknown] and do not assume the mutation is safe to retry.
+	EffectUnspecified Effect = iota
 
-	// Unknown indicates the command was sent or partially processed, but an error
+	// EffectNotSent indicates the command was never dispatched to tmux; no server state changed.
+	EffectNotSent
+
+	// EffectUnknown indicates the command was sent or partially processed, but an error
 	// occurred before confirmation. The mutation MAY have taken effect on the server;
 	// callers must NOT blindly retry.
-	Unknown
-	// Confirmed indicates tmux processed the command, but subsequent inspection failed.
-	Confirmed
-	// Rejected indicates tmux refused the mutation and did not create the requested object.
-	Rejected
+	EffectUnknown
+	// EffectConfirmed indicates tmux processed the command, but subsequent inspection failed.
+	EffectConfirmed
+	// EffectRejected indicates tmux refused the mutation and did not create the requested object.
+	EffectRejected
 )
 
 const (
-	SessionKind    ObjectKind = "session"
-	WindowKind     ObjectKind = "window"
-	PaneKind       ObjectKind = "pane"
-	ClientKind     ObjectKind = "client"
-	WindowLinkKind ObjectKind = "window-link"
+	ObjectKindSession    ObjectKind = "session"
+	ObjectKindWindow     ObjectKind = "window"
+	ObjectKindPane       ObjectKind = "pane"
+	ObjectKindClient     ObjectKind = "client"
+	ObjectKindWindowLink ObjectKind = "window-link"
 
-	// LinkKind is retained as an alias for [WindowLinkKind].
-	LinkKind = WindowLinkKind
+	// LinkKind is retained as an alias for [ObjectKindWindowLink].
+	LinkKind = ObjectKindWindowLink
 )
 
 const (
-	NoTimeout TimeoutSource = iota
-	CallerTimeout
-	LibraryTimeout
+	TimeoutSourceNone TimeoutSource = iota
+	TimeoutSourceCaller
+	TimeoutSourceLibrary
 )
 
 var (
@@ -139,6 +143,9 @@ type (
 	// with [errors.Is] or [errors.As]. The Error message deliberately excludes captured
 	// text and arguments to avoid leaking sensitive information into application logs.
 	OperationError struct {
+		// Operation names the API that failed as "Type.Method", or the function
+		// name for package-level functions. A *With variant reports its base
+		// method, so [Pane.InfoWith] reports "Pane.Info".
 		Operation string
 		Outcome   Outcome
 		Err       error
@@ -174,13 +181,15 @@ type (
 
 func (e Effect) String() string {
 	switch e {
-	case NotSent:
+	case EffectUnspecified:
+		return "unspecified"
+	case EffectNotSent:
 		return "not-sent"
-	case Unknown:
+	case EffectUnknown:
 		return "unknown"
-	case Confirmed:
+	case EffectConfirmed:
 		return "confirmed"
-	case Rejected:
+	case EffectRejected:
 		return "rejected"
 	}
 
@@ -223,14 +232,14 @@ func failedResult() Result {
 }
 
 func notSentOutcome() Outcome {
-	return Outcome{Effect: NotSent, Steps: nil, Created: nil}
+	return Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}
 }
 
 func unsupportedVersion(feature string, v Version) *UnsupportedError {
 	return &UnsupportedError{
 		Feature:   feature,
 		Version:   v,
-		Transport: Subprocess,
+		Transport: TransportSubprocess,
 		Err:       nil,
 	}
 }
@@ -239,7 +248,7 @@ func unsupported(feature string) *UnsupportedError {
 	return &UnsupportedError{
 		Feature:   feature,
 		Version:   Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false},
-		Transport: Subprocess,
+		Transport: TransportSubprocess,
 		Err:       nil,
 	}
 }
@@ -248,7 +257,7 @@ func unsupportedControl(feature string, err error) *UnsupportedError {
 	return &UnsupportedError{
 		Feature:   feature,
 		Version:   Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false},
-		Transport: Control,
+		Transport: TransportControl,
 		Err:       err,
 	}
 }
@@ -258,8 +267,14 @@ func opError(name string, err error) error {
 		return nil
 	}
 
-	if _, ok := errors.AsType[*discoveryError](err); ok && name != "Probe" {
-		return &OperationError{Operation: name, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Err: err}
+	// A helper already labeled this failure with the same operation. Only its
+	// direct result passes through; a wrapped one is relabeled as usual.
+	if oe, ok := err.(*OperationError); ok && oe.Operation == name { //nolint:errorlint // deliberately matches only an unwrapped helper result
+		return oe
+	}
+
+	if _, ok := errors.AsType[*discoveryError](err); ok && name != "Server.Probe" {
+		return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Err: err}
 	}
 
 	if op, ok := errors.AsType[*OperationError](err); ok {
@@ -270,7 +285,7 @@ func opError(name string, err error) error {
 		return &OperationError{Operation: name, Outcome: cmd.Outcome, Err: err}
 	}
 
-	return &OperationError{Operation: name, Outcome: Outcome{Effect: NotSent, Steps: nil, Created: nil}, Err: err}
+	return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Err: err}
 }
 
 func afterError(name string, err error, created ...CreatedObject) error {
@@ -278,7 +293,7 @@ func afterError(name string, err error, created ...CreatedObject) error {
 		return nil
 	}
 
-	return &OperationError{Operation: name, Outcome: Outcome{Effect: Confirmed, Steps: nil, Created: created}, Err: err}
+	return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectConfirmed, Steps: nil, Created: created}, Err: err}
 }
 
 func outcomeOf(err error) Outcome {
@@ -290,18 +305,18 @@ func outcomeOf(err error) Outcome {
 		return ce.Outcome
 	}
 
-	return Outcome{Effect: NotSent, Steps: nil, Created: nil}
+	return Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}
 }
 
 func contextSource(callerDone <-chan struct{}, err error) TimeoutSource {
 	if !errors.Is(err, context.DeadlineExceeded) {
-		return NoTimeout
+		return TimeoutSourceNone
 	}
 
 	select {
 	case <-callerDone:
-		return CallerTimeout
+		return TimeoutSourceCaller
 	default:
-		return LibraryTimeout
+		return TimeoutSourceLibrary
 	}
 }

@@ -6,17 +6,17 @@ import (
 )
 
 const (
-	// ResizeUp increases or decreases pane height upwards (-U flag).
-	ResizeUp ResizeDirection = iota
+	// ResizeDirectionUp increases or decreases pane height upwards (-U flag).
+	ResizeDirectionUp ResizeDirection = iota
 
-	// ResizeDown increases or decreases pane height downwards (-D flag).
-	ResizeDown
+	// ResizeDirectionDown increases or decreases pane height downwards (-D flag).
+	ResizeDirectionDown
 
-	// ResizeLeft increases or decreases pane width to the left (-L flag).
-	ResizeLeft
+	// ResizeDirectionLeft increases or decreases pane width to the left (-L flag).
+	ResizeDirectionLeft
 
-	// ResizeRight increases or decreases pane width to the right (-R flag).
-	ResizeRight
+	// ResizeDirectionRight increases or decreases pane width to the right (-R flag).
+	ResizeDirectionRight
 )
 
 const (
@@ -34,20 +34,20 @@ const (
 )
 
 const (
-	// EvenHorizontal arranges panes in equal-width vertical columns side by side.
-	EvenHorizontal Layout = "even-horizontal"
+	// LayoutEvenHorizontal arranges panes in equal-width vertical columns side by side.
+	LayoutEvenHorizontal Layout = "even-horizontal"
 
-	// EvenVertical arranges panes in equal-height horizontal rows stacked on top of each other.
-	EvenVertical Layout = "even-vertical"
+	// LayoutEvenVertical arranges panes in equal-height horizontal rows stacked on top of each other.
+	LayoutEvenVertical Layout = "even-vertical"
 
-	// MainHorizontal arranges a large primary pane on top with remaining panes tiled below.
-	MainHorizontal Layout = "main-horizontal"
+	// LayoutMainHorizontal arranges a large primary pane on top with remaining panes tiled below.
+	LayoutMainHorizontal Layout = "main-horizontal"
 
-	// MainVertical arranges a large primary pane on the left with remaining panes tiled on the right.
-	MainVertical Layout = "main-vertical"
+	// LayoutMainVertical arranges a large primary pane on the left with remaining panes tiled on the right.
+	LayoutMainVertical Layout = "main-vertical"
 
-	// Tiled arranges panes evenly in a 2D rectangular grid.
-	Tiled Layout = "tiled"
+	// LayoutTiled arranges panes evenly in a 2D rectangular grid.
+	LayoutTiled Layout = "tiled"
 )
 
 type (
@@ -72,13 +72,16 @@ type (
 		Percent int
 	}
 
-	// SwapPaneOptions configures pane swapping behavior.
+	// SwapPaneOptions configures [Pane.Swap].
 	SwapPaneOptions struct {
-		// Up swaps with the previous pane (-U flag).
-		Up bool
+		// Select makes the swapped pane active; otherwise focus stays put (-d flag when false).
+		Select bool
+	}
 
-		// Down swaps with the next pane (-D flag).
-		Down bool
+	// SwapWindowOptions configures [WindowLink.Swap].
+	SwapWindowOptions struct {
+		// Select makes the swapped window current; otherwise focus stays put (-d flag when false).
+		Select bool
 	}
 )
 
@@ -102,88 +105,66 @@ func (s SplitSize) args() ([]string, error) {
 	return nil, nil
 }
 
-// SwapWith exchanges this pane with another pane according to opts.
-func (p Pane) SwapWith(ctx context.Context, other Pane, opts SwapPaneOptions) error {
-	if err := p.h.check(); err != nil {
-		return opError("SwapWith", err)
-	}
-
-	if err := other.h.check(); err != nil {
-		return opError("SwapWith", err)
-	}
-
-	args := []string{"-s", p.h.id, "-t", other.h.id}
-	if opts.Up {
-		args = append(args, "-U")
-	}
-
-	if opts.Down {
-		args = append(args, "-D")
-	}
-
-	return p.h.act(ctx, "swap-pane", args...)
-}
-
 // SwapUp swaps this pane with the previous pane (-U flag).
 func (p Pane) SwapUp(ctx context.Context) error {
 	if err := p.h.check(); err != nil {
-		return opError("SwapUp", err)
+		return opError("Pane.SwapUp", err)
 	}
 
-	return p.h.act(ctx, "swap-pane", "-U", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.SwapUp", "swap-pane", "-U", "-t", p.h.id)
 }
 
 // SwapDown swaps this pane with the next pane (-D flag).
 func (p Pane) SwapDown(ctx context.Context) error {
 	if err := p.h.check(); err != nil {
-		return opError("SwapDown", err)
+		return opError("Pane.SwapDown", err)
 	}
 
-	return p.h.act(ctx, "swap-pane", "-D", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.SwapDown", "swap-pane", "-D", "-t", p.h.id)
 }
 
 // Mark sets the marked pane flag on this pane (-m flag).
 func (p Pane) Mark(ctx context.Context) error {
 	if err := p.h.check(); err != nil {
-		return opError("Mark", err)
+		return opError("Pane.Mark", err)
 	}
 
-	return p.h.act(ctx, "select-pane", "-m", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.Mark", "select-pane", "-m", "-t", p.h.id)
 }
 
 // Unmark clears the marked pane flag on this pane (-M flag).
 func (p Pane) Unmark(ctx context.Context) error {
 	if err := p.h.check(); err != nil {
-		return opError("Unmark", err)
+		return opError("Pane.Unmark", err)
 	}
 
-	return p.h.act(ctx, "select-pane", "-M", "-t", p.h.id)
+	return p.h.act(ctx, "Pane.Unmark", "select-pane", "-M", "-t", p.h.id)
 }
 
 // ResizeRelative adjusts the pane dimensions relative to its current size by adj cells in direction dir.
 func (p Pane) ResizeRelative(ctx context.Context, adj int, dir ResizeDirection) error {
 	if err := p.h.check(); err != nil {
-		return opError("ResizeRelative", err)
+		return opError("Pane.ResizeRelative", err)
 	}
 
 	if adj <= 0 {
-		return opError("ResizeRelative", invalid("adjustment must be positive"))
+		return opError("Pane.ResizeRelative", invalid("adjustment must be positive"))
 	}
 
 	var flag string
 
 	switch dir {
-	case ResizeUp:
+	case ResizeDirectionUp:
 		flag = "-U"
-	case ResizeDown:
+	case ResizeDirectionDown:
 		flag = "-D"
-	case ResizeLeft:
+	case ResizeDirectionLeft:
 		flag = "-L"
-	case ResizeRight:
+	case ResizeDirectionRight:
 		flag = "-R"
 	default:
-		return opError("ResizeRelative", invalid("resize direction"))
+		return opError("Pane.ResizeRelative", invalid("resize direction"))
 	}
 
-	return p.h.act(ctx, "resize-pane", "-t", p.h.id, flag, strconv.Itoa(adj))
+	return p.h.act(ctx, "Pane.ResizeRelative", "resize-pane", "-t", p.h.id, flag, strconv.Itoa(adj))
 }

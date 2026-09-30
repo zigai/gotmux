@@ -30,14 +30,14 @@ const (
 )
 
 const (
-	// LogNone disables tmux file logging (default).
-	LogNone LogLevel = iota
+	// LogLevelNone disables tmux file logging (default).
+	LogLevelNone LogLevel = iota
 
-	// LogVerbose enables verbose logging (-v flag, creating tmux-client/server-PID.log).
-	LogVerbose
+	// LogLevelVerbose enables verbose logging (-v flag, creating tmux-client/server-PID.log).
+	LogLevelVerbose
 
-	// LogDebug enables maximum verbosity debug logging (-vv flag).
-	LogDebug
+	// LogLevelDebug enables maximum verbosity debug logging (-vv flag).
+	LogLevelDebug
 )
 
 type (

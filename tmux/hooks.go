@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	// PrefixTable is the standard key table active after pressing the prefix key (default C-b).
-	PrefixTable KeyTable = "prefix"
+	// KeyTablePrefix is the standard key table active after pressing the prefix key (default C-b).
+	KeyTablePrefix KeyTable = "prefix"
 
-	// CopyModeTable is the key table active when emacs-style copy mode is entered.
-	CopyModeTable KeyTable = "copy-mode"
+	// KeyTableCopyMode is the key table active when emacs-style copy mode is entered.
+	KeyTableCopyMode KeyTable = "copy-mode"
 
-	// CopyModeViTable is the key table active when vi-style copy mode is entered.
-	CopyModeViTable KeyTable = "copy-mode-vi"
+	// KeyTableCopyModeVi is the key table active when vi-style copy mode is entered.
+	KeyTableCopyModeVi KeyTable = "copy-mode-vi"
 )
 
 type (
@@ -165,7 +165,7 @@ func parsePayload(raw string) CommandPayload {
 
 // GlobalHooks returns a [HookScope] targeting global server-wide hooks.
 func (s *Server) GlobalHooks() HookScope {
-	return HookScope{target: optionTarget{server: s, scope: GlobalSessionScope, h: zeroHandle}}
+	return HookScope{target: optionTarget{server: s, scope: ScopeGlobalSession, h: zeroHandle}}
 }
 
 // Hooks returns a [HookScope] targeting hooks installed on this specific session.
@@ -180,12 +180,12 @@ func (p Pane) Hooks() HookScope { return HookScope{target: p.Options().target} }
 // Set registers a command sequence to execute when the named hook event triggers at index.
 func (h HookScope) Set(ctx context.Context, name string, index int, commands CommandSequence) error {
 	if !validFormatName(name) || index < 0 || index > 1<<30 || len(commands.commands) == 0 {
-		return opError("SetHook", invalid("hook name/index/commands"))
+		return opError("HookScope.Set", invalid("hook name/index/commands"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("SetHook", err)
+		return opError("HookScope.Set", err)
 	}
 	defer op.close()
 
@@ -193,36 +193,36 @@ func (h HookScope) Set(ctx context.Context, name string, index int, commands Com
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
 	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
 
-	return opError("SetHook", err)
+	return opError("HookScope.Set", err)
 }
 
 // Unset removes the hook installed at the specified event name and index slot.
 func (h HookScope) Unset(ctx context.Context, name string, index int) error {
 	if !validFormatName(name) || index < 0 || index > 1<<30 {
-		return opError("UnsetHook", invalid("hook name/index"))
+		return opError("HookScope.Unset", invalid("hook name/index"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("UnsetHook", err)
+		return opError("HookScope.Unset", err)
 	}
 	defer op.close()
 
 	args := append(h.target.args(), "-u", "--", name+"["+strconv.Itoa(index)+"]")
 	_, err = h.target.server.execute(opCtx, op, emptyPlan(command("set-hook", args...)), g, nil)
 
-	return opError("UnsetHook", err)
+	return opError("HookScope.Unset", err)
 }
 
 // SetWhole replaces all commands on the named hook event in this scope.
 func (h HookScope) SetWhole(ctx context.Context, name string, commands CommandSequence) error {
 	if !validFormatName(name) || len(commands.commands) == 0 {
-		return opError("SetHook", invalid("hook name/commands"))
+		return opError("HookScope.SetWhole", invalid("hook name/commands"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("SetHook", err)
+		return opError("HookScope.SetWhole", err)
 	}
 	defer op.close()
 
@@ -230,18 +230,18 @@ func (h HookScope) SetWhole(ctx context.Context, name string, commands CommandSe
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
 	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
 
-	return opError("SetHook", err)
+	return opError("HookScope.SetWhole", err)
 }
 
 // Append appends a command sequence to the named hook event in this scope (-a flag).
 func (h HookScope) Append(ctx context.Context, name string, commands CommandSequence) error {
 	if !validFormatName(name) || len(commands.commands) == 0 {
-		return opError("SetHook", invalid("hook name/commands"))
+		return opError("HookScope.Append", invalid("hook name/commands"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("SetHook", err)
+		return opError("HookScope.Append", err)
 	}
 	defer op.close()
 
@@ -249,70 +249,70 @@ func (h HookScope) Append(ctx context.Context, name string, commands CommandSequ
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
 	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
 
-	return opError("SetHook", err)
+	return opError("HookScope.Append", err)
 }
 
 // Run executes the named hook event immediately in this scope (-R flag).
 func (h HookScope) Run(ctx context.Context, name string) error {
 	if !validFormatName(name) {
-		return opError("RunHook", invalid("hook name"))
+		return opError("HookScope.Run", invalid("hook name"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("RunHook", err)
+		return opError("HookScope.Run", err)
 	}
 	defer op.close()
 
 	args := append(h.target.args(), "-R", "--", name)
 	_, err = h.target.server.execute(opCtx, op, emptyPlan(command("set-hook", args...)), g, nil)
 
-	return opError("RunHook", err)
+	return opError("HookScope.Run", err)
 }
 
 // Remove deletes all command slots registered under the named hook event in this scope.
 func (h HookScope) Remove(ctx context.Context, name string) error {
 	if !validFormatName(name) {
-		return opError("UnsetHook", invalid("hook name"))
+		return opError("HookScope.Remove", invalid("hook name"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return opError("UnsetHook", err)
+		return opError("HookScope.Remove", err)
 	}
 	defer op.close()
 
 	args := append(h.target.args(), "-u", "--", name)
 	_, err = h.target.server.execute(opCtx, op, emptyPlan(command("set-hook", args...)), g, nil)
 
-	return opError("UnsetHook", err)
+	return opError("HookScope.Remove", err)
 }
 
 // List queries all hooks currently registered in this scope.
 func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return nil, opError("Hooks", err)
+		return nil, opError("HookScope.List", err)
 	}
 	defer op.close()
 
 	r, err := h.target.server.execute(opCtx, op, plainPlan(command("show-hooks", h.target.args()...)), g, nil)
 	if err != nil {
-		return nil, opError("Hooks", err)
+		return nil, opError("HookScope.List", err)
 	}
 
-	return h.parseHooksOutput(r.Stdout)
+	return h.parseHooksOutput("HookScope.List", r.Stdout)
 }
 
 // ListFiltered queries hooks registered in this scope filtered to the specified event name.
 func (h HookScope) ListFiltered(ctx context.Context, name string) ([]HookInfo, error) {
 	if !validFormatName(name) {
-		return nil, opError("Hooks", invalid("hook name"))
+		return nil, opError("HookScope.ListFiltered", invalid("hook name"))
 	}
 
 	opCtx, op, g, err := h.target.prepare(ctx)
 	if err != nil {
-		return nil, opError("Hooks", err)
+		return nil, opError("HookScope.ListFiltered", err)
 	}
 	defer op.close()
 
@@ -320,13 +320,13 @@ func (h HookScope) ListFiltered(ctx context.Context, name string) ([]HookInfo, e
 
 	r, err := h.target.server.execute(opCtx, op, plainPlan(command("show-hooks", args...)), g, nil)
 	if err != nil {
-		return nil, opError("Hooks", err)
+		return nil, opError("HookScope.ListFiltered", err)
 	}
 
-	return h.parseHooksOutput(r.Stdout)
+	return h.parseHooksOutput("HookScope.ListFiltered", r.Stdout)
 }
 
-func (h HookScope) parseHooksOutput(stdout []byte) ([]HookInfo, error) {
+func (h HookScope) parseHooksOutput(label string, stdout []byte) ([]HookInfo, error) {
 	out := []HookInfo{}
 
 	for line := range bytes.SplitSeq(bytes.TrimSuffix(stdout, []byte{'\n'}), []byte{'\n'}) {
@@ -347,7 +347,7 @@ func (h HookScope) parseHooksOutput(stdout []byte) ([]HookInfo, error) {
 
 			idx, err := arrayIndex(key, name)
 			if err != nil {
-				return nil, afterError("Hooks", err)
+				return nil, afterError(label, err)
 			}
 
 			index = idx
@@ -391,31 +391,31 @@ func bindArgs(table KeyTable, key Key, opts BindOptions) []string {
 // can be used to update an existing binding's note or repeat flag without replacing its command.
 func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands CommandSequence, opts BindOptions) error {
 	if err := validateBind(table, key, commands, opts); err != nil {
-		return opError("Bind", err)
+		return opError("Server.Bind", err)
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return opError("Bind", err)
+		return opError("Server.Bind", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return opError("Bind", err)
+		return opError("Server.Bind", err)
 	}
 
 	args := bindArgs(table, key, opts)
 	if len(commands.commands) == 0 {
 		_, err = s.execute(opCtx, op, emptyPlan(command("bind-key", args...)), newGuard(info.Identity), nil)
-		return opError("Bind", err)
+		return opError("Server.Bind", err)
 	}
 
 	node := leaf(command("bind-key", args...))
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
 	_, err = s.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, newGuard(info.Identity), nil)
 
-	return opError("Bind", err)
+	return opError("Server.Bind", err)
 }
 
 // Unbind removes a key binding from the specified key table.
@@ -426,11 +426,11 @@ func (s *Server) Unbind(ctx context.Context, table KeyTable, key Key) error {
 // UnbindWith removes key bindings with options such as -a (remove all bindings) and -q (quiet).
 func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, opts UnbindOptions) error {
 	if !opts.All && !key.Valid() {
-		return opError("Unbind", invalid("key"))
+		return opError("Server.Unbind", invalid("key"))
 	}
 
 	if table != "" && !table.Valid() {
-		return opError("Unbind", invalid("key table"))
+		return opError("Server.Unbind", invalid("key table"))
 	}
 
 	var args []string
@@ -451,7 +451,7 @@ func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, opts U
 		args = append(args, "--", string(key))
 	}
 
-	return s.endpointAction(ctx, "unbind-key", args...)
+	return s.endpointAction(ctx, "Server.Unbind", "unbind-key", args...)
 }
 
 // Bindings queries and returns all key bindings currently registered in the specified key table.
@@ -459,7 +459,7 @@ func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, opts U
 // If a binding's command text uses complex shell or tmux syntax outside what our non-evaluating
 // parser supports, [BindingInfo.Parsed] will be false and [BindingInfo.Raw] provides the verbatim text.
 func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, error) {
-	return s.BindingsWith(ctx, BindingsOptions{
+	return s.FindBindings(ctx, BindingsOptions{
 		Table:      table,
 		Key:        "",
 		FirstMatch: false,
@@ -498,21 +498,22 @@ func validateBindingsOptions(opts BindingsOptions) error {
 	return nil
 }
 
-// BindingsWith queries key bindings matching custom options such as table, key filter, or first match.
-func (s *Server) BindingsWith(ctx context.Context, opts BindingsOptions) ([]BindingInfo, error) {
+// FindBindings returns the key bindings matching opts: a table, a key, or only the first match.
+// It returns an empty slice when nothing matches.
+func (s *Server) FindBindings(ctx context.Context, opts BindingsOptions) ([]BindingInfo, error) {
 	if err := validateBindingsOptions(opts); err != nil {
-		return nil, opError("Bindings", err)
+		return nil, opError("Server.FindBindings", err)
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Bindings", err)
+		return nil, opError("Server.FindBindings", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Bindings", err)
+		return nil, opError("Server.FindBindings", err)
 	}
 
 	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", listKeysArgs(opts)...)), newGuard(info.Identity), nil)
@@ -521,7 +522,7 @@ func (s *Server) BindingsWith(ctx context.Context, opts BindingsOptions) ([]Bind
 			return []BindingInfo{}, nil
 		}
 
-		return nil, opError("Bindings", err)
+		return nil, opError("Server.FindBindings", err)
 	}
 
 	out := parseBindingsLines(r.Stdout, opts.Table, opts.Table)
@@ -539,22 +540,22 @@ func (s *Server) BindingsWith(ctx context.Context, opts BindingsOptions) ([]Bind
 // BindingNotes queries key bindings that have attached notes (tmux list-keys -N).
 func (s *Server) BindingNotes(ctx context.Context, opts BindingsOptions) ([]BindingNote, error) {
 	if err := validateBindingsOptions(opts); err != nil {
-		return nil, opError("BindingNotes", err)
+		return nil, opError("Server.BindingNotes", err)
 	}
 
 	if !wire.ValidString(opts.Prefix) {
-		return nil, opError("BindingNotes", invalid("prefix"))
+		return nil, opError("Server.BindingNotes", invalid("prefix"))
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("BindingNotes", err)
+		return nil, opError("Server.BindingNotes", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("BindingNotes", err)
+		return nil, opError("Server.BindingNotes", err)
 	}
 
 	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", bindingNotesArgs(opts)...)), newGuard(info.Identity), nil)
@@ -563,7 +564,7 @@ func (s *Server) BindingNotes(ctx context.Context, opts BindingsOptions) ([]Bind
 			return []BindingNote{}, nil
 		}
 
-		return nil, opError("BindingNotes", err)
+		return nil, opError("Server.BindingNotes", err)
 	}
 
 	notes := parseNotesOutput(r.Stdout, opts)
@@ -722,7 +723,7 @@ func (s *Server) fallbackBindings(ctx context.Context, op *operation, info Serve
 		}
 
 		r = rAll
-		defaultTable = PrefixTable
+		defaultTable = KeyTablePrefix
 	}
 
 	out := parseBindingsLines(r.Stdout, defaultTable, table)
@@ -774,7 +775,7 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 	i++
 
 	if b.Table == "" {
-		b.Table = PrefixTable
+		b.Table = KeyTablePrefix
 	}
 
 	if !b.Table.Valid() || !b.Key.Valid() {

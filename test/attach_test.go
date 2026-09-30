@@ -38,12 +38,12 @@ func attachmentSession(t *testing.T, server *tmux.Server, session tmux.Session, 
 		t.Fatal(err)
 	}
 
-	auxiliary, err := bound.UsingSubprocess()
+	subprocess, err := bound.ViaSubprocess()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	return auxiliary, connection
+	return subprocess, connection
 }
 
 func waitTerminalClient(t *testing.T, ctx context.Context, server *tmux.Server, terminal *os.File, done chan error) tmux.Client {
@@ -108,7 +108,7 @@ func testAttachmentLifecycle(t *testing.T, finish string) {
 
 	go func() {
 		var options tmux.AttachOptions
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: terminal, Out: terminal, Err: terminal}, options)
+		done <- session.Attach(attachCtx, tmux.Streams{In: terminal, Out: terminal, Err: terminal}, options)
 	}()
 
 	t.Cleanup(func() {
@@ -184,7 +184,7 @@ func TestIntegrationAPIAttachRejectsReplacementDaemon(t *testing.T) {
 		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		if err := server.KillIfIdentity(cleanup, replacement.Identity()); err != nil {
+		if err := server.KillMatching(cleanup, replacement.ServerIdentity()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -197,7 +197,7 @@ func TestIntegrationAPIAttachRejectsReplacementDaemon(t *testing.T) {
 
 	var options tmux.AttachOptions
 
-	err = stale.Attach(ctx, tmux.TerminalStreams{In: terminal, Out: terminal, Err: terminal}, options)
+	err = stale.Attach(ctx, tmux.Streams{In: terminal, Out: terminal, Err: terminal}, options)
 	if !errors.Is(err, tmux.ErrServerChanged) {
 		t.Fatalf("stale attach: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestIntegrationPrepareTerminalAttachedSession(t *testing.T) {
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	execCmd, err := server.PrepareTerminal(termCtx, cmd, tmux.TerminalStreams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.AllowStart})
+	execCmd, err := server.PrepareTerminal(termCtx, cmd, tmux.Streams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("PrepareTerminal failed: %v", err)
 	}
@@ -372,7 +372,7 @@ func TestIntegrationPrepareDefaultTerminal(t *testing.T) {
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	execCmd, err := server.PrepareDefaultTerminal(termCtx, tmux.TerminalStreams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.AllowStart})
+	execCmd, err := server.PrepareDefaultTerminal(termCtx, tmux.Streams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("PrepareDefaultTerminal failed: %v", err)
 	}
@@ -444,7 +444,7 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	execCmd, err := server.PrepareTerminalSequence(termCtx, seq, tmux.TerminalStreams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.AllowStart})
+	execCmd, err := server.PrepareTerminalSequence(termCtx, seq, tmux.Streams{In: term, Out: term, Err: term}, tmux.TerminalOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("PrepareTerminalSequence failed: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 	termCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	execCmd, err := session.PrepareAttach(termCtx, tmux.TerminalStreams{In: term, Out: term, Err: term}, tmux.AttachOptions{
+	execCmd, err := session.PrepareAttach(termCtx, tmux.Streams{In: term, Out: term, Err: term}, tmux.AttachOptions{
 		ReadOnly:            false,
 		PreserveEnvironment: false,
 		Detach:              tmux.DetachNone,
@@ -553,7 +553,7 @@ func TestIntegrationServerPrepareAttach(t *testing.T) {
 	termCtx1, cancel1 := context.WithCancel(ctx)
 	defer cancel1()
 
-	execCmd1, err := server.PrepareAttach(termCtx1, session.ID(), tmux.TerminalStreams{In: term1, Out: term1, Err: term1}, options)
+	execCmd1, err := server.PrepareAttach(termCtx1, session.ID(), tmux.Streams{In: term1, Out: term1, Err: term1}, options)
 	if err != nil {
 		t.Fatalf("server.PrepareAttach failed: %v", err)
 	}
@@ -567,7 +567,7 @@ func TestIntegrationServerPrepareAttach(t *testing.T) {
 	termCtx2, cancel2 := context.WithCancel(ctx)
 	defer cancel2()
 
-	execCmd2, err := server.PrepareAttachTarget(termCtx2, "", tmux.TerminalStreams{In: term2, Out: term2, Err: term2}, options)
+	execCmd2, err := server.PrepareAttachTarget(termCtx2, "", tmux.Streams{In: term2, Out: term2, Err: term2}, options)
 	if err != nil {
 		t.Fatalf("server.PrepareAttachTarget with empty target failed: %v", err)
 	}
@@ -586,7 +586,7 @@ func TestIntegrationAttach_MasterHangupTeardown(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- session.Attach(attachCtx, tmux.TerminalStreams{In: slave, Out: slave, Err: slave}, tmux.AttachOptions{})
+		done <- session.Attach(attachCtx, tmux.Streams{In: slave, Out: slave, Err: slave}, tmux.AttachOptions{})
 	}()
 
 	client := waitTerminalClient(t, ctx, server, slave, done)

@@ -79,13 +79,13 @@ func numericID(s string) uint64 {
 func (s *Server) Probe(ctx context.Context) (ServerInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return ServerInfo{}, opError("Probe", err)
+		return ServerInfo{}, opError("Server.Probe", err)
 	}
 	defer op.close()
 
 	v, err := s.probe(opCtx, op)
 
-	return v, opError("Probe", err)
+	return v, opError("Server.Probe", err)
 }
 
 // Info queries the tmux daemon on this server's endpoint and returns point-in-time
@@ -110,11 +110,11 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 
 	rows, err := parseRaw(r.Stdout, fields, "server")
 	if err != nil {
-		return wrapErr(afterError("Probe", err))
+		return wrapErr(afterError("Server.Probe", err))
 	}
 
 	if len(rows) != 1 {
-		return wrapErr(afterError("Probe", decodeError("server", "record count", wire.ErrRecord)))
+		return wrapErr(afterError("Server.Probe", decodeError("server", "record count", wire.ErrRecord)))
 	}
 
 	d := &recordDecoder{kind: "server", raw: rows[0], err: nil}
@@ -122,7 +122,7 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 
 	v := ParseVersion(d.str("version"))
 	if d.err != nil {
-		return wrapErr(afterError("Probe", d.err))
+		return wrapErr(afterError("Server.Probe", d.err))
 	}
 
 	if err := supportedVersion(v); err != nil {
@@ -134,23 +134,23 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 
 func listCommandAndArgs(kind ObjectKind, target string) (string, []string, error) {
 	switch kind {
-	case SessionKind:
+	case ObjectKindSession:
 		return "list-sessions", nil, nil
-	case WindowKind:
+	case ObjectKindWindow:
 		if target == "" {
 			return "list-windows", []string{"-a"}, nil
 		}
 
 		return "list-windows", nil, nil
-	case PaneKind:
+	case ObjectKindPane:
 		if target == "" {
 			return "list-panes", []string{"-a"}, nil
 		}
 
 		return "list-panes", nil, nil
-	case ClientKind:
+	case ObjectKindClient:
 		return "list-clients", nil, nil
-	case WindowLinkKind:
+	case ObjectKindWindowLink:
 		return "", nil, invalid("object kind")
 	default:
 		return "", nil, invalid("object kind")
@@ -165,20 +165,20 @@ func (s *Server) parseOrRetry(ctx context.Context, op *operation, p plan, g *gua
 
 	time.Sleep(retryBackoff)
 
-	r2, err2 := s.execute(ctx, op, p, g, nil)
-	if err2 != nil {
+	retried, retryErr := s.execute(ctx, op, p, g, nil)
+	if retryErr != nil {
 		return nil, err
 	}
 
-	rows2, err3 := parseRaw(r2.Stdout, fields, kind)
-	if err3 != nil {
+	retriedRows, parseErr := parseRaw(retried.Stdout, fields, kind)
+	if parseErr != nil {
 		return nil, err
 	}
 
-	return rows2, nil
+	return retriedRows, nil
 }
 
-func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, expected ServerIdentity, opts QueryOptions, target string) ([]map[string]string, error) {
+func (s *Server) listRaw(ctx context.Context, label string, op *operation, kind ObjectKind, expected ServerIdentity, opts QueryOptions, target string) ([]map[string]string, error) {
 	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
 	if err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (s *Server) listRaw(ctx context.Context, op *operation, kind ObjectKind, ex
 
 	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
 	if err != nil {
-		return nil, afterError(name, err)
+		return nil, afterError(label, err)
 	}
 
 	return rows, nil
@@ -233,22 +233,22 @@ func (s *Server) Sessions(ctx context.Context) ([]SessionInfo, error) {
 func (s *Server) SessionsWith(ctx context.Context, opts QueryOptions) ([]SessionInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Sessions", err)
+		return nil, opError("Server.Sessions", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Sessions", err)
+		return nil, opError("Server.Sessions", err)
 	}
 
-	out, err := s.sessions(opCtx, op, info.Identity, opts)
+	out, err := s.sessions(opCtx, "Server.Sessions", op, info.Identity, opts)
 
-	return out, opError("Sessions", err)
+	return out, opError("Server.Sessions", err)
 }
 
-func (s *Server) sessions(ctx context.Context, op *operation, id ServerIdentity, opts QueryOptions) ([]SessionInfo, error) {
-	rows, err := s.listRaw(ctx, op, SessionKind, id, opts, "")
+func (s *Server) sessions(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions) ([]SessionInfo, error) {
+	rows, err := s.listRaw(ctx, label, op, ObjectKindSession, id, opts, "")
 	if err != nil {
 		return nil, err
 	}
@@ -257,7 +257,7 @@ func (s *Server) sessions(ctx context.Context, op *operation, id ServerIdentity,
 	for _, m := range rows {
 		v, err := s.decodeSession(m, &id)
 		if err != nil {
-			return nil, afterError("Sessions", err)
+			return nil, afterError(label, err)
 		}
 
 		out = append(out, v)
@@ -283,26 +283,26 @@ func (s *Server) Windows(ctx context.Context) ([]WindowInfo, error) {
 func (s *Server) WindowsWith(ctx context.Context, opts QueryOptions) ([]WindowInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Windows", err)
+		return nil, opError("Server.Windows", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Windows", err)
+		return nil, opError("Server.Windows", err)
 	}
 
-	w, _, err := s.windowsWith(opCtx, op, info.Identity, opts, "")
+	w, _, err := s.windowsWith(opCtx, "Server.Windows", op, info.Identity, opts, "")
 
-	return w, opError("Windows", err)
+	return w, opError("Server.Windows", err)
 }
 
-func (s *Server) windows(ctx context.Context, op *operation, id ServerIdentity, target string) ([]WindowInfo, []WindowLinkInfo, error) {
-	return s.windowsWith(ctx, op, id, QueryOptions{Filter: "", ExtraFields: nil}, target)
+func (s *Server) windows(ctx context.Context, label string, op *operation, id ServerIdentity, target string) ([]WindowInfo, []WindowLinkInfo, error) {
+	return s.windowsWith(ctx, label, op, id, QueryOptions{Filter: "", ExtraFields: nil}, target)
 }
 
-func (s *Server) windowsWith(ctx context.Context, op *operation, id ServerIdentity, opts QueryOptions, target string) ([]WindowInfo, []WindowLinkInfo, error) {
-	rows, err := s.listRaw(ctx, op, WindowKind, id, opts, target)
+func (s *Server) windowsWith(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions, target string) ([]WindowInfo, []WindowLinkInfo, error) {
+	rows, err := s.listRaw(ctx, label, op, ObjectKindWindow, id, opts, target)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -314,7 +314,7 @@ func (s *Server) windowsWith(ctx context.Context, op *operation, id ServerIdenti
 	for _, m := range rows {
 		v, l, err := s.decodeWindow(m, &id)
 		if err != nil {
-			return nil, nil, afterError("Windows", err)
+			return nil, nil, afterError(label, err)
 		}
 
 		if !seen[v.ID] {
@@ -348,22 +348,22 @@ func (s *Server) Panes(ctx context.Context) ([]PaneInfo, error) {
 func (s *Server) PanesWith(ctx context.Context, opts QueryOptions) ([]PaneInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Panes", err)
+		return nil, opError("Server.Panes", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Panes", err)
+		return nil, opError("Server.Panes", err)
 	}
 
-	out, err := s.panes(opCtx, op, info.Identity, opts, "")
+	out, err := s.panes(opCtx, "Server.Panes", op, info.Identity, opts, "")
 
-	return out, opError("Panes", err)
+	return out, opError("Server.Panes", err)
 }
 
-func (s *Server) panes(ctx context.Context, op *operation, id ServerIdentity, opts QueryOptions, target string) ([]PaneInfo, error) {
-	rows, err := s.listRaw(ctx, op, PaneKind, id, opts, target)
+func (s *Server) panes(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions, target string) ([]PaneInfo, error) {
+	rows, err := s.listRaw(ctx, label, op, ObjectKindPane, id, opts, target)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +374,7 @@ func (s *Server) panes(ctx context.Context, op *operation, id ServerIdentity, op
 	for _, m := range rows {
 		v, err := s.decodePane(m, &id)
 		if err != nil {
-			return nil, afterError("Panes", err)
+			return nil, afterError(label, err)
 		}
 
 		// list-panes -a repeats panes for windows linked into multiple sessions.
@@ -399,26 +399,26 @@ func (s *Server) Clients(ctx context.Context) ([]ClientInfo, error) {
 func (s *Server) ClientsWith(ctx context.Context, opts QueryOptions) ([]ClientInfo, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return nil, opError("Clients", err)
+		return nil, opError("Server.Clients", err)
 	}
 	defer op.close()
 
 	info, err := s.probe(opCtx, op)
 	if err != nil {
-		return nil, opError("Clients", err)
+		return nil, opError("Server.Clients", err)
 	}
 
-	out, err := s.clientsWith(opCtx, op, info.Identity, opts)
+	out, err := s.clientsWith(opCtx, "Server.Clients", op, info.Identity, opts)
 
-	return out, opError("Clients", err)
+	return out, opError("Server.Clients", err)
 }
 
-func (s *Server) clients(ctx context.Context, op *operation, id ServerIdentity) ([]ClientInfo, error) {
-	return s.clientsWith(ctx, op, id, QueryOptions{Filter: "", ExtraFields: nil})
+func (s *Server) clients(ctx context.Context, label string, op *operation, id ServerIdentity) ([]ClientInfo, error) {
+	return s.clientsWith(ctx, label, op, id, QueryOptions{Filter: "", ExtraFields: nil})
 }
 
-func (s *Server) clientsWith(ctx context.Context, op *operation, id ServerIdentity, opts QueryOptions) ([]ClientInfo, error) {
-	rows, err := s.listRaw(ctx, op, ClientKind, id, opts, "")
+func (s *Server) clientsWith(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions) ([]ClientInfo, error) {
+	rows, err := s.listRaw(ctx, label, op, ObjectKindClient, id, opts, "")
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +427,7 @@ func (s *Server) clientsWith(ctx context.Context, op *operation, id ServerIdenti
 	for _, m := range rows {
 		v, err := s.decodeClient(m, &id)
 		if err != nil {
-			return nil, afterError("Clients", err)
+			return nil, afterError(label, err)
 		}
 
 		out = append(out, v)
@@ -438,8 +438,8 @@ func (s *Server) clientsWith(ctx context.Context, op *operation, id ServerIdenti
 	return out, nil
 }
 
-func (s *Server) lookup(ctx context.Context, kind ObjectKind, id string) (map[string]string, error) {
-	if kind == SessionKind && !SessionID(id).Valid() || kind == WindowKind && !WindowID(id).Valid() || kind == PaneKind && !PaneID(id).Valid() {
+func (s *Server) lookup(ctx context.Context, label string, kind ObjectKind, id string) (map[string]string, error) {
+	if kind == ObjectKindSession && !SessionID(id).Valid() || kind == ObjectKindWindow && !WindowID(id).Valid() || kind == ObjectKindPane && !PaneID(id).Valid() {
 		return nil, invalid("object ID")
 	}
 
@@ -454,17 +454,17 @@ func (s *Server) lookup(ctx context.Context, kind ObjectKind, id string) (map[st
 		return nil, err
 	}
 
-	return s.inspect(opCtx, op, kind, id, newGuard(info.Identity), QueryOptions{Filter: "", ExtraFields: nil})
+	return s.inspect(opCtx, label, op, kind, id, newGuard(info.Identity), QueryOptions{Filter: "", ExtraFields: nil})
 }
 
-func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, target string, g *guard, opts QueryOptions) (map[string]string, error) {
+func (s *Server) inspect(ctx context.Context, label string, op *operation, kind ObjectKind, target string, g *guard, opts QueryOptions) (map[string]string, error) {
 	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
 	if err != nil {
 		return nil, err
 	}
 
 	p := recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat(fields)))
-	if kind == ClientKind {
+	if kind == ObjectKindClient {
 		// display-message -c expands session fields from the default target, not the client's session.
 		p = recordsPlan(command("list-clients", "-f", clientFilter(target), "-F", wire.RecordFormat(fields)))
 	}
@@ -476,20 +476,20 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 
 	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
 	if err != nil {
-		return nil, afterError("Info", err)
+		return nil, afterError(label, err)
 	}
 
-	if kind == ClientKind && len(rows) == 0 {
-		return nil, opError("Info", ErrNotFound)
+	if kind == ObjectKindClient && len(rows) == 0 {
+		return nil, opError(label, ErrNotFound)
 	}
 
 	if len(rows) != 1 {
-		return nil, afterError("Info", decodeError(string(kind), "record count", wire.ErrRecord))
+		return nil, afterError(label, decodeError(string(kind), "record count", wire.ErrRecord))
 	}
 
 	// display-message succeeds with empty object fields when its target vanished.
-	if (kind == SessionKind || kind == WindowKind || kind == PaneKind) && rows[0][string(kind)+"_id"] == "" {
-		return nil, opError("Info", ErrNotFound)
+	if (kind == ObjectKindSession || kind == ObjectKindWindow || kind == ObjectKindPane) && rows[0][string(kind)+"_id"] == "" {
+		return nil, opError(label, ErrNotFound)
 	}
 
 	return rows[0], nil
@@ -499,18 +499,18 @@ func (s *Server) inspect(ctx context.Context, op *operation, kind ObjectKind, ta
 // on the daemon, and returns a [Session] handle retaining daemon origin provenance.
 // Returns [ErrNotFound] if no session with that ID exists.
 func (s *Server) Session(ctx context.Context, id SessionID) (Session, error) {
-	m, err := s.lookup(ctx, SessionKind, string(id))
+	m, err := s.lookup(ctx, "Server.Session", ObjectKindSession, string(id))
 	if err != nil {
-		return Session{}, opError("Session", err)
+		return Session{}, opError("Server.Session", err)
 	}
 
 	v, err := s.decodeSession(m, nil)
 	if err != nil {
-		return Session{}, afterError("Session", err)
+		return Session{}, afterError("Server.Session", err)
 	}
 
 	if v.ID != id {
-		return Session{}, afterError("Session", decodeError("session", "ID", ErrProtocol))
+		return Session{}, afterError("Server.Session", decodeError("session", "ID", ErrProtocol))
 	}
 
 	return v.Handle(), nil
@@ -518,18 +518,18 @@ func (s *Server) Session(ctx context.Context, id SessionID) (Session, error) {
 
 // Window looks up a window by ID and returns a verified [Window] handle with daemon provenance.
 func (s *Server) Window(ctx context.Context, id WindowID) (Window, error) {
-	m, err := s.lookup(ctx, WindowKind, string(id))
+	m, err := s.lookup(ctx, "Server.Window", ObjectKindWindow, string(id))
 	if err != nil {
-		return Window{}, opError("Window", err)
+		return Window{}, opError("Server.Window", err)
 	}
 
 	v, _, err := s.decodeWindow(m, nil)
 	if err != nil {
-		return Window{}, afterError("Window", err)
+		return Window{}, afterError("Server.Window", err)
 	}
 
 	if v.ID != id {
-		return Window{}, afterError("Window", decodeError("window", "ID", ErrProtocol))
+		return Window{}, afterError("Server.Window", decodeError("window", "ID", ErrProtocol))
 	}
 
 	return v.Handle(), nil
@@ -537,18 +537,18 @@ func (s *Server) Window(ctx context.Context, id WindowID) (Window, error) {
 
 // Pane looks up a pane by ID and returns a verified [Pane] handle with daemon provenance.
 func (s *Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
-	m, err := s.lookup(ctx, PaneKind, string(id))
+	m, err := s.lookup(ctx, "Server.Pane", ObjectKindPane, string(id))
 	if err != nil {
-		return Pane{}, opError("Pane", err)
+		return Pane{}, opError("Server.Pane", err)
 	}
 
 	v, err := s.decodePane(m, nil)
 	if err != nil {
-		return Pane{}, afterError("Pane", err)
+		return Pane{}, afterError("Server.Pane", err)
 	}
 
 	if v.ID != id {
-		return Pane{}, afterError("Pane", decodeError("pane", "ID", ErrProtocol))
+		return Pane{}, afterError("Server.Pane", decodeError("pane", "ID", ErrProtocol))
 	}
 
 	return v.Handle(), nil
@@ -558,54 +558,54 @@ func (s *Server) Pane(ctx context.Context, id PaneID) (Pane, error) {
 // Syntax is validated (e.g. "%0"), while daemon provenance is deferred until an operation executes.
 func (s *Server) PaneHandle(id PaneID) (Pane, error) {
 	if s == nil || s.runner == nil {
-		return Pane{}, opError("PaneHandle", ErrInvalidHandle)
+		return Pane{}, opError("Server.PaneHandle", ErrInvalidHandle)
 	}
 
 	if !id.Valid() {
-		return Pane{}, opError("PaneHandle", invalid("pane ID"))
+		return Pane{}, opError("Server.PaneHandle", invalid("pane ID"))
 	}
 
-	return Pane{h: s.unprobedHandle(string(id), PaneKind)}, nil
+	return Pane{h: s.unprobedHandle(string(id), ObjectKindPane)}, nil
 }
 
 // SessionHandle constructs a [Session] handle for a known session ID without performing a server round-trip.
 func (s *Server) SessionHandle(id SessionID) (Session, error) {
 	if s == nil || s.runner == nil {
-		return Session{}, opError("SessionHandle", ErrInvalidHandle)
+		return Session{}, opError("Server.SessionHandle", ErrInvalidHandle)
 	}
 
 	if !id.Valid() {
-		return Session{}, opError("SessionHandle", invalid("session ID"))
+		return Session{}, opError("Server.SessionHandle", invalid("session ID"))
 	}
 
-	return Session{h: s.unprobedHandle(string(id), SessionKind)}, nil
+	return Session{h: s.unprobedHandle(string(id), ObjectKindSession)}, nil
 }
 
 // WindowHandle constructs a [Window] handle for a known window ID without performing a server round-trip.
 func (s *Server) WindowHandle(id WindowID) (Window, error) {
 	if s == nil || s.runner == nil {
-		return Window{}, opError("WindowHandle", ErrInvalidHandle)
+		return Window{}, opError("Server.WindowHandle", ErrInvalidHandle)
 	}
 
 	if !id.Valid() {
-		return Window{}, opError("WindowHandle", invalid("window ID"))
+		return Window{}, opError("Server.WindowHandle", invalid("window ID"))
 	}
 
-	return Window{h: s.unprobedHandle(string(id), WindowKind)}, nil
+	return Window{h: s.unprobedHandle(string(id), ObjectKindWindow)}, nil
 }
 
 // ClientHandle constructs a [Client] handle for a known client terminal name without performing a server round-trip.
 // Syntax is validated, while daemon provenance is deferred until an operation executes.
 func (s *Server) ClientHandle(name ClientName) (Client, error) {
 	if s == nil || s.runner == nil {
-		return Client{}, opError("ClientHandle", ErrInvalidHandle)
+		return Client{}, opError("Server.ClientHandle", ErrInvalidHandle)
 	}
 
 	if !name.Valid() {
-		return Client{}, opError("ClientHandle", invalid("client name"))
+		return Client{}, opError("Server.ClientHandle", invalid("client name"))
 	}
 
-	return Client{h: s.unprobedHandle(string(name), ClientKind)}, nil
+	return Client{h: s.unprobedHandle(string(name), ObjectKindClient)}, nil
 }
 
 // FindSession locates a session by its exact human-readable name, avoiding tmux's
@@ -613,12 +613,12 @@ func (s *Server) ClientHandle(name ClientName) (Client, error) {
 // Returns [ErrNotFound] if missing, or [ErrAmbiguousTarget] if multiple sessions share the name.
 func (s *Server) FindSession(ctx context.Context, exactName string) (Session, error) {
 	if exactName == "" || !wire.ValidString(exactName) {
-		return Session{}, opError("FindSession", invalid("name"))
+		return Session{}, opError("Server.FindSession", invalid("name"))
 	}
 
 	sessions, err := s.Sessions(ctx)
 	if err != nil {
-		return Session{}, opError("FindSession", err)
+		return Session{}, opError("Server.FindSession", err)
 	}
 
 	var found Session
@@ -626,7 +626,7 @@ func (s *Server) FindSession(ctx context.Context, exactName string) (Session, er
 	for _, v := range sessions {
 		if v.Name == exactName {
 			if found.Valid() {
-				return Session{}, opError("FindSession", ErrAmbiguousTarget)
+				return Session{}, opError("Server.FindSession", ErrAmbiguousTarget)
 			}
 
 			found = v.Handle()
@@ -634,7 +634,7 @@ func (s *Server) FindSession(ctx context.Context, exactName string) (Session, er
 	}
 
 	if !found.Valid() {
-		return Session{}, opError("FindSession", ErrNotFound)
+		return Session{}, opError("Server.FindSession", ErrNotFound)
 	}
 
 	return found, nil
@@ -645,12 +645,12 @@ func (s *Server) FindSession(ctx context.Context, exactName string) (Session, er
 // Returns [ErrNotFound] if the client is not connected.
 func (s *Server) Client(ctx context.Context, name ClientName) (Client, error) {
 	if !name.Valid() {
-		return Client{}, opError("Client", invalid("client name"))
+		return Client{}, opError("Server.Client", invalid("client name"))
 	}
 
 	clients, err := s.Clients(ctx)
 	if err != nil {
-		return Client{}, opError("Client", err)
+		return Client{}, opError("Server.Client", err)
 	}
 
 	for _, v := range clients {
@@ -659,10 +659,10 @@ func (s *Server) Client(ctx context.Context, name ClientName) (Client, error) {
 		}
 	}
 
-	return Client{}, opError("Client", ErrNotFound)
+	return Client{}, opError("Server.Client", ErrNotFound)
 }
 
-func (h handle) inspectWith(ctx context.Context, opts QueryOptions) (map[string]string, error) {
+func (h handle) inspectWith(ctx context.Context, label string, opts QueryOptions) (map[string]string, error) {
 	if err := h.check(); err != nil {
 		return nil, err
 	}
@@ -673,7 +673,7 @@ func (h handle) inspectWith(ctx context.Context, opts QueryOptions) (map[string]
 	}
 	defer op.close()
 
-	return h.server.inspect(opCtx, op, h.kind, h.id, h.guard(), opts)
+	return h.server.inspect(opCtx, label, op, h.kind, h.id, h.guard(), opts)
 }
 
 // Info queries the answering daemon for the current point-in-time metadata of this session.
@@ -684,7 +684,7 @@ func (s Session) Info(ctx context.Context) (SessionInfo, error) {
 
 // InfoWith queries the answering daemon for the metadata of this session with custom query options.
 func (s Session) InfoWith(ctx context.Context, opts QueryOptions) (SessionInfo, error) {
-	m, err := s.h.inspectWith(ctx, opts)
+	m, err := s.h.inspectWith(ctx, "Session.Info", opts)
 	if err != nil {
 		return SessionInfo{}, opError("Session.Info", err)
 	}
@@ -708,7 +708,7 @@ func (w Window) Info(ctx context.Context) (WindowInfo, error) {
 
 // InfoWith queries the answering daemon for the metadata of this window with custom query options.
 func (w Window) InfoWith(ctx context.Context, opts QueryOptions) (WindowInfo, error) {
-	m, err := w.h.inspectWith(ctx, opts)
+	m, err := w.h.inspectWith(ctx, "Window.Info", opts)
 	if err != nil {
 		return WindowInfo{}, opError("Window.Info", err)
 	}
@@ -732,7 +732,7 @@ func (p Pane) Info(ctx context.Context) (PaneInfo, error) {
 
 // InfoWith queries the answering daemon for the metadata of this pane with custom query options.
 func (p Pane) InfoWith(ctx context.Context, opts QueryOptions) (PaneInfo, error) {
-	m, err := p.h.inspectWith(ctx, opts)
+	m, err := p.h.inspectWith(ctx, "Pane.Info", opts)
 	if err != nil {
 		return PaneInfo{}, opError("Pane.Info", err)
 	}
@@ -756,7 +756,7 @@ func (c Client) Info(ctx context.Context) (ClientInfo, error) {
 
 // InfoWith queries the answering daemon for the metadata of this client with custom query options.
 func (c Client) InfoWith(ctx context.Context, opts QueryOptions) (ClientInfo, error) {
-	m, err := c.h.inspectWith(ctx, opts)
+	m, err := c.h.inspectWith(ctx, "Client.Info", opts)
 	if err != nil {
 		return ClientInfo{}, opError("Client.Info", err)
 	}
@@ -791,7 +791,7 @@ func (l WindowLink) InfoWith(ctx context.Context, opts QueryOptions) (WindowLink
 	}
 	defer op.close()
 
-	m, err := l.h.server.inspect(opCtx, op, WindowKind, l.target(), l.guard(), opts)
+	m, err := l.h.server.inspect(opCtx, "WindowLink.Info", op, ObjectKindWindow, l.target(), l.guard(), opts)
 	if err != nil {
 		return WindowLinkInfo{}, opError("WindowLink.Info", err)
 	}
@@ -815,7 +815,7 @@ func (p Pane) Window(ctx context.Context) (Window, error) {
 		return Window{}, opError("Pane.Window", err)
 	}
 
-	return Window{h: p.h.withOrigin(string(v.WindowID), WindowKind)}, nil
+	return Window{h: p.h.withOrigin(string(v.WindowID), ObjectKindWindow)}, nil
 }
 
 // Windows returns all [WindowLink] handles linked into this session, ordered by slot index.
@@ -835,7 +835,7 @@ func (s Session) Windows(ctx context.Context) ([]WindowLink, error) {
 	}
 	defer op.close()
 
-	_, links, err := s.h.server.windows(opCtx, op, s.h.origin, s.h.id)
+	_, links, err := s.h.server.windows(opCtx, "Session.Windows", op, s.h.origin, s.h.id)
 	if err != nil {
 		return nil, opError("Session.Windows", err)
 	}
@@ -860,7 +860,7 @@ func (s Session) WindowInfos(ctx context.Context) ([]WindowInfo, []WindowLinkInf
 	}
 	defer op.close()
 
-	windows, links, err := s.h.server.windows(opCtx, op, s.h.origin, s.h.id)
+	windows, links, err := s.h.server.windows(opCtx, "Session.WindowInfos", op, s.h.origin, s.h.id)
 	if err != nil {
 		return nil, nil, opError("Session.WindowInfos", err)
 	}
@@ -881,7 +881,7 @@ func (w Window) Links(ctx context.Context) ([]WindowLink, error) {
 	}
 	defer op.close()
 
-	_, links, err := w.h.server.windows(opCtx, op, w.h.origin, "")
+	_, links, err := w.h.server.windows(opCtx, "Window.Links", op, w.h.origin, "")
 	if err != nil {
 		return nil, opError("Window.Links", err)
 	}
@@ -919,7 +919,7 @@ func (w Window) PanesWith(ctx context.Context, opts QueryOptions) ([]PaneInfo, e
 
 	defer op.close()
 
-	p, err := w.h.server.panes(opCtx, op, w.h.origin, opts, w.h.id)
+	p, err := w.h.server.panes(opCtx, "Window.Panes", op, w.h.origin, opts, w.h.id)
 	if err != nil {
 		return nil, opError("Window.Panes", err)
 	}
@@ -946,46 +946,48 @@ func (w Window) ActivePane(ctx context.Context) (Pane, error) {
 
 // Format evaluates an explicit tmux format expression in the target pane's context
 // and returns the expanded output bytes without trimming.
-func (p Pane) Format(ctx context.Context, expr Format) ([]byte, error) { return p.h.format(ctx, expr) }
+func (p Pane) Format(ctx context.Context, expr Format) ([]byte, error) {
+	return p.h.format(ctx, "Pane.Format", expr)
+}
 
 // FormatMulti evaluates multiple explicit tmux format expressions in the target pane's context
 // and returns the expanded output bytes in input order without trimming.
 func (p Pane) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
-	return p.h.formatMulti(ctx, exprs)
+	return p.h.formatMulti(ctx, "Pane.FormatMulti", exprs)
 }
 
 // Format evaluates an expression in this session's context.
 func (s Session) Format(ctx context.Context, expr Format) ([]byte, error) {
-	return s.h.format(ctx, expr)
+	return s.h.format(ctx, "Session.Format", expr)
 }
 
 // FormatMulti evaluates multiple expressions in this session's context.
 func (s Session) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
-	return s.h.formatMulti(ctx, exprs)
+	return s.h.formatMulti(ctx, "Session.FormatMulti", exprs)
 }
 
 // Format evaluates an expression in this window's context.
 func (w Window) Format(ctx context.Context, expr Format) ([]byte, error) {
-	return w.h.format(ctx, expr)
+	return w.h.format(ctx, "Window.Format", expr)
 }
 
 // FormatMulti evaluates multiple expressions in this window's context.
 func (w Window) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
-	return w.h.formatMulti(ctx, exprs)
+	return w.h.formatMulti(ctx, "Window.FormatMulti", exprs)
 }
 
 // Format evaluates an expression in this client's context.
 func (c Client) Format(ctx context.Context, expr Format) ([]byte, error) {
-	return c.h.format(ctx, expr)
+	return c.h.format(ctx, "Client.Format", expr)
 }
 
 // FormatMulti evaluates multiple expressions in this client's context.
 func (c Client) FormatMulti(ctx context.Context, exprs ...Format) ([][]byte, error) {
-	return c.h.formatMulti(ctx, exprs)
+	return c.h.formatMulti(ctx, "Client.FormatMulti", exprs)
 }
 
-func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
-	results, err := h.formatMulti(ctx, []Format{expr})
+func (h handle) format(ctx context.Context, label string, expr Format) ([]byte, error) {
+	results, err := h.formatMulti(ctx, label, []Format{expr})
 	if err != nil {
 		return nil, err
 	}
@@ -996,7 +998,7 @@ func (h handle) format(ctx context.Context, expr Format) ([]byte, error) {
 // formatPlan expands format in this object's own context. display-message -c would expand
 // session fields from the default target rather than the client's session, so clients use list-clients.
 func (h handle) formatPlan(format string) plan {
-	if h.kind == ClientKind {
+	if h.kind == ObjectKindClient {
 		return recordsPlan(command("list-clients", "-f", clientFilter(h.id), "-F", format))
 	}
 
@@ -1016,38 +1018,38 @@ func rawFormats(exprs []Format) ([]string, error) {
 	return raw, nil
 }
 
-func (h handle) formatMulti(ctx context.Context, exprs []Format) ([][]byte, error) {
+func (h handle) formatMulti(ctx context.Context, label string, exprs []Format) ([][]byte, error) {
 	if len(exprs) == 0 {
 		return [][]byte{}, nil
 	}
 
 	if err := h.check(); err != nil {
-		return nil, opError("Format", err)
+		return nil, opError(label, err)
 	}
 
 	rawExprs, err := rawFormats(exprs)
 	if err != nil {
-		return nil, opError("Format", err)
+		return nil, opError(label, err)
 	}
 
 	opCtx, op, err := h.server.begin(ctx)
 	if err != nil {
-		return nil, opError("Format", err)
+		return nil, opError(label, err)
 	}
 	defer op.close()
 
 	r, err := h.server.execute(opCtx, op, h.formatPlan(wire.ExpressionsFormat(rawExprs)), h.guard(), nil)
 	if err != nil {
-		return nil, opError("Format", err)
+		return nil, opError(label, err)
 	}
 
 	records, err := wire.ParseRecords(r.Stdout, len(exprs))
-	if err == nil && h.kind == ClientKind && len(records) == 0 {
-		return nil, opError("Format", ErrNotFound)
+	if err == nil && h.kind == ObjectKindClient && len(records) == 0 {
+		return nil, opError(label, ErrNotFound)
 	}
 
 	if err != nil || len(records) != 1 {
-		return nil, afterError("Format", errors.Join(err, wire.ErrRecord))
+		return nil, afterError(label, errors.Join(err, wire.ErrRecord))
 	}
 
 	out := make([][]byte, len(records[0]))

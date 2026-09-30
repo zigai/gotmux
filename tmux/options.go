@@ -48,7 +48,7 @@ type (
 	// SetOptionOptions configures scalar option mutation behavior.
 	SetOptionOptions struct {
 		// Value specifies the optional value to assign.
-		// When Value is absent (Unavailable), tmux toggles flag options or sets the default.
+		// When Value is absent ([ValueStateUnavailable]), tmux toggles flag options or sets the default.
 		// When Value is present (including explicit empty string ""), the value argument is passed to tmux.
 		Value Value[string]
 
@@ -75,7 +75,7 @@ type (
 		Name string
 
 		// Value is the string representation of the option's value.
-		// If the option has no value set (such as an empty hook definition in -H listings), Value is Unavailable.
+		// If the option has no value set (such as an empty hook definition in -H listings), Value is [ValueStateUnavailable].
 		Value Value[string]
 
 		// Inherited is true when the option was inherited from a parent scope (marked with '*' when -A is used).
@@ -94,34 +94,34 @@ type (
 
 // Options returns an accessor for server-wide configuration options (tmux set-option -s).
 func (s *Server) Options() ServerOptions {
-	return ServerOptions{optionTarget{server: s, h: zeroHandle, scope: ServerScope}}
+	return ServerOptions{optionTarget{server: s, h: zeroHandle, scope: ScopeServer}}
 }
 
 // GlobalSessionOptions returns an accessor for default session options inherited by
 // newly created sessions (tmux set-option -g).
 func (s *Server) GlobalSessionOptions() SessionOptions {
-	return SessionOptions{optionTarget{server: s, h: zeroHandle, scope: GlobalSessionScope}}
+	return SessionOptions{optionTarget{server: s, h: zeroHandle, scope: ScopeGlobalSession}}
 }
 
 // GlobalWindowOptions returns an accessor for default window options inherited by
 // newly created windows (tmux set-option -g -w).
 func (s *Server) GlobalWindowOptions() WindowOptions {
-	return WindowOptions{optionTarget{server: s, h: zeroHandle, scope: GlobalWindowScope}}
+	return WindowOptions{optionTarget{server: s, h: zeroHandle, scope: ScopeGlobalWindow}}
 }
 
 // Options returns an accessor for configuration options scoped to this specific session.
 func (s Session) Options() SessionOptions {
-	return SessionOptions{optionTarget{server: s.h.server, h: s.h, scope: SessionScope}}
+	return SessionOptions{optionTarget{server: s.h.server, h: s.h, scope: ScopeSession}}
 }
 
 // Options returns an accessor for configuration options scoped to this specific window.
 func (w Window) Options() WindowOptions {
-	return WindowOptions{optionTarget{server: w.h.server, h: w.h, scope: WindowScope}}
+	return WindowOptions{optionTarget{server: w.h.server, h: w.h, scope: ScopeWindow}}
 }
 
 // Options returns an accessor for configuration options scoped to this specific pane.
 func (p Pane) Options() PaneOptions {
-	return PaneOptions{optionTarget{server: p.h.server, h: p.h, scope: PaneScope}}
+	return PaneOptions{optionTarget{server: p.h.server, h: p.h, scope: ScopePane}}
 }
 
 func (t optionTarget) prepare(ctx context.Context) (context.Context, *operation, *guard, error) {
@@ -129,7 +129,7 @@ func (t optionTarget) prepare(ctx context.Context) (context.Context, *operation,
 		if err := t.h.check(); err != nil {
 			return nil, nil, nil, err
 		}
-	} else if t.scope == SessionScope || t.scope == WindowScope || t.scope == PaneScope {
+	} else if t.scope == ScopeSession || t.scope == ScopeWindow || t.scope == ScopePane {
 		return nil, nil, nil, ErrInvalidHandle
 	}
 
@@ -153,17 +153,17 @@ func (t optionTarget) prepare(ctx context.Context) (context.Context, *operation,
 
 func (t optionTarget) args() []string {
 	switch t.scope {
-	case ServerScope:
+	case ScopeServer:
 		return []string{"-s"}
-	case GlobalSessionScope:
+	case ScopeGlobalSession:
 		return []string{"-g"}
-	case SessionScope:
+	case ScopeSession:
 		return []string{"-t", t.h.id}
-	case GlobalWindowScope:
+	case ScopeGlobalWindow:
 		return []string{"-g", "-w"}
-	case WindowScope:
+	case ScopeWindow:
 		return []string{"-w", "-t", t.h.id}
-	case PaneScope:
+	case ScopePane:
 		return []string{"-p", "-t", t.h.id}
 	}
 
@@ -213,7 +213,7 @@ func userOptionName(name string) bool {
 
 // Named output distinguishes scalars from arrays and rejects abbreviated names.
 // Tmux quotes string values; ParseWords preserves their bytes without evaluation.
-func (t optionTarget) readScalar(ctx context.Context, op *operation, g *guard, name string, inherited bool) (Value[string], error) {
+func (t optionTarget) readScalar(ctx context.Context, label string, op *operation, g *guard, name string, inherited bool) (Value[string], error) {
 	args := append(t.args(), "-q")
 	if inherited {
 		args = append(args, "-A")
@@ -231,17 +231,17 @@ func (t optionTarget) readScalar(ctx context.Context, op *operation, g *guard, n
 	}
 
 	if r.Stdout[len(r.Stdout)-1] != '\n' {
-		return Value[string]{}, afterError("Options", decodeError("option", name, ErrProtocol))
+		return Value[string]{}, afterError(label, decodeError("option", name, ErrProtocol))
 	}
 
-	isIndexed := strings.HasSuffix(name, "]")
-	if !isIndexed && bytes.HasPrefix(r.Stdout, []byte(name+"[")) {
+	indexed := strings.HasSuffix(name, "]")
+	if !indexed && bytes.HasPrefix(r.Stdout, []byte(name+"[")) {
 		return Value[string]{}, invalid("array option; use Array")
 	}
 
 	words, err := wire.ParseWords(string(r.Stdout[:len(r.Stdout)-1]))
 	if err != nil {
-		return Value[string]{}, afterError("Options", decodeError("option", name, err))
+		return Value[string]{}, afterError(label, decodeError("option", name, err))
 	}
 
 	if len(words) != 2 || strings.TrimSuffix(words[0], "*") != name {
@@ -251,31 +251,31 @@ func (t optionTarget) readScalar(ctx context.Context, op *operation, g *guard, n
 	return PresentValue(words[1]), nil
 }
 
-func (t optionTarget) read(ctx context.Context, name string) (OptionValue[string], error) {
+func (t optionTarget) read(ctx context.Context, label string, name string) (OptionValue[string], error) {
 	if !validOptionName(name) {
-		return OptionValue[string]{}, opError("Options", invalid("option name"))
+		return OptionValue[string]{}, opError(label, invalid("option name"))
 	}
 
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return OptionValue[string]{}, opError("Options", err)
+		return OptionValue[string]{}, opError(label, err)
 	}
 	defer op.close()
 
-	local, err := t.readScalar(opCtx, op, g, name, false)
+	local, err := t.readScalar(opCtx, label, op, g, name, false)
 	if err != nil {
-		return OptionValue[string]{}, opError("Options", err)
+		return OptionValue[string]{}, opError(label, err)
 	}
 
-	effective, err := t.readScalar(opCtx, op, g, name, true)
+	effective, err := t.readScalar(opCtx, label, op, g, name, true)
 	if err != nil {
-		return OptionValue[string]{}, opError("Options", err)
+		return OptionValue[string]{}, opError(label, err)
 	}
 
 	result := OptionValue[string]{Local: local, Effective: effective, Origin: UnavailableValue[Scope]()}
 	if a, ok := local.Get(); ok {
 		if b, found := effective.Get(); !found || a != b {
-			return OptionValue[string]{}, afterError("Options", ErrInconsistent)
+			return OptionValue[string]{}, afterError(label, ErrInconsistent)
 		}
 
 		result.Origin = PresentValue(t.scope)
@@ -286,19 +286,19 @@ func (t optionTarget) read(ctx context.Context, name string) (OptionValue[string
 	return result, nil
 }
 
-func (t optionTarget) setWith(ctx context.Context, name string, opts SetOptionOptions) error {
+func (t optionTarget) setWith(ctx context.Context, label string, name string, opts SetOptionOptions) error {
 	if !validOptionName(name) {
-		return opError("SetOption", invalid("option name"))
+		return opError(label, invalid("option name"))
 	}
 
 	val, hasValue := opts.Value.Get()
 	if hasValue && !wire.ValidString(val) {
-		return opError("SetOption", invalid("option value"))
+		return opError(label, invalid("option value"))
 	}
 
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return opError("SetOption", err)
+		return opError(label, err)
 	}
 	defer op.close()
 
@@ -323,17 +323,17 @@ func (t optionTarget) setWith(ctx context.Context, name string, opts SetOptionOp
 
 	_, err = t.server.execute(opCtx, op, emptyPlan(command("set-option", args...)), g, nil)
 
-	return opError("SetOption", err)
+	return opError(label, err)
 }
 
-func (t optionTarget) unsetWith(ctx context.Context, name string, opts UnsetOptionOptions) error {
+func (t optionTarget) unsetWith(ctx context.Context, label string, name string, opts UnsetOptionOptions) error {
 	if !validOptionName(name) {
-		return opError("SetOption", invalid("option name"))
+		return opError(label, invalid("option name"))
 	}
 
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return opError("SetOption", err)
+		return opError(label, err)
 	}
 	defer op.close()
 
@@ -348,15 +348,15 @@ func (t optionTarget) unsetWith(ctx context.Context, name string, opts UnsetOpti
 
 	_, err = t.server.execute(opCtx, op, emptyPlan(command("set-option", args...)), g, nil)
 
-	return opError("SetOption", err)
+	return opError(label, err)
 }
 
-func (t optionTarget) set(ctx context.Context, name, value string, unset bool) error {
+func (t optionTarget) set(ctx context.Context, label string, name, value string, unset bool) error {
 	if unset {
-		return t.unsetWith(ctx, name, UnsetOptionOptions{Cascade: false})
+		return t.unsetWith(ctx, label, name, UnsetOptionOptions{Cascade: false})
 	}
 
-	return t.setWith(ctx, name, SetOptionOptions{
+	return t.setWith(ctx, label, name, SetOptionOptions{
 		Value:        PresentValue(value),
 		Append:       false,
 		ExpandFormat: false,
@@ -364,10 +364,10 @@ func (t optionTarget) set(ctx context.Context, name, value string, unset bool) e
 	})
 }
 
-func (t optionTarget) list(ctx context.Context, opts ListOptionOptions) ([]OptionEntry, error) {
+func (t optionTarget) list(ctx context.Context, label string, opts ListOptionOptions) ([]OptionEntry, error) {
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return nil, opError("Options.List", err)
+		return nil, opError(label, err)
 	}
 	defer op.close()
 
@@ -383,7 +383,7 @@ func (t optionTarget) list(ctx context.Context, opts ListOptionOptions) ([]Optio
 
 	r, err := t.server.execute(opCtx, op, plainPlan(command("show-options", args...)), g, nil)
 	if err != nil {
-		return nil, opError("Options.List", err)
+		return nil, opError(label, err)
 	}
 
 	var out []OptionEntry
@@ -421,43 +421,43 @@ func (t optionTarget) list(ctx context.Context, opts ListOptionOptions) ([]Optio
 	return out, nil
 }
 
-func userSetWith(ctx context.Context, t optionTarget, name string, opts SetOptionOptions) error {
+func userSetWith(ctx context.Context, label string, t optionTarget, name string, opts SetOptionOptions) error {
 	if !userOptionName(name) {
-		return opError("UserOption", invalid("user option name"))
+		return opError(label, invalid("user option name"))
 	}
 
-	return t.setWith(ctx, name, opts)
+	return t.setWith(ctx, label, name, opts)
 }
 
-func userUnsetWith(ctx context.Context, t optionTarget, name string, opts UnsetOptionOptions) error {
+func userUnsetWith(ctx context.Context, label string, t optionTarget, name string, opts UnsetOptionOptions) error {
 	if !userOptionName(name) {
-		return opError("UserOption", invalid("user option name"))
+		return opError(label, invalid("user option name"))
 	}
 
-	return t.unsetWith(ctx, name, opts)
+	return t.unsetWith(ctx, label, name, opts)
 }
 
-func userGet(ctx context.Context, t optionTarget, name string) (OptionValue[string], error) {
+func userGet(ctx context.Context, label string, t optionTarget, name string) (OptionValue[string], error) {
 	if !userOptionName(name) {
-		return OptionValue[string]{}, opError("UserOption", invalid("user option name"))
+		return OptionValue[string]{}, opError(label, invalid("user option name"))
 	}
 
-	return t.read(ctx, name)
+	return t.read(ctx, label, name)
 }
 
-func userSet(ctx context.Context, t optionTarget, name, value string, unset bool) error {
+func userSet(ctx context.Context, label string, t optionTarget, name, value string, unset bool) error {
 	if !userOptionName(name) {
-		return opError("UserOption", invalid("user option name"))
+		return opError(label, invalid("user option name"))
 	}
 
-	return t.set(ctx, name, value, unset)
+	return t.set(ctx, label, name, value, unset)
 }
 
 func convertOption[T any](v OptionValue[string], parse func(string) (T, error)) (OptionValue[T], error) {
 	cv := func(value Value[string]) (Value[T], error) {
 		s, ok := value.Get()
 		if !ok {
-			if value.State() == Unsupported {
+			if value.State() == ValueStateUnsupported {
 				return UnsupportedValue[T](), nil
 			}
 
@@ -513,15 +513,15 @@ func boolOption(v bool) string {
 	return "off"
 }
 
-func (t optionTarget) array(ctx context.Context, name string) ([]ArrayEntry, error) {
-	base, _, isIndexed, err := parseOptionName(name)
-	if err != nil || isIndexed {
-		return nil, opError("Array", invalid("option name"))
+func (t optionTarget) array(ctx context.Context, label string, name string) ([]ArrayEntry, error) {
+	base, _, indexed, err := parseOptionName(name)
+	if err != nil || indexed {
+		return nil, opError(label, invalid("option name"))
 	}
 
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return nil, opError("Array", err)
+		return nil, opError(label, err)
 	}
 	defer op.close()
 
@@ -529,7 +529,7 @@ func (t optionTarget) array(ctx context.Context, name string) ([]ArrayEntry, err
 
 	r, err := t.server.execute(opCtx, op, plainPlan(command("show-options", args...)), g, nil)
 	if err != nil {
-		return nil, opError("Array", err)
+		return nil, opError(label, err)
 	}
 
 	out := []ArrayEntry{}
@@ -539,7 +539,7 @@ func (t optionTarget) array(ctx context.Context, name string) ([]ArrayEntry, err
 			continue
 		}
 
-		entry, err := parseArrayLine(line, base)
+		entry, err := parseArrayLine(label, line, base)
 		if err != nil {
 			return nil, err
 		}
@@ -550,24 +550,24 @@ func (t optionTarget) array(ctx context.Context, name string) ([]ArrayEntry, err
 	return out, nil
 }
 
-func parseArrayLine(line []byte, base string) (ArrayEntry, error) {
+func parseArrayLine(label string, line []byte, base string) (ArrayEntry, error) {
 	key, value, ok := strings.Cut(string(line), " ")
 	if !ok {
-		return ArrayEntry{}, afterError("Array", ErrProtocol)
+		return ArrayEntry{}, afterError(label, ErrProtocol)
 	}
 
 	if key == base || !strings.HasPrefix(key, base+"[") {
-		return ArrayEntry{}, opError("Array", invalid("not an array option"))
+		return ArrayEntry{}, opError(label, invalid("not an array option"))
 	}
 
 	index, err := arrayIndex(key, base)
 	if err != nil {
-		return ArrayEntry{}, afterError("Array", err)
+		return ArrayEntry{}, afterError(label, err)
 	}
 
 	words, err := wire.ParseWords(value)
 	if err != nil || len(words) != 1 {
-		return ArrayEntry{}, afterError("Array", ErrProtocol)
+		return ArrayEntry{}, afterError(label, ErrProtocol)
 	}
 
 	return ArrayEntry{Index: index, Value: words[0]}, nil
@@ -586,29 +586,29 @@ func arrayIndex(key, name string) (int, error) {
 	return n, nil
 }
 
-func (t optionTarget) updateArray(ctx context.Context, name string, updates []ArrayUpdate) (ArrayUpdateResult, error) {
+func (t optionTarget) updateArray(ctx context.Context, label string, name string, updates []ArrayUpdate) (ArrayUpdateResult, error) {
 	result := ArrayUpdateResult{Applied: []int{}}
 
-	base, _, isIndexed, err := parseOptionName(name)
-	if err != nil || isIndexed {
-		return result, opError("UpdateArray", invalid("option name"))
+	base, _, indexed, err := parseOptionName(name)
+	if err != nil || indexed {
+		return result, opError(label, invalid("option name"))
 	}
 
 	if err := validateArrayUpdates(updates); err != nil {
-		return result, opError("UpdateArray", err)
+		return result, opError(label, err)
 	}
 
 	owned := append([]ArrayUpdate{}, updates...)
 
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
-		return result, opError("UpdateArray", err)
+		return result, opError(label, err)
 	}
 	defer op.close()
 
 	steps := make([]StepOutcome, len(owned))
 	for i := range steps {
-		steps[i] = StepOutcome{Index: i, Effect: NotSent}
+		steps[i] = StepOutcome{Index: i, Effect: EffectNotSent}
 	}
 
 	for i, u := range owned {
@@ -619,7 +619,7 @@ func (t optionTarget) updateArray(ctx context.Context, name string, updates []Ar
 			return result, arrayUpdateError(err, i, steps)
 		}
 
-		steps[i].Effect = Confirmed
+		steps[i].Effect = EffectConfirmed
 		result.Applied = append(result.Applied, i)
 	}
 
@@ -655,8 +655,8 @@ func arrayUpdateError(err error, i int, steps []StepOutcome) error {
 	steps[i].Effect = outcome.Effect
 
 	aggregate := outcome.Effect
-	if i > 0 && aggregate == NotSent {
-		aggregate = Unknown
+	if i > 0 && aggregate == EffectNotSent {
+		aggregate = EffectUnknown
 	}
 
 	return &OperationError{

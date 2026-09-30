@@ -181,7 +181,7 @@ func TestDispatcherCancellationDrainsBeforeNext(t *testing.T) {
 	cancel()
 
 	e := <-first
-	if !errors.Is(e, context.Canceled) || outcomeOf(e).Effect != Unknown {
+	if !errors.Is(e, context.Canceled) || outcomeOf(e).Effect != EffectUnknown {
 		t.Fatalf("dispatched cancellation: %v %#v", e, outcomeOf(e))
 	}
 
@@ -251,7 +251,7 @@ func TestDispatcherQueuedCancellationNotSent(t *testing.T) {
 	cancel()
 
 	e := <-queued
-	if !errors.Is(e, context.Canceled) || outcomeOf(e).Effect != NotSent {
+	if !errors.Is(e, context.Canceled) || outcomeOf(e).Effect != EffectNotSent {
 		t.Fatalf("queued cancellation: %v %#v", e, outcomeOf(e))
 	}
 
@@ -283,7 +283,7 @@ func TestDispatcherRawRejectedBeforeWrite(t *testing.T) {
 	defer op.close()
 
 	r, e := p.c.run(opCtx, op, plainPlan(command("capture-pane", "-p")), 100)
-	if !errors.Is(e, ErrTransportUnsupported) || outcomeOf(e).Effect != NotSent || r.ExitCode != -1 {
+	if !errors.Is(e, ErrTransportUnsupported) || outcomeOf(e).Effect != EffectNotSent || r.ExitCode != -1 {
 		t.Fatal(r, e)
 	}
 

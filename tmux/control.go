@@ -144,35 +144,35 @@ type Connection struct {
 // entire lifetime. The original Server continues to use subprocess execution.
 func (s *Server) OpenControl(ctx context.Context, session Session, opts ControlOptions) (*Connection, error) {
 	if err := s.validateOpenControl(ctx, session); err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	opts, err := normalizeControlOptions(opts)
 	if err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	nonce, err := token("TGO-READY:")
 	if err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	args, err := s.controlAttachArgs(session, opts, nonce)
 	if err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	connCtx, cancel := context.WithCancelCause(ctx)
 	c := newConnection(s, session, opts, cancel)
 
 	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	c.startWorkers(connCtx, nonce, session.h.guard())
 
 	if err = c.awaitReady(ctx); err != nil {
-		return nil, opError("OpenControl", err)
+		return nil, opError("Server.OpenControl", err)
 	}
 
 	return c, nil
@@ -230,48 +230,48 @@ func (s *Server) validateOpenControlNewSession(ctx context.Context, opts Control
 // The newly created [Session] is returned alongside the active [*Connection].
 func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessionOptions) (*Connection, Session, error) {
 	if err := s.validateOpenControlNewSession(ctx, opts); err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	ctrlOpts, err := normalizeControlOptions(opts.Control)
 	if err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	opts.Control = ctrlOpts
 
 	nonce, err := token("TGO-READY:")
 	if err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	args, err := s.controlNewSessionArgs(opts, nonce)
 	if err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	info, err := s.Probe(ctx)
 	if err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	connCtx, cancel := context.WithCancelCause(ctx)
-	dummySession := Session{h: handle{server: nil, origin: info.Identity, id: "", kind: SessionKind, client: clientCheck{name: "", pid: 0, created: 0}}}
+	dummySession := Session{h: handle{server: nil, origin: info.Identity, id: "", kind: ObjectKindSession, client: clientCheck{name: "", pid: 0, created: 0}}}
 
 	c := newConnection(s, dummySession, opts.Control, cancel)
 	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	c.startWorkers(connCtx, nonce, nil)
 
 	if err = c.awaitReady(ctx); err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	session, err := c.resolveCreatedSession(ctx)
 	if err != nil {
-		return nil, Session{}, opError("OpenControlNewSession", err)
+		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
 	return c, session, nil
@@ -335,10 +335,10 @@ func (c *Connection) Server() *Server {
 	return c.server
 }
 
-// AuxiliaryServer explicitly selects bounded subprocess execution but retains
-// this connection's original daemon identity and lifetime. It is never used as
+// SubprocessServer returns a server that runs commands through separate tmux
+// subprocesses but keeps this connection's daemon identity and lifetime. It is never used as
 // an automatic retry/fallback and cannot start a replacement daemon.
-func (c *Connection) AuxiliaryServer() *Server {
+func (c *Connection) SubprocessServer() *Server {
 	if c == nil || c.original == nil {
 		return nil
 	}
@@ -403,8 +403,8 @@ func (c *Connection) Wait(ctx context.Context) error {
 	}
 }
 
-// Diagnostics returns a copy of captured stderr bytes emitted by the tmux control client subprocess.
-func (c *Connection) Diagnostics() []byte {
+// Stderr returns a copy of captured stderr bytes emitted by the tmux control client subprocess.
+func (c *Connection) Stderr() []byte {
 	if c == nil || c.diagnostics == nil {
 		return nil
 	}
@@ -645,12 +645,12 @@ func (s *Server) controlFlags(opts ControlOptions) (string, error) {
 }
 
 func (s *Server) controlAttachArgs(session Session, opts ControlOptions, nonce string) ([]string, error) {
-	flagsStr, err := s.controlFlags(opts)
+	flags, err := s.controlFlags(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	p := session.h.guard().wrap(emptyPlan(command("attach-session", "-t", session.h.id, "-f", flagsStr)))
+	p := session.h.guard().wrap(emptyPlan(command("attach-session", "-t", session.h.id, "-f", flags)))
 	p.nodes = append(p.nodes, markerNode(nonce))
 
 	args, err := p.argv()
@@ -715,12 +715,12 @@ func newSessionEnv(env map[string]string) []string {
 }
 
 func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce string) ([]string, error) {
-	flagsStr, err := s.controlFlags(opts.Control)
+	flags, err := s.controlFlags(opts.Control)
 	if err != nil {
 		return nil, err
 	}
 
-	cmdArgs := append([]string{"new-session", "-f", flagsStr}, newSessionFlags(opts)...)
+	cmdArgs := append([]string{"new-session", "-f", flags}, newSessionFlags(opts)...)
 
 	cmdArgs = append(cmdArgs, newSessionEnv(opts.TmuxEnv)...)
 

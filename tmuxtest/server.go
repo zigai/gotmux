@@ -91,7 +91,7 @@ func NewServer(tb testing.TB) *tmux.Server {
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         tmux.LogNone,
+		LogLevel:         tmux.LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -109,11 +109,11 @@ func NewServer(tb testing.TB) *tmux.Server {
 		Env:     nil,
 		TmuxEnv: nil,
 		Size:    tmux.Size{Width: defaultWidth, Height: defaultHeight},
-		Start:   tmux.AllowStart,
+		Start:   tmux.StartPolicyAllowStart,
 		Group:   "",
 	})
 	if session.Valid() {
-		identity = tmux.PresentValue(session.Identity())
+		identity = tmux.PresentValue(session.ServerIdentity())
 	}
 
 	if err != nil {
@@ -149,7 +149,7 @@ func cleanupDaemon(tb testing.TB, server *tmux.Server, identity tmux.Value[tmux.
 	}
 
 	if known {
-		err := server.KillIfIdentity(ctx, id)
+		err := server.KillMatching(ctx, id)
 		if err != nil && !errors.Is(err, tmux.ErrNoServer) {
 			tb.Errorf("fixture cleanup failed at %s: %v", dir, err)
 		}

@@ -12,8 +12,8 @@ import (
 	tmux "github.com/zigai/gotmux/tmux"
 )
 
-func currentEnvironment(identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID) tmux.Environment {
-	return tmux.Environment{
+func currentVars(identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID) tmux.TmuxVars {
+	return tmux.TmuxVars{
 		TMUX:     fmt.Sprintf("%s,%d,%s", identity.ReportedSocket, identity.PID, strings.TrimPrefix(string(session), "$")),
 		TMUXPane: string(pane),
 	}
@@ -31,7 +31,7 @@ func assertNoCurrentContext(t *testing.T, info tmux.CurrentInfo) {
 	}
 }
 
-func TestIntegrationCurrentWithEnvDiscovery(t *testing.T) {
+func TestIntegrationCurrentFromDiscovery(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	explicitLink, explicitPane := graphWindow(t, ctx, session)
 
@@ -55,7 +55,7 @@ func TestIntegrationCurrentWithEnvDiscovery(t *testing.T) {
 		{name: "active-pane", pane: activePane.ID(), link: activeLink},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			info, err := server.CurrentWithEnv(ctx, currentEnvironment(identity.Identity, session.ID(), test.hint))
+			info, err := server.CurrentFrom(ctx, currentVars(identity.Identity, session.ID(), test.hint))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -82,7 +82,7 @@ func assertCurrentContext(t *testing.T, info tmux.CurrentInfo, identity tmux.Ser
 	}
 }
 
-func TestIntegrationCurrentWithEnvRejectsInvalidContext(t *testing.T) {
+func TestIntegrationCurrentFromRejectsInvalidContext(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	pane := firstPane(t, server, ctx)
 
@@ -98,18 +98,18 @@ func TestIntegrationCurrentWithEnvRejectsInvalidContext(t *testing.T) {
 
 	for _, test := range []struct {
 		name string
-		env  tmux.Environment
+		env  tmux.TmuxVars
 		want error
 	}{
-		{name: "pid-with-pane", env: currentEnvironment(wrongPID, session.ID(), pane.ID()), want: tmux.ErrServerChanged},
-		{name: "pid-without-pane", env: currentEnvironment(wrongPID, session.ID(), ""), want: tmux.ErrServerChanged},
-		{name: "socket", env: currentEnvironment(wrongSocket, session.ID(), pane.ID()), want: tmux.ErrInvalidHandle},
-		{name: "missing-pane", env: currentEnvironment(identity.Identity, session.ID(), "%999999"), want: tmux.ErrNotFound},
+		{name: "pid-with-pane", env: currentVars(wrongPID, session.ID(), pane.ID()), want: tmux.ErrServerChanged},
+		{name: "pid-without-pane", env: currentVars(wrongPID, session.ID(), ""), want: tmux.ErrServerChanged},
+		{name: "socket", env: currentVars(wrongSocket, session.ID(), pane.ID()), want: tmux.ErrInvalidHandle},
+		{name: "missing-pane", env: currentVars(identity.Identity, session.ID(), "%999999"), want: tmux.ErrNotFound},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			info, err := server.CurrentWithEnv(ctx, test.env)
+			info, err := server.CurrentFrom(ctx, test.env)
 			if !errors.Is(err, test.want) {
-				t.Fatalf("CurrentWithEnv error: %v, want %v", err, test.want)
+				t.Fatalf("CurrentFrom error: %v, want %v", err, test.want)
 			}
 
 			assertNoCurrentContext(t, info)

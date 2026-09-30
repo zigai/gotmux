@@ -35,7 +35,7 @@ func TestIntegrationAPIScalarOptions(t *testing.T) {
 	}
 
 	value, err = options.Get(ctx, "status-left")
-	if err != nil || value.Local.State() != tmux.Unavailable {
+	if err != nil || value.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("unset: %+v, %v", value, err)
 	}
 
@@ -175,7 +175,7 @@ func TestIntegrationAPIPaneNavigationAndCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := pane.SelectAdjacent(ctx, tmux.PaneRight); err != nil {
+	if err := pane.SelectAdjacent(ctx, tmux.PaneDirectionRight); err != nil {
 		t.Fatal(err)
 	}
 
@@ -291,12 +291,12 @@ func TestIntegrationAPISubprocessLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	auxiliarySession, err := controlSession.UsingSubprocess()
-	if err != nil || !auxiliarySession.Identity().Equal(controlSession.Identity()) {
+	subprocessSession, err := controlSession.ViaSubprocess()
+	if err != nil || !subprocessSession.ServerIdentity().Equal(controlSession.ServerIdentity()) {
 		t.Fatalf("identity: %v", err)
 	}
 
-	if _, err := auxiliarySession.Options().Get(ctx, "status-left"); err != nil {
+	if _, err := subprocessSession.Options().Get(ctx, "status-left"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -304,11 +304,11 @@ func TestIntegrationAPISubprocessLifetime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := auxiliarySession.Info(ctx); err == nil {
+	if _, err := subprocessSession.Info(ctx); err == nil {
 		t.Fatal("closed generation accepted")
 	}
 
-	if _, err := auxiliarySession.UsingSubprocess(); err == nil {
+	if _, err := subprocessSession.ViaSubprocess(); err == nil {
 		t.Fatal("closed generation converted")
 	}
 }
@@ -317,9 +317,9 @@ func TestIntegrationAPIRawSubprocess(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	bound := apiControl(t, server, session, ctx).Server()
 
-	auxiliary, err := bound.UsingSubprocess()
-	if err != nil || !auxiliary.Support().RawCommands {
-		t.Fatalf("auxiliary: %v", err)
+	subprocess, err := bound.ViaSubprocess()
+	if err != nil || !subprocess.Support().RawCommands {
+		t.Fatalf("subprocess: %v", err)
 	}
 
 	command, err := tmux.NewCommand("display-message", "-p", "literal")
@@ -331,9 +331,9 @@ func TestIntegrationAPIRawSubprocess(t *testing.T) {
 		t.Fatalf("raw control: %v", err)
 	}
 
-	result, err := auxiliary.Run(ctx, command)
+	result, err := subprocess.Run(ctx, command)
 	if err != nil || string(result.Stdout) != "literal\n" {
-		t.Fatalf("raw auxiliary: %q, %v", result.Stdout, err)
+		t.Fatalf("raw subprocess: %q, %v", result.Stdout, err)
 	}
 }
 
@@ -546,8 +546,8 @@ func TestEnvironmentOperationNames(t *testing.T) {
 
 	var opErr *tmux.OperationError
 	if errors.As(err, &opErr) {
-		if opErr.Operation != "Environment.Unset" {
-			t.Errorf("expected opErr.Operation to be 'Environment.Unset', got %q", opErr.Operation)
+		if opErr.Operation != "EnvironmentScope.Unset" {
+			t.Errorf("expected opErr.Operation to be 'EnvironmentScope.Unset', got %q", opErr.Operation)
 		}
 	} else {
 		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
@@ -559,8 +559,8 @@ func TestEnvironmentOperationNames(t *testing.T) {
 	}
 
 	if errors.As(err, &opErr) {
-		if opErr.Operation != "Environment.Remove" {
-			t.Errorf("expected opErr.Operation to be 'Environment.Remove', got %q", opErr.Operation)
+		if opErr.Operation != "EnvironmentScope.Remove" {
+			t.Errorf("expected opErr.Operation to be 'EnvironmentScope.Remove', got %q", opErr.Operation)
 		}
 	} else {
 		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
@@ -580,8 +580,8 @@ func TestMissingObjectEffect(t *testing.T) {
 	}
 
 	if opErr, ok := errors.AsType[*tmux.OperationError](err); ok {
-		if opErr.Outcome.Effect == tmux.Confirmed {
-			t.Errorf("read-only missing session lookup reported Effect: Confirmed! Must not be Confirmed.")
+		if opErr.Outcome.Effect == tmux.EffectConfirmed {
+			t.Errorf("read-only missing session lookup reported EffectConfirmed; it must not be EffectConfirmed.")
 		}
 	}
 }
@@ -596,7 +596,7 @@ func TestDuplicateSessionCreationReportsRejection(t *testing.T) {
 	_, err := server.NewSession(ctx, opts)
 
 	opErr, ok := errors.AsType[*tmux.OperationError](err)
-	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) || opErr.Outcome.Effect != tmux.Rejected || len(opErr.Outcome.Created) != 0 {
+	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) || opErr.Outcome.Effect != tmux.EffectRejected || len(opErr.Outcome.Created) != 0 {
 		t.Fatalf("duplicate session = %#v, %v", opErr, err)
 	}
 
@@ -621,7 +621,7 @@ func TestStaleSessionEnvironmentReportsNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = stale.Environment().Get(ctx, "HOME", false)
+	_, err = stale.Environment().Get(ctx, "HOME")
 	if !errors.Is(err, tmux.ErrNotFound) || errors.Is(err, tmux.ErrServerChanged) {
 		t.Fatalf("stale session environment = %v", err)
 	}

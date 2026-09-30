@@ -15,8 +15,8 @@ const (
 
 // OverflowPolicy controls how an [EventStream] handles buffer overflow.
 const (
-	// FailOnOverflow releases reservations and terminates the stream with [ErrEventsLost].
-	FailOnOverflow OverflowPolicy = iota
+	// OverflowPolicyFail releases reservations and terminates the stream with [ErrEventsLost].
+	OverflowPolicyFail OverflowPolicy = iota
 )
 
 // OverflowPolicy defines the action taken when an event stream buffer overflows.
@@ -55,20 +55,20 @@ type EventStream struct {
 // Closing an individual stream releases its reservation and never affects other streams or the connection.
 func (c *Connection) Events(ctx context.Context, opts EventOptions) (*EventStream, error) {
 	if ctx == nil {
-		return nil, opError("Events", invalid("nil context"))
+		return nil, opError("Connection.Events", invalid("nil context"))
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, opError("Events", err)
+		return nil, opError("Connection.Events", err)
 	}
 
 	opts, err := normalizeEventOptions(opts)
 	if err != nil {
-		return nil, opError("Events", err)
+		return nil, opError("Connection.Events", err)
 	}
 
 	if c == nil || c.done == nil || c.streams == nil {
-		return nil, opError("Events", ErrInvalidHandle)
+		return nil, opError("Connection.Events", ErrInvalidHandle)
 	}
 
 	c.mu.Lock()
@@ -76,12 +76,12 @@ func (c *Connection) Events(ctx context.Context, opts EventOptions) (*EventStrea
 		err := c.terminal
 		c.mu.Unlock()
 
-		return nil, opError("Events", errors.Join(ErrClosed, err))
+		return nil, opError("Connection.Events", errors.Join(ErrClosed, err))
 	}
 
 	if err := c.checkStreamCapacity(opts.MaxBytes); err != nil {
 		c.mu.Unlock()
-		return nil, opError("Events", err)
+		return nil, opError("Connection.Events", err)
 	}
 
 	s := newEventStream(c, opts.MaxBytes, opts.MaxCount)
@@ -193,7 +193,7 @@ func newEventStream(conn *Connection, maxBytes int64, maxCount int) *EventStream
 }
 
 func normalizeEventOptions(opts EventOptions) (EventOptions, error) {
-	if opts.MaxBytes < 0 || opts.MaxCount < 0 || opts.Overflow != FailOnOverflow {
+	if opts.MaxBytes < 0 || opts.MaxCount < 0 || opts.Overflow != OverflowPolicyFail {
 		return opts, invalid("event options")
 	}
 

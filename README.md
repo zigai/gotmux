@@ -108,7 +108,7 @@ for {
 }
 ```
 
-### Ambient environment discovery
+### Finding the current pane
 
 ```go
 ctx := context.Background()

@@ -3,159 +3,12 @@
 package tmux_test
 
 import (
-	"context"
 	"errors"
-	"os/user"
-	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	tmux "github.com/zigai/gotmux/tmux"
 )
-
-func TestIntegrationServerAccess(t *testing.T) {
-	server, _, ctx := apiFixture(t)
-	info, _ := server.Probe(ctx)
-	t.Logf("Probe version: %+v, raw: %q", info.Version, info.Version.Raw)
-
-	entries := accessEntries(t, ctx, server)
-	t.Logf("AccessList entries (%d): %+v", len(entries), entries)
-
-	if len(entries) == 0 {
-		t.Fatal("expected at least one access entry for current user/owner")
-	}
-
-	// Grant read-only access to a user
-	const testUser = "nobody"
-	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{Group: false, ReadOnly: true}); err != nil {
-		t.Fatalf("GrantAccess(RO) failed: %v", err)
-	}
-
-	entry := requireAccessEntry(t, ctx, server, testUser)
-	if !entry.ReadOnly || entry.IsGroup {
-		t.Errorf("expected user %q with ReadOnly=true and IsGroup=false, got: %+v", testUser, entry)
-	}
-
-	// Grant read-write access to the same user
-	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{Group: false, ReadOnly: false}); err != nil {
-		t.Fatalf("GrantAccess(RW) failed: %v", err)
-	}
-
-	if entry := requireAccessEntry(t, ctx, server, testUser); entry.ReadOnly {
-		t.Errorf("expected user %q to have ReadOnly=false, got: %+v", testUser, entry)
-	}
-
-	// Revoke user access
-	if err := server.RevokeAccess(ctx, testUser, false); err != nil {
-		t.Fatalf("RevokeAccess failed: %v", err)
-	}
-
-	if entries := accessEntries(t, ctx, server); slices.ContainsFunc(entries, func(e tmux.AccessEntry) bool { return e.Name == testUser }) {
-		t.Fatalf("expected user %q to be removed from access list, but still present: %+v", testUser, entries)
-	}
-
-	exerciseGroupAccess(t, ctx, server)
-}
-
-func accessEntries(t *testing.T, ctx context.Context, server *tmux.Server) []tmux.AccessEntry {
-	t.Helper()
-
-	entries, err := server.AccessList(ctx)
-	if err != nil {
-		fatalCommand(t, "AccessList", err)
-	}
-
-	return entries
-}
-
-func requireAccessEntry(t *testing.T, ctx context.Context, server *tmux.Server, name string) tmux.AccessEntry {
-	t.Helper()
-
-	entries := accessEntries(t, ctx, server)
-
-	idx := slices.IndexFunc(entries, func(e tmux.AccessEntry) bool { return e.Name == name })
-	if idx < 0 {
-		t.Fatalf("expected user %q in access list, got: %+v", name, entries)
-	}
-
-	return entries[idx]
-}
-
-// exerciseGroupAccess is best effort: it only logs a missing group entry.
-func exerciseGroupAccess(t *testing.T, ctx context.Context, server *tmux.Server) {
-	t.Helper()
-
-	group, ok := currentGroupName()
-	if !ok {
-		return
-	}
-
-	if err := server.GrantAccess(ctx, group, tmux.AccessOptions{Group: true, ReadOnly: true}); err != nil {
-		return
-	}
-
-	defer func() { _ = server.RevokeAccess(ctx, group, true) }()
-
-	entries, err := server.AccessList(ctx)
-	if err != nil {
-		return
-	}
-
-	if !slices.ContainsFunc(entries, func(e tmux.AccessEntry) bool { return e.Name == group && e.IsGroup }) {
-		t.Logf("group %q not listed as distinct group entry", group)
-	}
-}
-
-func currentGroupName() (string, bool) {
-	current, err := user.Current()
-	if err != nil || current.Gid == "" {
-		return "", false
-	}
-
-	group, err := user.LookupGroupId(current.Gid)
-	if err != nil || group.Name == "" || strings.Contains(group.Name, " ") {
-		return "", false
-	}
-
-	return group.Name, true
-}
-
-func fatalCommand(t *testing.T, call string, err error) {
-	t.Helper()
-
-	if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
-		t.Fatalf("%s failed: %v; stderr: %q, stdout: %q", call, err, cmdErr.Result.Stderr, cmdErr.Result.Stdout)
-	}
-
-	t.Fatalf("%s failed: %v", call, err)
-}
-
-func requireTmux38(t *testing.T, ctx context.Context, server *tmux.Server) {
-	t.Helper()
-
-	probeInfo, err := server.Probe(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !probeInfo.Version.AtLeast(3, 8) {
-		t.Skip("skipping test requiring tmux 3.8+")
-	}
-}
-
-func assertPaneTitle(t *testing.T, ctx context.Context, pane tmux.Pane, want string) {
-	t.Helper()
-
-	info, err := pane.Info(ctx)
-	if err != nil {
-		t.Fatalf("pane %s Info failed: %v", pane.ID(), err)
-	}
-
-	if info.Title != want {
-		t.Errorf("expected pane title %q, got %q", want, info.Title)
-	}
-}
 
 func TestIntegrationClockModeAndSendPrefix(t *testing.T) {
 	server, session, ctx := apiFixture(t)
@@ -171,13 +24,13 @@ func TestIntegrationClockModeAndSendPrefix(t *testing.T) {
 	}
 
 	// Send primary prefix
-	if err := pane.SendPrefix(ctx, false); err != nil {
-		t.Fatalf("SendPrefix(false) failed: %v", err)
+	if err := pane.SendPrefix(ctx); err != nil {
+		t.Fatalf("SendPrefix failed: %v", err)
 	}
 
 	// Send secondary prefix (-2)
-	if err := pane.SendPrefix(ctx, true); err != nil {
-		t.Fatalf("SendPrefix(true) failed: %v", err)
+	if err := pane.SendSecondaryPrefix(ctx); err != nil {
+		t.Fatalf("SendSecondaryPrefix failed: %v", err)
 	}
 
 	// Clock mode
@@ -190,57 +43,11 @@ func TestIntegrationClockModeAndSendPrefix(t *testing.T) {
 	_ = pane.SendKeys(ctx, "q")
 }
 
-func TestIntegrationMessagesAndPromptHistory(t *testing.T) {
-	server, session, ctx := apiFixture(t)
-
-	// Server Messages
-	msgs, err := server.Messages(ctx, tmux.MessagesOptions{})
-	if err != nil {
-		t.Fatalf("server.Messages failed: %v", err)
-	}
-
-	if len(msgs) == 0 {
-		t.Log("no messages returned (acceptable on fresh server)")
-	}
-
-	// Terminal capabilities
-	_, err = server.Messages(ctx, tmux.MessagesOptions{Terminal: true})
-	if err != nil {
-		t.Fatalf("server.Messages(Terminal) failed: %v", err)
-	}
-
-	// Jobs
-	_, err = server.Messages(ctx, tmux.MessagesOptions{Jobs: true})
-	if err != nil {
-		t.Fatalf("server.Messages(Jobs) failed: %v", err)
-	}
-
-	// Client Messages (via attached client)
-	client, _, _ := uiClient(t, ctx, server, session)
-
-	clientMsgs, err := client.Messages(ctx, tmux.MessagesOptions{})
-	if err != nil {
-		t.Fatalf("client.Messages failed: %v", err)
-	}
-
-	t.Logf("client.Messages count: %d", len(clientMsgs))
-
-	// Prompt history
-	_, err = server.PromptHistory(ctx, "command")
-	if err != nil {
-		t.Fatalf("PromptHistory failed: %v", err)
-	}
-
-	if err := server.ClearPromptHistory(ctx, "command"); err != nil {
-		t.Fatalf("ClearPromptHistory failed: %v", err)
-	}
-}
-
-func TestIntegrationSplitOptionsEnhanced(t *testing.T) {
+func TestIntegrationSplitAppearanceAndKillTargetOptions(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	requireTmux38(t, ctx, server)
 
-	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "split-enhanced"})
+	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "split-appearance"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,7 +229,7 @@ func TestIntegrationRespawnPreserveEnvironment(t *testing.T) {
 	}
 }
 
-func TestIntegrationCaptureOptionsEnhanced(t *testing.T) {
+func TestIntegrationCaptureEscapeOptions(t *testing.T) {
 	_, session, ctx := apiFixture(t)
 
 	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "capture-opt-test"})

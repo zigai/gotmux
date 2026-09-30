@@ -60,11 +60,11 @@ func TestSplitSizeArgs(t *testing.T) {
 
 func TestLayoutConstantsNameTmuxLayouts(t *testing.T) {
 	for layout, want := range map[Layout]string{
-		EvenHorizontal: "even-horizontal",
-		EvenVertical:   "even-vertical",
-		MainHorizontal: "main-horizontal",
-		MainVertical:   "main-vertical",
-		Tiled:          "tiled",
+		LayoutEvenHorizontal: "even-horizontal",
+		LayoutEvenVertical:   "even-vertical",
+		LayoutMainHorizontal: "main-horizontal",
+		LayoutMainVertical:   "main-vertical",
+		LayoutTiled:          "tiled",
 	} {
 		if string(layout) != want {
 			t.Errorf("layout %q, want tmux name %q", layout, want)

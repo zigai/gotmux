@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 )
 
-func FuzzParseEnvironment(f *testing.F) {
+func FuzzParseTmuxVars(f *testing.F) {
 	seeds := []struct {
 		tmux string
 		pane string
@@ -32,7 +32,7 @@ func FuzzParseEnvironment(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, tmuxEnv string, tmuxPane string) {
-		info, err := ParseEnvironment(Environment{TMUX: tmuxEnv, TMUXPane: tmuxPane})
+		info, err := ParseTmuxVars(TmuxVars{TMUX: tmuxEnv, TMUXPane: tmuxPane})
 		if err == nil {
 			if info.PID <= 0 {
 				t.Errorf("PID must be positive, got %d (TMUX=%q)", info.PID, tmuxEnv)

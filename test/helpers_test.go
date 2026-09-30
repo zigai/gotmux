@@ -148,3 +148,39 @@ func testEnvironment(dir string) []string {
 		"LC_ALL=" + locale,
 	}
 }
+
+func fatalCommand(t *testing.T, call string, err error) {
+	t.Helper()
+
+	if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
+		t.Fatalf("%s failed: %v; stderr: %q, stdout: %q", call, err, cmdErr.Result.Stderr, cmdErr.Result.Stdout)
+	}
+
+	t.Fatalf("%s failed: %v", call, err)
+}
+
+func requireTmux38(t *testing.T, ctx context.Context, server *tmux.Server) {
+	t.Helper()
+
+	probeInfo, err := server.Probe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !probeInfo.Version.AtLeast(3, 8) {
+		t.Skip("skipping test requiring tmux 3.8+")
+	}
+}
+
+func assertPaneTitle(t *testing.T, ctx context.Context, pane tmux.Pane, want string) {
+	t.Helper()
+
+	info, err := pane.Info(ctx)
+	if err != nil {
+		t.Fatalf("pane %s Info failed: %v", pane.ID(), err)
+	}
+
+	if info.Title != want {
+		t.Errorf("expected pane title %q, got %q", want, info.Title)
+	}
+}

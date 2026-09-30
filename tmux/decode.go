@@ -165,7 +165,7 @@ func (s *Server) decodeSession(m map[string]string, expected *ServerIdentity) (S
 		Attached:    d.nonnegative("session_attached"),
 		WindowCount: d.nonnegative("session_windows"),
 		Group:       group,
-		h:           s.newHandle(string(sid), SessionKind, id),
+		h:           s.newHandle(string(sid), ObjectKindSession, id),
 	}
 
 	if d.err != nil {
@@ -188,7 +188,7 @@ func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (Wi
 		d.fail("session_id", wire.ErrRecord)
 	}
 
-	wh := s.newHandle(string(wid), WindowKind, id)
+	wh := s.newHandle(string(wid), ObjectKindWindow, id)
 	v := WindowInfo{
 		rawRecord: rawRecord{raw: m},
 		ID:        wid,
@@ -277,7 +277,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		Selection:      selectionVal,
 		CursorX:        d.nonnegative("cursor_x"),
 		CursorY:        d.nonnegative("cursor_y"),
-		h:              s.newHandle(string(paneID), PaneKind, id),
+		h:              s.newHandle(string(paneID), ObjectKindPane, id),
 	}
 
 	if d.err != nil {
@@ -304,7 +304,7 @@ func decodePaneSelection(d *recordDecoder, inMode bool) Value[SelectionInfo] {
 }
 
 func decodePaneContext(d *recordDecoder, m map[string]string) paneContext {
-	ctx := paneContext{
+	paneCtx := paneContext{
 		sessionID:   UnavailableValue[SessionID](),
 		sessionName: UnavailableValue[string](),
 		windowName:  UnavailableValue[string](),
@@ -316,24 +316,24 @@ func decodePaneContext(d *recordDecoder, m map[string]string) paneContext {
 			d.fail("session_id", wire.ErrRecord)
 		}
 
-		ctx.sessionID = PresentValue(SessionID(sid))
+		paneCtx.sessionID = PresentValue(SessionID(sid))
 	}
 
 	if sname, ok := m["session_name"]; ok && sname != "" {
-		ctx.sessionName = PresentValue(sname)
+		paneCtx.sessionName = PresentValue(sname)
 	}
 
 	if wname, ok := m["window_name"]; ok && wname != "" {
-		ctx.windowName = PresentValue(wname)
+		paneCtx.windowName = PresentValue(wname)
 	}
 
 	if windex, ok := m["window_index"]; ok && windex != "" {
 		if idx, err := strconv.Atoi(windex); err == nil && idx >= 0 {
-			ctx.windowIndex = PresentValue(idx)
+			paneCtx.windowIndex = PresentValue(idx)
 		}
 	}
 
-	return ctx
+	return paneCtx
 }
 
 func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (ClientInfo, error) {
@@ -361,7 +361,7 @@ func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (Cl
 
 	cpid := d.nonnegative("client_pid")
 	created := d.timestamp("client_created")
-	ch := s.newHandle(string(cname), ClientKind, id)
+	ch := s.newHandle(string(cname), ObjectKindClient, id)
 	ch.client = clientCheck{name: cname, pid: cpid, created: created.Unix()}
 
 	control := d.boolean("client_control_mode")
@@ -398,13 +398,13 @@ func (s *Server) decodeClient(m map[string]string, expected *ServerIdentity) (Cl
 
 func fieldsFor(kind ObjectKind) []string {
 	switch kind {
-	case SessionKind:
+	case ObjectKindSession:
 		return schema.WithIdentity(schema.Session)
-	case WindowKind, WindowLinkKind:
+	case ObjectKindWindow, ObjectKindWindowLink:
 		return schema.WithIdentity(schema.Window)
-	case PaneKind:
+	case ObjectKindPane:
 		return schema.WithIdentity(schema.Pane)
-	case ClientKind:
+	case ObjectKindClient:
 		return schema.WithIdentity(schema.Client)
 	}
 

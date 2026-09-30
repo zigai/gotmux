@@ -8,17 +8,18 @@ import (
 	"strings"
 )
 
-// Environment holds raw tmux environment variable values passed to child processes.
-type Environment struct {
-	// TMUX is the value of the ambient $TMUX environment variable (formatted as "socket,pid,session").
+// TmuxVars holds the $TMUX and $TMUX_PANE environment variables tmux sets for
+// the processes it runs, which locate the caller's server, session, and pane.
+type TmuxVars struct {
+	// TMUX is the value of $TMUX (formatted as "socket,pid,session").
 	TMUX string
 
-	// TMUXPane is the value of the ambient $TMUX_PANE environment variable (e.g. "%0").
+	// TMUXPane is the value of $TMUX_PANE (e.g. "%0").
 	TMUXPane string
 }
 
-// EnvironmentInfo holds the structured fields parsed from [Environment].
-type EnvironmentInfo struct {
+// TmuxVarsInfo holds the structured fields parsed from [TmuxVars].
+type TmuxVarsInfo struct {
 	// SocketPath is the absolute path to the tmux server socket.
 	SocketPath string
 
@@ -28,11 +29,11 @@ type EnvironmentInfo struct {
 	// SessionID is the session ID parsed from the $TMUX variable (prefixed with "$").
 	SessionID SessionID
 
-	// PaneID is the pane ID parsed from $TMUX_PANE, or Unavailable if $TMUX_PANE was empty.
+	// PaneID is the pane ID parsed from $TMUX_PANE, or [ValueStateUnavailable] if $TMUX_PANE was empty.
 	PaneID Value[PaneID]
 }
 
-// CurrentInfo holds verified point-in-time metadata for the caller's ambient tmux context.
+// CurrentInfo holds verified point-in-time metadata for the pane the caller runs in.
 type CurrentInfo struct {
 	// Identity is the verified server identity of the answering daemon.
 	Identity ServerIdentity
@@ -53,24 +54,24 @@ type CurrentInfo struct {
 	Client Value[ClientInfo]
 }
 
-// ParseEnvironment parses $TMUX ("socket,pid,session") and $TMUX_PANE.
+// ParseTmuxVars parses $TMUX ("socket,pid,session") and $TMUX_PANE.
 // Splits trailing comma fields from the end to preserve commas in socket paths.
-// Returns [ErrNotInsideTmux] if env.TMUX is empty. Does not perform I/O.
-func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
-	if env.TMUX == "" {
-		return EnvironmentInfo{}, ErrNotInsideTmux
+// Returns [ErrNotInsideTmux] if vars.TMUX is empty. Does not perform I/O.
+func ParseTmuxVars(vars TmuxVars) (TmuxVarsInfo, error) {
+	if vars.TMUX == "" {
+		return TmuxVarsInfo{}, ErrNotInsideTmux
 	}
 
-	if strings.ContainsRune(env.TMUX, 0) {
-		return EnvironmentInfo{}, invalid("TMUX environment")
+	if strings.ContainsRune(vars.TMUX, 0) {
+		return TmuxVarsInfo{}, invalid("TMUX environment")
 	}
 
-	end := strings.LastIndexByte(env.TMUX, ',')
+	end := strings.LastIndexByte(vars.TMUX, ',')
 	if end < 0 {
-		return EnvironmentInfo{}, invalid("TMUX trailing session")
+		return TmuxVarsInfo{}, invalid("TMUX trailing session")
 	}
 
-	pre := env.TMUX[:end]
+	pre := vars.TMUX[:end]
 	start := strings.LastIndexByte(pre, ',')
 
 	var (
@@ -80,10 +81,10 @@ func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
 	)
 
 	if start >= 0 {
-		sock, p, s, is3Part, err := parseTmux3Part(env.TMUX, start, end)
+		sock, p, s, is3Part, err := parseTmux3Part(vars.TMUX, start, end)
 		if is3Part {
 			if err != nil {
-				return EnvironmentInfo{}, err
+				return TmuxVarsInfo{}, err
 			}
 
 			socket = sock
@@ -93,9 +94,9 @@ func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
 	}
 
 	if socket == "" {
-		sock, p, err := parseTmux2Part(env.TMUX, start, end)
+		sock, p, err := parseTmux2Part(vars.TMUX, start, end)
 		if err != nil {
-			return EnvironmentInfo{}, err
+			return TmuxVarsInfo{}, err
 		}
 
 		socket = sock
@@ -104,70 +105,70 @@ func ParseEnvironment(env Environment) (EnvironmentInfo, error) {
 
 	paneID := UnavailableValue[PaneID]()
 
-	if env.TMUXPane != "" {
-		id := PaneID(env.TMUXPane)
+	if vars.TMUXPane != "" {
+		id := PaneID(vars.TMUXPane)
 		if !id.Valid() {
-			return EnvironmentInfo{SocketPath: "", PID: 0, SessionID: "", PaneID: UnavailableValue[PaneID]()}, invalid("TMUX_PANE")
+			return TmuxVarsInfo{SocketPath: "", PID: 0, SessionID: "", PaneID: UnavailableValue[PaneID]()}, invalid("TMUX_PANE")
 		}
 
 		paneID = PresentValue(id)
 	}
 
-	return EnvironmentInfo{SocketPath: socket, PID: pid, SessionID: sid, PaneID: paneID}, nil
+	return TmuxVarsInfo{SocketPath: socket, PID: pid, SessionID: sid, PaneID: paneID}, nil
 }
 
 // Current discovers and verifies the current tmux context (pane, window, session)
-// from ambient environment variables ($TMUX and $TMUX_PANE).
+// from this process's $TMUX and $TMUX_PANE.
 //
-// It starts a temporary server handle targeting the ambient socket, takes a snapshot,
+// It starts a temporary server handle targeting the socket named in $TMUX, takes a snapshot,
 // and returns verified [CurrentInfo]. Returns [ErrNotInsideTmux] if run outside tmux.
 func Current(ctx context.Context) (CurrentInfo, error) {
-	return CurrentWithEnv(ctx, Environment{TMUX: os.Getenv("TMUX"), TMUXPane: os.Getenv("TMUX_PANE")})
+	return CurrentFrom(ctx, TmuxVars{TMUX: os.Getenv("TMUX"), TMUXPane: os.Getenv("TMUX_PANE")})
 }
 
-// CurrentWithEnv discovers and verifies current tmux context using the provided [Environment] values.
+// CurrentFrom is [Current] with the given variables instead of this process's environment.
 // Returns [ErrServerChanged] if the environment PID does not match the answering daemon.
-func CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
-	hints, err := ParseEnvironment(env)
+func CurrentFrom(ctx context.Context, vars TmuxVars) (CurrentInfo, error) {
+	hints, err := ParseTmuxVars(vars)
 	if err != nil {
-		return CurrentInfo{}, opError("Current", err)
+		return CurrentInfo{}, opError("CurrentFrom", err)
 	}
 
-	s, err := New(Config{Binary: "", SocketPath: hints.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogNone, LoginShell: false})
+	s, err := New(Config{Binary: "", SocketPath: hints.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
 	if err != nil {
-		return CurrentInfo{}, opError("Current", err)
+		return CurrentInfo{}, opError("CurrentFrom", err)
 	}
 
-	return s.CurrentWithEnv(ctx, env)
+	return s.CurrentFrom(ctx, vars)
 }
 
-// CurrentWithEnv verifies the provided [Environment] against this specific server instance,
+// CurrentFrom verifies the provided [TmuxVars] against this specific server instance,
 // asserting that the socket path and daemon PID match before resolving the pane, window, and session.
 // Returns [ErrInvalidHandle] for a socket mismatch and [ErrServerChanged] for a PID mismatch.
-func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentInfo, error) {
-	hints, err := ParseEnvironment(env)
+func (s *Server) CurrentFrom(ctx context.Context, vars TmuxVars) (CurrentInfo, error) {
+	hints, err := ParseTmuxVars(vars)
 	if err != nil {
-		return CurrentInfo{}, opError("Current", err)
+		return CurrentInfo{}, opError("Server.CurrentFrom", err)
 	}
 
 	if s == nil || s.endpoint.String() != hints.SocketPath {
-		return CurrentInfo{}, opError("Current", ErrInvalidHandle)
+		return CurrentInfo{}, opError("Server.CurrentFrom", ErrInvalidHandle)
 	}
 
 	snap, err := s.Snapshot(ctx)
 	if err != nil {
-		return CurrentInfo{}, opError("Current", err)
+		return CurrentInfo{}, opError("Server.CurrentFrom", err)
 	}
 
 	if hints.PID != snap.Identity.PID {
-		return CurrentInfo{}, opError("Current", ErrServerChanged)
+		return CurrentInfo{}, opError("Server.CurrentFrom", ErrServerChanged)
 	}
 
 	paneID, ok := hints.PaneID.Get()
 	if !ok {
 		info, err := resolveActiveContext(snap, hints)
 		if err != nil {
-			return CurrentInfo{}, opError("Current", err)
+			return CurrentInfo{}, opError("Server.CurrentFrom", err)
 		}
 
 		return info, nil
@@ -175,7 +176,7 @@ func (s *Server) CurrentWithEnv(ctx context.Context, env Environment) (CurrentIn
 
 	info, err := resolvePaneContext(snap, paneID)
 	if err != nil {
-		return CurrentInfo{}, opError("Current", err)
+		return CurrentInfo{}, opError("Server.CurrentFrom", err)
 	}
 
 	return info, nil
@@ -272,7 +273,7 @@ func resolvePaneContext(snap Snapshot, paneID PaneID) (CurrentInfo, error) {
 	return out, nil
 }
 
-func resolveActiveContext(snap Snapshot, hints EnvironmentInfo) (CurrentInfo, error) {
+func resolveActiveContext(snap Snapshot, hints TmuxVarsInfo) (CurrentInfo, error) {
 	var (
 		targetSession SessionInfo
 		foundSession  bool
@@ -289,7 +290,7 @@ func resolveActiveContext(snap Snapshot, hints EnvironmentInfo) (CurrentInfo, er
 		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
 	}
 
-	activeLink, ok := findActiveLink(snap.links, targetSession.ID)
+	activeLink, ok := lookupActiveLink(snap.links, targetSession.ID)
 	if !ok {
 		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
 	}
@@ -299,7 +300,7 @@ func resolveActiveContext(snap Snapshot, hints EnvironmentInfo) (CurrentInfo, er
 		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
 	}
 
-	activePane, ok := findActivePane(snap.panes, w.ID)
+	activePane, ok := lookupActivePane(snap.panes, w.ID)
 	if !ok {
 		return CurrentInfo{}, invalid("TMUX_PANE required for verified pane context")
 	}
@@ -314,7 +315,7 @@ func resolveActiveContext(snap Snapshot, hints EnvironmentInfo) (CurrentInfo, er
 	}, nil
 }
 
-func findActiveLink(links []WindowLinkInfo, sessionID SessionID) (WindowLinkInfo, bool) {
+func lookupActiveLink(links []WindowLinkInfo, sessionID SessionID) (WindowLinkInfo, bool) {
 	for _, l := range links {
 		if l.SessionID == sessionID && l.Active {
 			return l, true
@@ -326,7 +327,7 @@ func findActiveLink(links []WindowLinkInfo, sessionID SessionID) (WindowLinkInfo
 	return zero, false
 }
 
-func findActivePane(panes []PaneInfo, windowID WindowID) (PaneInfo, bool) {
+func lookupActivePane(panes []PaneInfo, windowID WindowID) (PaneInfo, bool) {
 	for _, p := range panes {
 		if p.WindowID == windowID && p.Active {
 			return p, true

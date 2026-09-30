@@ -47,7 +47,7 @@ func TestIntegrationInspectCreateAndCapture(t *testing.T) {
 
 	record := setAndReadTitle(t, ctx, split, "quotes '$; #{pane_id} #[style]")
 
-	if e = link.Window().SelectLayout(ctx, tmux.Tiled); e != nil {
+	if e = link.Window().SelectLayout(ctx, tmux.LayoutTiled); e != nil {
 		t.Fatal(e)
 	}
 
@@ -104,7 +104,7 @@ func assertConsistentSnapshot(t *testing.T, ctx context.Context, s *tmux.Server,
 		t.Fatal(e)
 	}
 
-	if snap.Consistency != tmux.Consistent || len(snap.Panes()) != panes {
+	if snap.Consistency != tmux.ConsistencyComplete || len(snap.Panes()) != panes {
 		t.Fatalf("snapshot: %d panes, missing %+v", len(snap.Panes()), snap.MissingReferences())
 	}
 }
@@ -152,7 +152,7 @@ func TestIntegrationOptionsInheritanceAndEmpty(t *testing.T) {
 	}
 
 	inherited := paneUserOption(t, ctx, pane, "@probe")
-	if v, ok := inherited.Effective.Get(); !ok || v != "global" || inherited.Local.State() != tmux.Unavailable {
+	if v, ok := inherited.Effective.Get(); !ok || v != "global" || inherited.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatal(inherited)
 	}
 
@@ -279,8 +279,8 @@ func TestIntegrationTwoServersAndReplacement(t *testing.T) {
 		t.Fatal("cross-server targeting", e)
 	}
 
-	old := pa.Identity()
-	if e = a.KillIfIdentity(ctx, old); e != nil {
+	old := pa.ServerIdentity()
+	if e = a.KillMatching(ctx, old); e != nil {
 		t.Fatal(e)
 	}
 	// Same private endpoint; new lookup may discover a replacement, old handle may not.
@@ -293,10 +293,10 @@ func TestIntegrationTwoServersAndReplacement(t *testing.T) {
 		c, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
-		_ = a.KillIfIdentity(c, replacement.Identity())
+		_ = a.KillMatching(c, replacement.ServerIdentity())
 	})
 
-	if e = a.KillIfIdentity(ctx, old); !errors.Is(e, tmux.ErrServerChanged) {
+	if e = a.KillMatching(ctx, old); !errors.Is(e, tmux.ErrServerChanged) {
 		t.Fatalf("stale identity was not rejected: %v", e)
 	}
 
@@ -309,7 +309,7 @@ func TestIntegrationTwoServersAndReplacement(t *testing.T) {
 	}
 }
 
-func TestIntegrationControlParityAndExplicitAuxiliary(t *testing.T) {
+func TestIntegrationControlParityAndExplicitSubprocess(t *testing.T) {
 	s := tmuxtest.NewServer(t)
 	ctx := integrationContext(t)
 
@@ -334,7 +334,7 @@ func TestIntegrationControlParityAndExplicitAuxiliary(t *testing.T) {
 		t.Fatalf("unsafe control capture accepted: %v", e)
 	}
 
-	aux, e := pane.UsingSubprocess()
+	aux, e := pane.ViaSubprocess()
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -355,7 +355,7 @@ func TestIntegrationControlParityAndExplicitAuxiliary(t *testing.T) {
 	}
 
 	if _, e = aux.Info(ctx); !errors.Is(e, tmux.ErrClosed) {
-		t.Fatalf("auxiliary handle outlived connection: %v", e)
+		t.Fatalf("subprocess handle outlived connection: %v", e)
 	}
 }
 
@@ -389,7 +389,7 @@ func assertSameCapture(t *testing.T, ctx context.Context, a, b tmux.Pane) {
 
 	second, e := b.Capture(ctx, tmux.CaptureOptions{})
 	if e != nil || !bytes.Equal(first, second) {
-		t.Fatal("auxiliary capture mismatch", e)
+		t.Fatal("subprocess capture mismatch", e)
 	}
 }
 
@@ -415,7 +415,7 @@ func TestIntegrationNoServerAndExistingOnly(t *testing.T) {
 		t.Fatalf("missing server: %v", e)
 	}
 
-	if _, e = s.NewSession(ctx, tmux.NewSessionOptions{Start: tmux.ExistingOnly}); !errors.Is(e, tmux.ErrNoServer) {
+	if _, e = s.NewSession(ctx, tmux.NewSessionOptions{Start: tmux.StartPolicyExistingOnly}); !errors.Is(e, tmux.ErrNoServer) {
 		t.Fatalf("existing-only: %v", e)
 	}
 
@@ -668,7 +668,7 @@ func testOperationsLayoutCycling(t *testing.T, ctx context.Context, session tmux
 		t.Fatal(err)
 	}
 
-	if err := window.SelectLayout(ctx, tmux.EvenHorizontal); err != nil {
+	if err := window.SelectLayout(ctx, tmux.LayoutEvenHorizontal); err != nil {
 		t.Fatal(err)
 	}
 
@@ -956,7 +956,7 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 	// Verify that the tmux session environment does NOT contain the variable
 	envScope := session.Environment()
 
-	envValResult, err := envScope.Get(ctx, envKey, false)
+	envValResult, err := envScope.Get(ctx, envKey)
 	if err != nil {
 		t.Fatalf("session.Environment().Get failed: %v", err)
 	}
@@ -967,7 +967,7 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 }
 
 // TestIntegrationRunWithStartPolicy verifies that RunWith explicitly controls server startup policy
-// via StartPolicy (AllowStart vs ExistingOnly) independently of command names or aliases.
+// via StartPolicy (StartPolicyAllowStart vs StartPolicyExistingOnly) independently of command names or aliases.
 func TestIntegrationRunWithStartPolicy(t *testing.T) {
 	dir := shortTempDir(t)
 	socketPath := filepath.Join(dir, "start.sock")
@@ -989,33 +989,33 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
-		LogLevel:         tmux.LogNone,
+		LogLevel:         tmux.LogLevelNone,
 		LoginShell:       false,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// 1. ExistingOnly with new-session should fail with ErrNoServer (because -N is passed)
+	// 1. StartPolicyExistingOnly with new-session should fail with ErrNoServer (because -N is passed)
 	cmd, err := tmux.NewCommand("new-session", "-d", "-s", "s1")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.ExistingOnly})
+	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly})
 	if !errors.Is(err, tmux.ErrNoServer) {
-		t.Fatalf("expected ErrNoServer for ExistingOnly on unstarted server, got %v", err)
+		t.Fatalf("expected ErrNoServer for StartPolicyExistingOnly on unstarted server, got %v", err)
 	}
 
-	// 2. AllowStart with alias "new" should succeed and spawn daemon
+	// 2. StartPolicyAllowStart with alias "new" should succeed and spawn daemon
 	aliasCmd, err := tmux.NewCommand("new", "-d", "-s", "s-alias")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = server.RunWith(ctx, aliasCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	_, err = server.RunWith(ctx, aliasCmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
-		t.Fatalf("RunWith with AllowStart failed: %v", err)
+		t.Fatalf("RunWith with StartPolicyAllowStart failed: %v", err)
 	}
 
 	t.Cleanup(func() {
@@ -1033,7 +1033,7 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 
 	_ = sess
 
-	// 3. ExistingOnly with RunSequenceWith while running should succeed
+	// 3. StartPolicyExistingOnly with RunSequenceWith while running should succeed
 	seqCmd, err := tmux.NewCommand("display-message", "-p", "alive")
 	if err != nil {
 		t.Fatal(err)
@@ -1044,7 +1044,7 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seqRes, err := server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.ExistingOnly})
+	seqRes, err := server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly})
 	if err != nil {
 		t.Fatalf("RunSequenceWith failed: %v", err)
 	}
@@ -1077,7 +1077,7 @@ func TestIntegrationRootFlagsExecution(t *testing.T) {
 		UTF8:             tmux.UTF8Omit,
 		Colors256:        true,
 		TerminalFeatures: []string{"256", "RGB"},
-		LogLevel:         tmux.LogVerbose,
+		LogLevel:         tmux.LogLevelVerbose,
 		LoginShell:       false,
 	})
 	if err != nil {
@@ -1089,7 +1089,7 @@ func TestIntegrationRootFlagsExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.AllowStart})
+	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
 		t.Fatalf("RunWith failed: %v", err)
 	}
@@ -1118,9 +1118,9 @@ func TestIntegrationRootFlagsExecution(t *testing.T) {
 	})
 }
 
-// TestIntegrationAuxiliaryServerNeverAutoSpawns verifies that bound auxiliary servers
+// TestIntegrationSubprocessServerNeverAutoSpawns verifies that a connection's subprocess servers
 // strictly forbid auto-spawning replacement daemons across all execution paths.
-func TestIntegrationAuxiliaryServerNeverAutoSpawns(t *testing.T) {
+func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
 	connection, err := server.OpenControl(ctx, session, tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0})
@@ -1128,18 +1128,18 @@ func TestIntegrationAuxiliaryServerNeverAutoSpawns(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	auxiliary := connection.AuxiliaryServer()
+	subprocess := connection.SubprocessServer()
 
-	// 1. Calling RunWith with AllowStart on auxiliary server must NOT spawn daemon if dead.
+	// 1. Calling RunWith with StartPolicyAllowStart on subprocess server must NOT spawn daemon if dead.
 	// First, test when daemon is alive: commands execute through guard.
 	pingCmd, err := tmux.NewCommand("display-message", "-p", "alive")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := auxiliary.RunWith(ctx, pingCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	res, err := subprocess.RunWith(ctx, pingCmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart})
 	if err != nil {
-		t.Fatalf("auxiliary RunWith while alive failed: %v", err)
+		t.Fatalf("subprocess RunWith while alive failed: %v", err)
 	}
 
 	if !bytes.Contains(res.Stdout, []byte("alive")) {
@@ -1150,21 +1150,21 @@ func TestIntegrationAuxiliaryServerNeverAutoSpawns(t *testing.T) {
 	_ = server.Kill(ctx)
 	_ = connection.Close()
 
-	// 3. Both Run and RunWith with AllowStart must fail with ErrNoServer or ErrServerChanged,
+	// 3. Both Run and RunWith with StartPolicyAllowStart must fail with ErrNoServer or ErrServerChanged,
 	// and must NEVER leak an auto-spawned replacement daemon on the socket!
 	leakCmd, err := tmux.NewCommand("new-session", "-d", "-s", "leak-attempt")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = auxiliary.Run(ctx, leakCmd)
+	_, err = subprocess.Run(ctx, leakCmd)
 	if err == nil {
-		t.Fatal("expected auxiliary.Run to fail after daemon killed")
+		t.Fatal("expected subprocess.Run to fail after daemon killed")
 	}
 
-	_, err = auxiliary.RunWith(ctx, leakCmd, tmux.RunOptions{Start: tmux.AllowStart})
+	_, err = subprocess.RunWith(ctx, leakCmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart})
 	if err == nil {
-		t.Fatal("expected auxiliary.RunWith to fail after daemon killed")
+		t.Fatal("expected subprocess.RunWith to fail after daemon killed")
 	}
 
 	// Verify no daemon exists on the socket path
@@ -1339,7 +1339,7 @@ func TestIntegrationRunSequenceWithStdinSingleStream(t *testing.T) {
 	inputData := []byte("payload for sequence single stream\n")
 	// The first command consumes stdin to EOF. The second command finds stdin exhausted,
 	// demonstrating that stdin is a single shared stream delivered to the tmux process, not duplicated.
-	_, _ = server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.AllowStart, Input: inputData})
+	_, _ = server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: inputData})
 
 	got, err := server.ReadBuffer(ctx, b1)
 	if err != nil {
@@ -1692,7 +1692,7 @@ func TestIntegrationRunWithEmptyInputSlice(t *testing.T) {
 		t.Fatalf("NewCommand failed: %v", err)
 	}
 
-	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.AllowStart, Input: []byte{}})
+	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: []byte{}})
 	if err != nil {
 		t.Fatalf("RunWith with empty input slice failed: %v", err)
 	}
@@ -1863,7 +1863,7 @@ func TestIntegrationSetPaneOutputAction(t *testing.T) {
 	}
 
 	// 3. Batch action
-	if err := conn.SetPaneOutputActions(ctx, tmux.PaneOutputTarget{Pane: boundPane, Action: tmux.PaneOutputOn}); err != nil {
+	if err := conn.SetPaneOutputActions(ctx, tmux.PaneOutputSetting{Pane: boundPane, Action: tmux.PaneOutputOn}); err != nil {
 		t.Fatalf("SetPaneOutputActions failed: %v", err)
 	}
 }
@@ -1910,7 +1910,7 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 		{"client.SetWindowSize", func() error { return client.SetWindowSize(ctx, window, tmux.Size{Width: 90, Height: 30}) }},
 		{"client.ClearWindowSize", func() error { return client.ClearWindowSize(ctx, window) }},
 		{"client.ResetCursorTracking", func() error { return client.ResetCursorTracking(ctx) }},
-		{"client.Scroll", func() error { return client.Scroll(ctx, tmux.ScrollDown, 2) }},
+		{"client.Scroll", func() error { return client.Scroll(ctx, tmux.ScrollDirectionDown, 2) }},
 		{"client.Refresh with negated flag", func() error {
 			return client.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagReadOnly.Negate()}})
 		}},
@@ -1918,7 +1918,7 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 		{"conn.SetWindowSize", func() error { return conn.SetWindowSize(ctx, window, tmux.Size{Width: 95, Height: 35}) }},
 		{"conn.ClearWindowSize", func() error { return conn.ClearWindowSize(ctx, window) }},
 		{"conn.ResetCursorTracking", func() error { return conn.ResetCursorTracking(ctx) }},
-		{"conn.Scroll", func() error { return conn.Scroll(ctx, tmux.ScrollUp, 1) }},
+		{"conn.Scroll", func() error { return conn.Scroll(ctx, tmux.ScrollDirectionUp, 1) }},
 		{"conn.Refresh", func() error { return conn.Refresh(ctx, tmux.RefreshOptions{StatusOnly: true}) }},
 	})
 }
@@ -1994,8 +1994,8 @@ func TestIntegrationDedicatedCommands(t *testing.T) {
 		{"Pane.Unmark", func() error { return splitPane.Unmark(ctx) }},
 		{"Pane.SwapUp", func() error { return splitPane.SwapUp(ctx) }},
 		{"Pane.SwapDown", func() error { return splitPane.SwapDown(ctx) }},
-		{"Pane.SwapWith", func() error { return splitPane.SwapWith(ctx, initialPane, tmux.SwapPaneOptions{Up: true}) }},
-		{"Pane.ResizeRelative", func() error { return splitPane.ResizeRelative(ctx, 2, tmux.ResizeDown) }},
+		{"Pane.Swap", func() error { return splitPane.Swap(ctx, initialPane, tmux.SwapPaneOptions{Select: true}) }},
+		{"Pane.ResizeRelative", func() error { return splitPane.ResizeRelative(ctx, 2, tmux.ResizeDirectionDown) }},
 		{"Pane.ToggleZoom", func() error { return splitPane.ToggleZoom(ctx) }},
 		{"Pane.ToggleZoom back", func() error { return splitPane.ToggleZoom(ctx) }},
 		{"Pane.Join with FullSize", func() error {
@@ -2035,7 +2035,7 @@ func assertSessionTmuxEnv(t *testing.T, ctx context.Context, server *tmux.Server
 
 	t.Cleanup(func() { _ = sess.Kill(ctx) })
 
-	envVal, err := sess.Environment().Get(ctx, "CUSTOM_SESSION_VAR", false)
+	envVal, err := sess.Environment().Get(ctx, "CUSTOM_SESSION_VAR")
 	if v, ok := envVal.Value.Get(); err != nil || !ok || v != "session_native_val" {
 		t.Fatalf("expected session native env var, got %+v, err: %v", envVal, err)
 	}
@@ -2210,7 +2210,7 @@ func runWithRetries(ctx context.Context, server *tmux.Server, cmd tmux.Command, 
 	var err error
 
 	for range attempts {
-		if _, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.ExistingOnly}); err == nil {
+		if _, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly}); err == nil {
 			return nil
 		}
 

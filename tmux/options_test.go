@@ -8,10 +8,10 @@ import (
 )
 
 func TestArrayUpdateOutcome(t *testing.T) {
-	for _, effect := range []Effect{NotSent, Unknown, Confirmed} {
+	for _, effect := range []Effect{EffectNotSent, EffectUnknown, EffectConfirmed} {
 		t.Run(effect.String(), func(t *testing.T) {
 			cause := &OperationError{Operation: "set-option", Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Err: ErrProtocol}
-			steps := []StepOutcome{{Index: 0, Effect: Confirmed}, {Index: 1, Effect: NotSent}, {Index: 2, Effect: NotSent}}
+			steps := []StepOutcome{{Index: 0, Effect: EffectConfirmed}, {Index: 1, Effect: EffectNotSent}, {Index: 2, Effect: EffectNotSent}}
 
 			err := arrayUpdateError(cause, 1, steps)
 			if !errors.Is(err, ErrProtocol) {
@@ -23,14 +23,14 @@ func TestArrayUpdateOutcome(t *testing.T) {
 				t.Fatalf("expected OperationError: %v", err)
 			}
 
-			want := []StepOutcome{{Index: 0, Effect: Confirmed}, {Index: 1, Effect: effect}, {Index: 2, Effect: NotSent}}
+			want := []StepOutcome{{Index: 0, Effect: EffectConfirmed}, {Index: 1, Effect: effect}, {Index: 2, Effect: EffectNotSent}}
 			if diff := cmp.Diff(want, got.Outcome.Steps); diff != "" {
 				t.Fatal(diff)
 			}
 
 			aggregate := effect
-			if effect == NotSent {
-				aggregate = Unknown
+			if effect == EffectNotSent {
+				aggregate = EffectUnknown
 			}
 
 			if got.Outcome.Effect != aggregate {

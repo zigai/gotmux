@@ -87,7 +87,7 @@ func writeMockResponse(t *testing.T, name string, data []byte) {
 }
 
 func encodeTestPaneRecord(s *Server, id string) []byte {
-	fields := fieldsFor(PaneKind)
+	fields := fieldsFor(ObjectKindPane)
 
 	m := make(map[string]string, len(fields))
 	for _, f := range fields {
@@ -124,7 +124,7 @@ func mockServerIdentity(s *Server) ServerIdentity {
 
 func TestUnprobedHandleInfo(t *testing.T) {
 	s, response, _ := mockScriptServer(t)
-	bound := Pane{h: s.newHandle("%7", PaneKind, mockServerIdentity(s))}
+	bound := Pane{h: s.newHandle("%7", ObjectKindPane, mockServerIdentity(s))}
 	writeMockResponse(t, response, append([]byte(guardOK), encodeTestPaneRecord(s, "%7")...))
 
 	if _, err := bound.Info(context.Background()); err != nil {
@@ -285,9 +285,102 @@ func TestEqualRequiresEveryIdentityField(t *testing.T) {
 				t.Fatalf("ServerIdentity.Equal = %v, want %v", got, tc.equal)
 			}
 
-			a := Pane{h: s.newHandle("%7", PaneKind, base)}
-			if got := a.Equal(Pane{h: s.newHandle("%7", PaneKind, changed)}); got != tc.equal {
+			a := Pane{h: s.newHandle("%7", ObjectKindPane, base)}
+			if got := a.Equal(Pane{h: s.newHandle("%7", ObjectKindPane, changed)}); got != tc.equal {
 				t.Fatalf("Pane.Equal = %v, want %v", got, tc.equal)
+			}
+		})
+	}
+}
+
+func TestPaneMethodsRejectInvalidHandle(t *testing.T) {
+	ctx := t.Context()
+
+	var (
+		invalidPane Pane
+		invalidWin  Window
+	)
+
+	if err := invalidPane.ClockMode(ctx); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on invalidPane.ClockMode, got: %v", err)
+	}
+
+	if err := invalidPane.SendPrefix(ctx); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on invalidPane.SendPrefix, got: %v", err)
+	}
+
+	defaultNewPaneOpts := NewPaneOptions{
+		Width:               "",
+		Height:              "",
+		X:                   "",
+		Y:                   "",
+		Modal:               false,
+		Dir:                 "",
+		Program:             Program{kind: 0, name: "", args: nil},
+		Env:                 nil,
+		TmuxEnv:             nil,
+		Select:              false,
+		Zoom:                false,
+		Title:               "",
+		BorderLines:         "",
+		Style:               "",
+		ActiveBorderStyle:   "",
+		InactiveBorderStyle: "",
+		FloatOverZoom:       false,
+		CloseOnClick:        false,
+		CaptureAllKeys:      false,
+	}
+
+	if _, err := invalidPane.NewPane(ctx, defaultNewPaneOpts); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on invalidPane.NewPane, got: %v", err)
+	}
+
+	if _, err := invalidWin.NewPane(ctx, defaultNewPaneOpts); !errors.Is(err, ErrInvalidHandle) {
+		t.Errorf("expected ErrInvalidHandle on invalidWin.NewPane, got: %v", err)
+	}
+}
+
+func TestOperationErrorNamesCalledMethod(t *testing.T) {
+	ctx := t.Context()
+
+	var (
+		pane    Pane
+		window  Window
+		session Session
+		client  Client
+	)
+
+	noQuery := QueryOptions{Filter: "", ExtraFields: nil}
+
+	tests := []struct {
+		want string
+		call func() error
+	}{
+		{"Pane.Kill", func() error { return pane.Kill(ctx) }},
+		{"Window.Kill", func() error { return window.Kill(ctx) }},
+		{"Session.Rename", func() error { return session.Rename(ctx, "renamed") }},
+		{"Pane.Info", func() error { _, err := pane.InfoWith(ctx, noQuery); return err }},
+		{"Client.Info", func() error { _, err := client.Info(ctx); return err }},
+		{"SessionOptions.SetBaseIndex", func() error { return session.Options().SetBaseIndex(ctx, 1) }},
+		{"SessionOptions.SetHistoryLimit", func() error { return session.Options().SetHistoryLimit(ctx, -1) }},
+		{"EnvironmentScope.Unset", func() error { return session.Environment().Unset(ctx, "invalid=name") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			err := tt.call()
+
+			opErr, ok := errors.AsType[*OperationError](err)
+			if !ok {
+				t.Fatalf("got %v, want *OperationError", err)
+			}
+
+			if opErr.Operation != tt.want {
+				t.Errorf("Operation = %q, want %q", opErr.Operation, tt.want)
+			}
+
+			if msg := err.Error(); strings.Contains(msg, tt.want+": "+tt.want) {
+				t.Errorf("error repeats the operation: %q", msg)
 			}
 		})
 	}

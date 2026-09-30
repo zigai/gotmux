@@ -90,10 +90,10 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 		return result, false, e //nolint:wrapcheck // context error is propagated directly
 	}
 
-	child, cancel := context.WithCancelCause(ctx)
+	cmdCtx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
-	cmd := r.command(child, args)
+	cmd := r.command(cmdCtx, args)
 	stdout := newBuffer(outMax, func() { cancel(ErrOutputLimit) })
 	stderr := newBuffer(errMax, func() { cancel(ErrOutputLimit) })
 	cmd.Stdout = stdout
@@ -118,7 +118,7 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
 
-	if cause := context.Cause(child); cause != nil {
+	if cause := context.Cause(cmdCtx); cause != nil {
 		e = errors.Join(e, cause)
 	}
 

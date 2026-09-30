@@ -22,7 +22,7 @@ func graphState(t *testing.T, ctx context.Context, server *tmux.Server) map[stri
 		t.Fatal(err)
 	}
 
-	if snapshot.Consistency != tmux.Consistent {
+	if snapshot.Consistency != tmux.ConsistencyComplete {
 		t.Fatalf("inconsistent fixture: %+v", snapshot.MissingReferences())
 	}
 
@@ -301,7 +301,7 @@ func TestIntegrationGraphUnlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !shared.Identity().Equal(other.Identity()) || !shared.Window().Equal(original.Window()) {
+	if !shared.ServerIdentity().Equal(other.ServerIdentity()) || !shared.Window().Equal(original.Window()) {
 		t.Fatalf("returned link lost window provenance: %+v", shared)
 	}
 
@@ -334,7 +334,7 @@ func TestIntegrationGraphWindowSwap(t *testing.T) {
 	b := string(session.ID()) + ":" + strconv.Itoa(second.Index())
 	want[a], want[b] = want[b], want[a]
 
-	if err := first.Swap(ctx, second, false); err != nil {
+	if err := first.Swap(ctx, second, tmux.SwapWindowOptions{Select: false}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -434,7 +434,7 @@ func TestIntegrationGraphPaneSwap(t *testing.T) {
 				}
 			}
 
-			if err := first.Swap(ctx, second, false); err != nil {
+			if err := first.Swap(ctx, second, tmux.SwapPaneOptions{Select: false}); err != nil {
 				t.Fatal(err)
 			}
 
@@ -476,7 +476,7 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 				name string
 				run  func() error
 			}{
-				{name: "swap", run: func() error { return source.Swap(ctx, target, false) }},
+				{name: "swap", run: func() error { return source.Swap(ctx, target, tmux.SwapPaneOptions{Select: false}) }},
 				{name: "join", run: func() error { return source.Join(ctx, target, options) }},
 			} {
 				t.Run(action.name, func(t *testing.T) {
@@ -511,7 +511,7 @@ func assertRejectedBeforeSend(t *testing.T, err, want error) {
 		t.Errorf("mutation error: %v, want %v", err, want)
 	}
 
-	if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.NotSent {
+	if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.EffectNotSent {
 		t.Errorf("mutation was not rejected before send: %v", err)
 	}
 }
@@ -521,7 +521,7 @@ func TestIntegrationGraphHandleLifetimes(t *testing.T) {
 		name string
 		want error
 	}{
-		{name: "control-and-auxiliary", want: nil},
+		{name: "control-and-subprocess", want: nil},
 		{name: "different-connections", want: tmux.ErrInvalidHandle},
 		{name: "unbound-target", want: tmux.ErrInvalidHandle},
 		{name: "closed-connection", want: tmux.ErrClosed},
@@ -545,7 +545,7 @@ func TestIntegrationGraphHandleLifetimes(t *testing.T) {
 
 			want := graphState(t, ctx, server)
 
-			err = source.Swap(ctx, target, false)
+			err = source.Swap(ctx, target, tmux.SwapPaneOptions{Select: false})
 			if test.want == nil {
 				if err != nil {
 					t.Errorf("swap error: %v, want nil", err)
@@ -576,7 +576,7 @@ func lifetimeTarget(t *testing.T, ctx context.Context, server *tmux.Server, sess
 		}
 	}
 
-	return connection.AuxiliaryServer()
+	return connection.SubprocessServer()
 }
 
 func TestIntegrationGraphMissingLookups(t *testing.T) {
@@ -715,7 +715,7 @@ func consistentSnapshot(t *testing.T, ctx context.Context, server *tmux.Server) 
 		t.Fatal(err)
 	}
 
-	if snap.Consistency != tmux.Consistent {
+	if snap.Consistency != tmux.ConsistencyComplete {
 		t.Fatalf("inconsistent snapshot: %+v", snap.MissingReferences())
 	}
 
@@ -739,13 +739,13 @@ func snapshotControlClient(t *testing.T, snap tmux.Snapshot) tmux.ClientInfo {
 type resolvedHandle[H any] interface {
 	Valid() bool
 	Equal(other H) bool
-	Identity() tmux.ServerIdentity
+	ServerIdentity() tmux.ServerIdentity
 }
 
 func assertResolved[H resolvedHandle[H]](t *testing.T, kind string, got H, ok bool, want H, identity tmux.ServerIdentity) {
 	t.Helper()
 
-	if !ok || !got.Valid() || !got.Equal(want) || !got.Identity().Equal(identity) {
+	if !ok || !got.Valid() || !got.Equal(want) || !got.ServerIdentity().Equal(identity) {
 		t.Fatalf("%s resolution failed: ok=%v, resolved=%v", kind, ok, got)
 	}
 }

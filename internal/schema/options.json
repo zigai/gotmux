@@ -326,23 +326,23 @@
       "ClipboardExternal": "external"
     },
     "StatusPosition": {
-      "StatusTop": "top",
-      "StatusBottom": "bottom"
+      "StatusPositionTop": "top",
+      "StatusPositionBottom": "bottom"
     },
     "StatusMode": {
-      "StatusOff": "off",
-      "StatusOn": "on",
-      "StatusTwoLines": "2",
-      "StatusThreeLines": "3",
-      "StatusFourLines": "4",
-      "StatusFiveLines": "5"
+      "StatusModeOff": "off",
+      "StatusModeOn": "on",
+      "StatusModeTwoLines": "2",
+      "StatusModeThreeLines": "3",
+      "StatusModeFourLines": "4",
+      "StatusModeFiveLines": "5"
     },
     "DetachPolicy": {
-      "DetachOff": "off",
-      "DetachOn": "on",
-      "DetachNoDetached": "no-detached",
-      "DetachPrevious": "previous",
-      "DetachNext": "next"
+      "DetachPolicyOff": "off",
+      "DetachPolicyOn": "on",
+      "DetachPolicyNoDetached": "no-detached",
+      "DetachPolicyPrevious": "previous",
+      "DetachPolicyNext": "next"
     },
     "ModeKeys": {
       "ModeKeysVi": "vi",
@@ -360,9 +360,9 @@
       "RemainFailed": "failed"
     },
     "PaneBorderStatus": {
-      "BorderOff": "off",
-      "BorderTop": "top",
-      "BorderBottom": "bottom"
+      "PaneBorderStatusOff": "off",
+      "PaneBorderStatusTop": "top",
+      "PaneBorderStatusBottom": "bottom"
     },
     "PassthroughPolicy": {
       "PassthroughOff": "off",
