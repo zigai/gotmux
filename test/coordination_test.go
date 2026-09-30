@@ -243,8 +243,6 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 	}
 }
 
-// TestIntegrationRunShellDelay verifies that RunShell with a valid Delay >= 0 succeeds
-// and negative Delay returns ErrInvalidArgument.
 func TestIntegrationRunShellDelay(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
@@ -263,13 +261,9 @@ func TestIntegrationRunShellDelay(t *testing.T) {
 	}
 }
 
-// TestIntegrationSourceTextAndStdin verifies that Server.SourceText and raw RunWith with
-// "source-file -" correctly evaluate multiline configuration via stdin including braces,
-// %if conditionals, escaped literals, and options like ParseOnly and Verbose.
 func TestIntegrationSourceTextAndStdin(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	// 1. SourceText with conditionals (%if / %else / %endif), braces, and escaped literals
 	config := `%if 1
 set-option -t ` + string(session.ID()) + ` @cond_branch "branch_taken"
 %else
@@ -292,7 +286,6 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	assertUserOption(t, ctx, session, "@cond_branch", "branch_taken")
 	assertUserOption(t, ctx, session, "@escaped_literal", "literal;with#{special}")
 
-	// 2. SourceText with ParseOnly = true (syntax validation without execution)
 	parseOnlyConfig := `set-option -t ` + string(session.ID()) + ` @parse_only "should_not_be_set"`
 	if _, err := server.SourceText(ctx, parseOnlyConfig, tmux.SourceOptions{ParseOnly: true}); err != nil {
 		t.Fatalf("SourceText with ParseOnly failed: %v", err)
@@ -303,7 +296,6 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 		t.Fatalf("ParseOnly option was unexpectedly set: %+v, %v", val, err)
 	}
 
-	// 3. SourceText with Verbose = true
 	verboseConfig := `set-option -t ` + string(session.ID()) + ` @verbose_opt "is_set"`
 
 	verboseRes, err := server.SourceText(ctx, verboseConfig, tmux.SourceOptions{Verbose: true})
@@ -317,7 +309,6 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 		t.Fatalf("expected verbose output, got stdout=%q stderr=%q", verboseRes.Stdout, verboseRes.Stderr)
 	}
 
-	// 4. Raw RunWith executing source-file - with RunOptions.Input
 	rawCmd, err := tmux.NewCommand("source-file", "-")
 	if err != nil {
 		t.Fatalf("NewCommand failed: %v", err)
@@ -334,7 +325,6 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	// 1. RunShell with Delay and Background
 	shellScript := "sleep 0.05 && echo shell_ran_yes"
 
 	var shellOptions tmux.RunShellOptions
@@ -350,7 +340,6 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 		t.Fatalf("expected stdout to contain 'shell_ran_yes', got: %q", string(res.Stdout))
 	}
 
-	// 2. Server.IfShell: true branch
 	cmdTrue := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "true_branch")
 
 	cmdFalse := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "false_branch")
@@ -360,13 +349,12 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 
 	assertUserOption(t, ctx, session, "@if_shell", "true_branch")
 
-	// Server.IfShell: false branch
 	if err := server.IfShell(ctx, "false", testSequence(t, cmdTrue), testSequence(t, cmdFalse)); err != nil {
 		t.Fatalf("IfShell false branch failed: %v", err)
 	}
 
 	assertUserOption(t, ctx, session, "@if_shell", "false_branch")
-	// 3. Server.LockScreen executes lock-server cleanly
+
 	if err := server.LockScreen(ctx); err != nil {
 		t.Fatalf("Server.LockScreen failed: %v", err)
 	}

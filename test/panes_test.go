@@ -23,22 +23,18 @@ func TestIntegrationClockModeAndSendPrefix(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Send primary prefix
 	if err := pane.SendPrefix(ctx); err != nil {
 		t.Fatalf("SendPrefix failed: %v", err)
 	}
 
-	// Send secondary prefix (-2)
 	if err := pane.SendSecondaryPrefix(ctx); err != nil {
 		t.Fatalf("SendSecondaryPrefix failed: %v", err)
 	}
 
-	// Clock mode
 	if err := pane.ClockMode(ctx); err != nil {
 		t.Fatalf("ClockMode failed: %v", err)
 	}
 
-	// Send key to exit clock mode
 	_ = server
 	_ = pane.SendKeys(ctx, "q")
 }
@@ -75,7 +71,6 @@ func TestIntegrationSplitAppearanceAndKillTargetOptions(t *testing.T) {
 
 	assertPaneTitle(t, ctx, newPane, testTitle)
 
-	// Test Split with KillTarget (-k) sets remain-on-exit
 	paneWithK, err := newPane.Split(ctx, tmux.SplitOptions{
 		Direction:  tmux.Horizontal,
 		KillTarget: true,
@@ -109,7 +104,6 @@ func TestIntegrationNewPaneFloating(t *testing.T) {
 
 	window := link.Window()
 
-	// 1. Create a floating pane via Window.NewPane
 	floatPane, err := window.NewPane(ctx, tmux.NewPaneOptions{
 		Width:       "50",
 		Height:      "15",
@@ -128,7 +122,6 @@ func TestIntegrationNewPaneFloating(t *testing.T) {
 
 	assertPaneTitle(t, ctx, floatPane, "FloatingPane")
 
-	// Submit text in floating pane
 	if err := floatPane.Submit(ctx, "echo hello-floating"); err != nil {
 		t.Fatalf("floatPane.Submit failed: %v", err)
 	}
@@ -147,7 +140,6 @@ func TestIntegrationNewPaneFloating(t *testing.T) {
 		t.Fatal("expected non-empty captured output")
 	}
 
-	// 2. Create another pane via Pane.NewPane targeting the existing pane
 	childPane, err := floatPane.NewPane(ctx, tmux.NewPaneOptions{
 		Width:       "30",
 		Height:      "10",
@@ -166,7 +158,6 @@ func TestIntegrationNewPaneFloating(t *testing.T) {
 
 	assertPaneTitle(t, ctx, childPane, "ChildFloatPane")
 
-	// 3. Create a modal pane with CloseOnCancel
 	modalPane, err := window.NewPane(ctx, tmux.NewPaneOptions{
 		Width:          "40",
 		Height:         "12",
@@ -199,7 +190,6 @@ func TestIntegrationRespawnPreserveEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Respawn pane with PreserveEnvironment
 	if err := pane.Respawn(ctx, tmux.RespawnOptions{
 		KillRunning:         true,
 		PreserveEnvironment: true,
@@ -211,7 +201,6 @@ func TestIntegrationRespawnPreserveEnvironment(t *testing.T) {
 		t.Fatalf("pane.Respawn with PreserveEnvironment failed: %v", err)
 	}
 
-	// Respawn window with PreserveEnvironment on a dedicated window
 	link2, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "respawn-win2"})
 	if err != nil {
 		t.Fatal(err)

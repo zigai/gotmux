@@ -33,7 +33,6 @@ func TestAttachResizeAndSignal(t *testing.T) {
 
 	_, cancel, done := attachCancelable(t, ctx, server, session, slave, options)
 
-	// Verify initial client geometry was received (24 rows x 80 cols)
 	client := terminalClientInfo(t, ctx, server, slave)
 	if client.Width != 80 || client.Height != 24 {
 		t.Logf("initial client size: %dx%d (expected 80x24)", client.Width, client.Height)
@@ -48,7 +47,6 @@ func TestAttachResizeAndSignal(t *testing.T) {
 		return info.Width == 120 && info.Height == 50
 	})
 
-	// Cancel attachment context, verify Attach returns cleanly and restores terminal state
 	cancel()
 
 	select {
@@ -93,10 +91,8 @@ func TestIntegrationAttachResize_HighBandwidthStorm(t *testing.T) {
 		t.Fatalf("failed to query panes: %v", err)
 	}
 
-	// Start high-bandwidth output in the background
 	_ = panes[0].Handle().Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
 
-	// Blast rapid resize signals while data is streaming
 	for i := range 30 {
 		resizePTY(t, master, slave, uint16(24+(i%10)), uint16(80+(i%20)))
 		signalResize(clientPID)
@@ -104,7 +100,6 @@ func TestIntegrationAttachResize_HighBandwidthStorm(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// Verify clean teardown without deadlock
 	cancel()
 
 	select {

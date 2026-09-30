@@ -269,17 +269,14 @@ func TestIntegrationHookScopeExtensions(t *testing.T) {
 	cmd2 := testCommand(t, "display-message", "second")
 	cmd3 := testCommand(t, "display-message", "replaced")
 
-	// 1. SetWhole sets whole hook without index
 	if err := session.Hooks().SetWhole(ctx, hook, testSequence(t, cmd1)); err != nil {
 		t.Fatalf("SetWhole failed: %v", err)
 	}
 
-	// 2. Append appends to the hook with -a
 	if err := session.Hooks().Append(ctx, hook, testSequence(t, cmd2)); err != nil {
 		t.Fatalf("Append failed: %v", err)
 	}
 
-	// Verify both entries exist (index 0 and index 1)
 	hooks, err := session.Hooks().List(ctx)
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
@@ -289,22 +286,18 @@ func TestIntegrationHookScopeExtensions(t *testing.T) {
 		t.Fatalf("expected 2 hooks for %s after append, got %d", hook, count)
 	}
 
-	// 3. ListFiltered returns only matching hooks
 	assertFilteredHooks(t, ctx, session, hook, 2)
 
-	// 4. Run-now (-R) executes without error
 	if err := session.Hooks().Run(ctx, hook); err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
 
-	// 5. SetWhole replaces the whole hook (replaces slot 0 and removes slot 1)
 	if err := session.Hooks().SetWhole(ctx, hook, testSequence(t, cmd3)); err != nil {
 		t.Fatalf("SetWhole replace failed: %v", err)
 	}
 
 	assertFilteredHooks(t, ctx, session, hook, 1)
 
-	// 6. Remove deletes all slots for the hook
 	if err := session.Hooks().Remove(ctx, hook); err != nil {
 		t.Fatalf("Remove failed: %v", err)
 	}
@@ -336,7 +329,6 @@ func TestIntegrationKeyBindingsExtensions(t *testing.T) {
 
 	cmd := testCommand(t, "display-message", "pressed")
 
-	// 1. Bind key with note and repeat
 	if err := server.Bind(ctx, "root", "F12", testSequence(t, cmd), tmux.BindOptions{
 		Repeat: false,
 		Note:   "Initial Note",
@@ -348,10 +340,8 @@ func TestIntegrationKeyBindingsExtensions(t *testing.T) {
 		t.Fatalf("unexpected binding: %+v", binding)
 	}
 
-	// 2-3. Commandless edit
 	assertCommandlessEdit(t, ctx, server, "F12")
 
-	// 4. Commandless edit: clear note with ClearNote, then 5. UnbindWith the key
 	var emptySeq tmux.CommandSequence
 	if err := server.Bind(ctx, "root", "F12", emptySeq, tmux.BindOptions{
 		ClearNote: true,
@@ -363,12 +353,10 @@ func TestIntegrationKeyBindingsExtensions(t *testing.T) {
 		t.Fatalf("UnbindWith failed: %v", err)
 	}
 
-	// 6. Native mouse and User key bindings
 	bindKeys(t, ctx, server, "root", testSequence(t, cmd), "MouseDown1Pane", "User0")
 	soleBinding(t, ctx, server, "MouseDown1Pane")
 	soleBinding(t, ctx, server, "User0")
 
-	// 7. UnbindWith all on custom table
 	assertUnbindAll(t, ctx, server, "custom_table", testSequence(t, cmd))
 }
 

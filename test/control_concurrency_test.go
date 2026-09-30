@@ -73,7 +73,6 @@ func TestControlConcurrentRequests(t *testing.T) {
 		t.Error(err)
 	}
 
-	// Assert that no race or deadlock occurs, and connection.Close() succeeds cleanly.
 	closeDone := make(chan error, 1)
 	go func() {
 		closeDone <- connection.Close()

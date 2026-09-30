@@ -936,7 +936,6 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 	envKey := "TGO_PROC_ENV_TEST"
 	envVal := "process_isolated_value"
 
-	// Create a session with Env overrides and an explicit Exec program
 	session, err := server.NewSession(ctx, tmux.NewSessionOptions{
 		Window: "env-test-win",
 		Dir:    dir,
@@ -949,11 +948,9 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 		t.Fatalf("NewSession with Env failed: %v", err)
 	}
 
-	// Verify the process received the environment variable
 	awaitFile(t, ctx, resultFile)
 	assertFileBytes(t, resultFile, []byte(envVal))
 
-	// Verify that the tmux session environment does NOT contain the variable
 	envScope := session.Environment()
 
 	envValResult, err := envScope.Get(ctx, envKey)
@@ -996,7 +993,6 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. StartPolicyExistingOnly with new-session should fail with ErrNoServer (because -N is passed)
 	cmd, err := tmux.NewCommand("new-session", "-d", "-s", "s1")
 	if err != nil {
 		t.Fatal(err)
@@ -1007,7 +1003,6 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		t.Fatalf("expected ErrNoServer for StartPolicyExistingOnly on unstarted server, got %v", err)
 	}
 
-	// 2. StartPolicyAllowStart with alias "new" should succeed and spawn daemon
 	aliasCmd, err := tmux.NewCommand("new", "-d", "-s", "s-alias")
 	if err != nil {
 		t.Fatal(err)
@@ -1025,7 +1020,6 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		_ = server.Kill(cleanupCtx)
 	})
 
-	// Verify session exists
 	sess, err := server.FindSession(ctx, "s-alias")
 	if err != nil {
 		t.Fatalf("FindSession failed after started: %v", err)
@@ -1033,7 +1027,6 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 
 	_ = sess
 
-	// 3. StartPolicyExistingOnly with RunSequenceWith while running should succeed
 	seqCmd, err := tmux.NewCommand("display-message", "-p", "alive")
 	if err != nil {
 		t.Fatal(err)
@@ -1054,8 +1047,6 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 	}
 }
 
-// TestIntegrationRootFlagsExecution verifies execution of commands with explicit root flags
-// (Colors256, TerminalFeatures, UTF8Omit, LogLevel).
 func TestIntegrationRootFlagsExecution(t *testing.T) {
 	dir := shortTempDir(t)
 	socketPath := filepath.Join(dir, "root.sock")
@@ -1101,7 +1092,6 @@ func TestIntegrationRootFlagsExecution(t *testing.T) {
 		_ = server.Kill(cleanupCtx)
 	})
 
-	// Verify server log file was generated (from -v flag)
 	awaitObservation(t, ctx, "server log file created", func() bool {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
@@ -1130,8 +1120,6 @@ func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 
 	subprocess := connection.SubprocessServer()
 
-	// 1. Calling RunWith with StartPolicyAllowStart on subprocess server must NOT spawn daemon if dead.
-	// First, test when daemon is alive: commands execute through guard.
 	pingCmd, err := tmux.NewCommand("display-message", "-p", "alive")
 	if err != nil {
 		t.Fatal(err)
@@ -1146,12 +1134,9 @@ func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 		t.Fatalf("expected 'alive', got %q", string(res.Stdout))
 	}
 
-	// 2. Kill the daemon
 	_ = server.Kill(ctx)
 	_ = connection.Close()
 
-	// 3. Both Run and RunWith with StartPolicyAllowStart must fail with ErrNoServer or ErrServerChanged,
-	// and must NEVER leak an auto-spawned replacement daemon on the socket!
 	leakCmd, err := tmux.NewCommand("new-session", "-d", "-s", "leak-attempt")
 	if err != nil {
 		t.Fatal(err)
@@ -1167,7 +1152,6 @@ func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 		t.Fatal("expected subprocess.RunWith to fail after daemon killed")
 	}
 
-	// Verify no daemon exists on the socket path
 	_, err = server.Panes(ctx)
 	if !errors.Is(err, tmux.ErrNoServer) {
 		t.Fatalf("expected ErrNoServer, indicating no daemon was spawned, got %v", err)
@@ -1202,7 +1186,6 @@ func TestIntegrationDisplayMessageStdin(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	window, pane := firstWindowPane(t, ctx, session)
 
-	// 1. Create an empty pane in the window using split-window with empty command
 	splitCmd, err := tmux.NewCommand("split-window", "-d", "-t", string(pane.ID()), "")
 	if err != nil {
 		t.Fatalf("NewCommand split-window failed: %v", err)
@@ -1214,7 +1197,6 @@ func TestIntegrationDisplayMessageStdin(t *testing.T) {
 
 	emptyPane := otherPane(t, ctx, server, window, pane)
 
-	// 2. Forward stdin into the empty pane using display-message -I
 	wantText := "hello to empty pane from display-message -I\nsecond line"
 
 	displayCmd, err := tmux.NewCommand("display-message", "-I", "-t", string(emptyPane.ID()))
@@ -1227,7 +1209,6 @@ func TestIntegrationDisplayMessageStdin(t *testing.T) {
 		t.Fatalf("RunWith display-message -I failed: %v", err)
 	}
 
-	// 3. Capture pane content and assert delivery
 	awaitCaptureContains(t, ctx, emptyPane, "hello to empty pane from display-message -I", "second line")
 }
 
@@ -1350,14 +1331,11 @@ func TestIntegrationRunSequenceWithStdinSingleStream(t *testing.T) {
 		t.Fatalf("buffer data mismatch: got %q, want %q", got, inputData)
 	}
 
-	// Buffer 2 was not created because stdin was consumed to EOF by command 1
 	if _, err := server.ReadBuffer(ctx, b2); !errors.Is(err, tmux.ErrNotFound) {
 		t.Fatalf("expected buffer 2 not to exist because stdin was consumed by command 1, got %v", err)
 	}
 }
 
-// TestIntegrationPrepareCommandFileStreaming verifies that PrepareCommand executes a command
-// with caller-owned [os.File] streams (pipes), observing unbuffered streaming and EOF.
 func TestIntegrationPrepareCommandFileStreaming(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
@@ -1479,8 +1457,6 @@ func TestIntegrationPrepareCommandIndefiniteWait(t *testing.T) {
 	}
 }
 
-// TestIntegrationPrepareForegroundServer verifies that PrepareForegroundServer runs a tmux server
-// in the foreground (-D), allowing connections and sessions, and exits cleanly when killed.
 func TestIntegrationPrepareForegroundServer(t *testing.T) {
 	dir := shortTempDir(t)
 	sockPath := filepath.Join(dir, "fg.sock")
@@ -1571,12 +1547,9 @@ func awaitServerReady(t *testing.T, s *tmux.Server) {
 	})
 }
 
-// TestIntegrationRootShell verifies that RunRootShell and PrepareRootShell execute shell commands
-// using tmux -c, respecting default-shell semantics and StartPolicy.
 func TestIntegrationRootShell(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	// 1. RunRootShell bounded execution
 	res, err := server.RunRootShell(ctx, "echo rootshell_output", tmux.RootShellOptions{})
 	if err != nil {
 		t.Fatalf("RunRootShell failed: %v", err)
@@ -1590,7 +1563,6 @@ func TestIntegrationRootShell(t *testing.T) {
 		t.Errorf("expected 'rootshell_output', got %q", string(res.Stdout))
 	}
 
-	// 2. PrepareRootShell with pipe streaming
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -1622,8 +1594,6 @@ func TestIntegrationRootShell(t *testing.T) {
 	}
 }
 
-// TestIntegrationPrepareSequence verifies that PrepareSequence executes a sequence of commands
-// with caller-owned streams.
 func TestIntegrationPrepareSequence(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
@@ -1715,7 +1685,6 @@ func TestIntegrationRunWithEmptyInputSlice(t *testing.T) {
 		}
 	}
 
-	// Verify empty input immediately completed with exit code 0 and pane is valid
 	if !newPane.Valid() {
 		t.Fatal("expected valid new pane")
 	}
@@ -1749,7 +1718,6 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 		t.Errorf("expected session name %q, got %q", sessName, info.Name)
 	}
 
-	// Test Connection.Client() discovers the exact owned client
 	client, err := conn.Client(ctx)
 	if err != nil {
 		t.Fatalf("conn.Client failed: %v", err)
@@ -1768,7 +1736,6 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 		t.Errorf("expected client to be in control mode")
 	}
 
-	// Execute command via connection's server wire
 	windows, err := conn.Server().Windows(ctx)
 	if err != nil || len(windows) == 0 {
 		t.Fatalf("conn.Server().Windows failed: %v", err)
@@ -1790,7 +1757,6 @@ func TestIntegrationControlNoEchoPTY(t *testing.T) {
 
 	closeOnCleanup(t, conn)
 
-	// Verify commands execute over the -CC connection
 	windows, err := conn.Server().Windows(ctx)
 	if err != nil || len(windows) == 0 {
 		t.Fatalf("Windows query over -CC connection failed: %v", err)
@@ -1806,8 +1772,6 @@ func TestIntegrationControlNoEchoPTY(t *testing.T) {
 	}
 }
 
-// TestIntegrationSetPaneOutputAction verifies that SetPaneOutputAction applies pause/continue
-// actions on control clients and receives %pause and %continue notifications.
 func TestIntegrationSetPaneOutputAction(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
@@ -1834,7 +1798,6 @@ func TestIntegrationSetPaneOutputAction(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// 1. Pause pane output
 	if err := conn.SetPaneOutputAction(ctx, boundPane, tmux.PaneOutputPause); err != nil {
 		t.Fatalf("SetPaneOutputAction pause failed: %v", err)
 	}
@@ -1848,7 +1811,6 @@ func TestIntegrationSetPaneOutputAction(t *testing.T) {
 		t.Errorf("expected PanePauseEvent for pane %s", pane.ID())
 	}
 
-	// 2. Continue pane output
 	if err := conn.SetPaneOutputAction(ctx, boundPane, tmux.PaneOutputContinue); err != nil {
 		t.Fatalf("SetPaneOutputAction continue failed: %v", err)
 	}
@@ -1862,7 +1824,6 @@ func TestIntegrationSetPaneOutputAction(t *testing.T) {
 		t.Errorf("expected PaneContinueEvent for pane %s", pane.ID())
 	}
 
-	// 3. Batch action
 	if err := conn.SetPaneOutputActions(ctx, tmux.PaneOutputSetting{Pane: boundPane, Action: tmux.PaneOutputOn}); err != nil {
 		t.Fatalf("SetPaneOutputActions failed: %v", err)
 	}
@@ -1884,8 +1845,6 @@ func awaitEvent(ctx context.Context, stream *tmux.EventStream, match func(tmux.E
 	}
 }
 
-// TestIntegrationClientRefreshExtended exercises per-window sizing, cursor reset,
-// scroll adjustments, and client flag toggles on an attached control client.
 func TestIntegrationClientRefreshExtended(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
@@ -1906,7 +1865,6 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 	window, _ := firstWindowPane(t, ctx, session)
 
 	runSteps(t, []namedStep{
-		// Per-window size on the control client (-C @win:w,h), then cleared (-C @win:).
 		{"client.SetWindowSize", func() error { return client.SetWindowSize(ctx, window, tmux.Size{Width: 90, Height: 30}) }},
 		{"client.ClearWindowSize", func() error { return client.ClearWindowSize(ctx, window) }},
 		{"client.ResetCursorTracking", func() error { return client.ResetCursorTracking(ctx) }},
@@ -1914,7 +1872,6 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 		{"client.Refresh with negated flag", func() error {
 			return client.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagReadOnly.Negate()}})
 		}},
-		// The Connection's own convenience methods.
 		{"conn.SetWindowSize", func() error { return conn.SetWindowSize(ctx, window, tmux.Size{Width: 95, Height: 35}) }},
 		{"conn.ClearWindowSize", func() error { return conn.ClearWindowSize(ctx, window) }},
 		{"conn.ResetCursorTracking", func() error { return conn.ResetCursorTracking(ctx) }},
@@ -1942,7 +1899,6 @@ func TestIntegrationControlExitLifecycle(t *testing.T) {
 		waitDone <- conn.Wait(ctx)
 	}()
 
-	// Kill session to trigger native %exit
 	if err := session.Kill(ctx); err != nil {
 		t.Fatalf("session.Kill failed: %v", err)
 	}
@@ -1963,7 +1919,6 @@ func TestIntegrationDedicatedCommands(t *testing.T) {
 	assertSessionTmuxEnv(t, ctx, server)
 	assertPlacementConflictsRejected(t, ctx, session)
 
-	// Valid NewWindow with Before: true and TmuxEnv
 	win, err := session.NewWindow(ctx, tmux.NewWindowOptions{
 		Name:    "custom-win-before",
 		Before:  true,
@@ -1973,7 +1928,6 @@ func TestIntegrationDedicatedCommands(t *testing.T) {
 		t.Fatalf("NewWindow with Before and TmuxEnv failed: %v", err)
 	}
 
-	// SplitOptions with TmuxEnv
 	winPanes, err := win.Window().Panes(ctx)
 	if err != nil || len(winPanes) == 0 {
 		t.Fatalf("failed to query window panes: %v", err)
@@ -2113,12 +2067,10 @@ func captureThroughBuffer(ctx context.Context, server *tmux.Server, pane tmux.Pa
 func TestIntegrationDaemonSignals(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	// 1. Guarded RecreateSocket (SIGUSR1) on running daemon
 	if err := server.RecreateSocket(ctx); err != nil {
 		t.Fatalf("RecreateSocket on running daemon failed: %v", err)
 	}
 
-	// 2. Guarded ToggleLogging (SIGUSR2) on running daemon
 	if err := server.ToggleLogging(ctx); err != nil {
 		t.Fatalf("ToggleLogging on running daemon failed: %v", err)
 	}
@@ -2145,7 +2097,6 @@ func TestIntegrationRecreateSocket_ConcurrentLoad(t *testing.T) {
 	errCh := make(chan error, 16)
 	stop := make(chan struct{})
 
-	// Launch 6 workers executing continuous commands
 	for i := range 6 {
 		wg.Add(1)
 		go func(workerID int) {
@@ -2157,7 +2108,6 @@ func TestIntegrationRecreateSocket_ConcurrentLoad(t *testing.T) {
 		}(i)
 	}
 
-	// Trigger RecreateSocket twice during active load
 	time.Sleep(20 * time.Millisecond)
 
 	if err := server.RecreateSocket(ctx); err != nil {
@@ -2179,7 +2129,6 @@ func TestIntegrationRecreateSocket_ConcurrentLoad(t *testing.T) {
 		t.Fatalf("worker encountered error during socket recreation: %v", err)
 	}
 
-	// Verify subsequent operations succeed on recreated socket
 	if _, err := server.Panes(ctx); err != nil {
 		t.Fatalf("server.Panes failed after socket recreation: %v", err)
 	}

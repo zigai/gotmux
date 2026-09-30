@@ -111,7 +111,6 @@ func TestOptionMutationOptionsValidation(t *testing.T) {
 	server := localServer(t)
 	ctx := t.Context()
 
-	// Invalid option name
 	if err := server.Options().SetWith(ctx, "invalid name with spaces", SetOptionOptions{
 		Value:        PresentValue("1"),
 		Append:       false,
@@ -121,7 +120,6 @@ func TestOptionMutationOptionsValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for invalid option name, got %v", err)
 	}
 
-	// Invalid option value (NUL byte)
 	if err := server.Options().SetWith(ctx, "escape-time", SetOptionOptions{
 		Value:        PresentValue("1\x002"),
 		Append:       false,
@@ -131,7 +129,6 @@ func TestOptionMutationOptionsValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for NUL byte in value, got %v", err)
 	}
 
-	// Invalid unset option name
 	if err := server.Options().UnsetWith(ctx, "invalid name", UnsetOptionOptions{Cascade: true}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid option name in UnsetWith, got %v", err)
 	}

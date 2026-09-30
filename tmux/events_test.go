@@ -303,7 +303,6 @@ func TestZeroResourceValues(t *testing.T) {
 }
 
 func TestDecodeEventsPauseAndContinue(t *testing.T) {
-	// Test %pause
 	ev, err := decodeEvent([]byte("%pause %4\n"), 4096)
 	if err != nil {
 		t.Fatalf("decode %%%%pause failed: %v", err)
@@ -320,7 +319,6 @@ func TestDecodeEventsPauseAndContinue(t *testing.T) {
 
 	_ = pauseEv.cloneEvent()
 
-	// Test %continue
 	ev, err = decodeEvent([]byte("%continue %7\n"), 4096)
 	if err != nil {
 		t.Fatalf("decode %%%%continue failed: %v", err)
@@ -339,7 +337,6 @@ func TestDecodeEventsPauseAndContinue(t *testing.T) {
 }
 
 func TestDecodeEventsSubscriptionChanged(t *testing.T) {
-	// Test %subscription-changed with window index
 	ev, err := decodeEvent([]byte("%subscription-changed mysub $1 @2 3 %4 : hello\n"), 4096)
 	if err != nil {
 		t.Fatalf("decode %%%%subscription-changed failed: %v", err)
@@ -362,7 +359,6 @@ func TestDecodeEventsSubscriptionChanged(t *testing.T) {
 		t.Errorf("expected Data 'hello', got %q", string(subEv.Data()))
 	}
 
-	// Test %subscription-changed without window index
 	ev, err = decodeEvent([]byte("%subscription-changed sess_sub $1 - - - : sess_val\n"), 4096)
 	if err != nil {
 		t.Fatalf("decode session %%%%subscription-changed failed: %v", err)
@@ -383,7 +379,6 @@ func TestDecodeEventsSubscriptionChanged(t *testing.T) {
 }
 
 func TestDecodeEventCRLF(t *testing.T) {
-	// Test CRLF trimming in decodeEvent
 	ev, err := decodeEvent([]byte("%session-changed $0 s1\r\n"), 4096)
 	if err != nil {
 		t.Fatalf("decodeEvent with CRLF failed: %v", err)
@@ -480,7 +475,6 @@ func TestDecodeWindowPaneChangedEvent(t *testing.T) {
 func TestEventStream_BurstSaturation(t *testing.T) {
 	c := eventConnection(t)
 
-	// Stream 1: Large capacity stream that should survive high throughput
 	s1, err := c.Events(context.Background(), EventOptions{
 		MaxBytes: 10 * 1024 * 1024,
 		MaxCount: 60000,
@@ -490,7 +484,6 @@ func TestEventStream_BurstSaturation(t *testing.T) {
 		t.Fatalf("failed to create stream 1: %v", err)
 	}
 
-	// Stream 2: Small capacity stream that will overflow under burst
 	s2, err := c.Events(context.Background(), EventOptions{
 		MaxBytes: 2048,
 		MaxCount: 5,
@@ -510,13 +503,11 @@ func TestEventStream_BurstSaturation(t *testing.T) {
 		})
 	}
 
-	// Stream 2 must have failed with ErrEventsLost due to capacity overflow
 	_, err2 := s2.Next(context.Background())
 	if !errors.Is(err2, ErrEventsLost) {
 		t.Fatalf("expected ErrEventsLost on saturated stream 2, got: %v", err2)
 	}
 
-	// Stream 1 must have survived and preserved the first event intact
 	ev1, err1 := s1.Next(context.Background())
 	if err1 != nil {
 		t.Fatalf("expected stream 1 to survive burst, got: %v", err1)

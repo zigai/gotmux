@@ -71,7 +71,6 @@ func TestSecurityFormatInjection(t *testing.T) {
 	// 5. Guarded mutations and queries keep working on objects with '#' in their names.
 	assertHashNamedWindowUsable(t, ctx, session, link)
 
-	// Ensure base session is unharmed
 	if _, err := baseSession.Info(ctx); err != nil {
 		t.Fatalf("base fixture session should remain valid: %v", err)
 	}

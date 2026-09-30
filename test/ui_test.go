@@ -132,7 +132,6 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 
-	// Subtest 1: Mouse: false (default), dismissed via 'q' key without selection
 	t.Run("MouseFalseDismissal", func(t *testing.T) {
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-not-selected", "ran")
 		items := []tmux.MenuItem{
@@ -151,14 +150,12 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 			return output.contains("TGO_MENU_ITEM_1")
 		})
 
-		// Send 'q' to dismiss the menu without executing the item command
 		if _, err := terminal.WriteString("q"); err != nil {
 			t.Fatal(err)
 		}
 
 		waitUIResult(t, ctx, result)
 
-		// Verify menu command was not executed
 		val, err := session.Options().User(ctx, "@menu-not-selected")
 		if err == nil {
 			if str, ok := val.Local.Get(); ok && str == "ran" {
@@ -167,7 +164,6 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 		}
 	})
 
-	// Subtest 2: Mouse: true with RequireClick: true, selected via item key
 	t.Run("MouseTrueSelection", func(t *testing.T) {
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-mouse-effect", "selected")
 		items := []tmux.MenuItem{
@@ -188,7 +184,6 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 			return output.contains("TGO_MENU_ITEM_M")
 		})
 
-		// Choose the item via key shortcut 'm'
 		if _, err := terminal.WriteString("m"); err != nil {
 			t.Fatal(err)
 		}
@@ -304,7 +299,6 @@ func TestIntegrationClientPopupWithoutDeadline(t *testing.T) {
 	options.Program = tmux.Exec("/bin/sh", "-c", `printf 'ok' > result`)
 	options.CloseOnExit = true
 
-	// context.Background() has no deadline; it must succeed without error.
 	if err := client.Popup(context.Background(), options); err != nil {
 		t.Fatalf("client.Popup without deadline failed: %v", err)
 	}
@@ -317,7 +311,6 @@ func TestIntegrationClientPopupWithoutDeadline(t *testing.T) {
 func TestIntegrationClientSwitchToggleReadOnly(t *testing.T) {
 	server, session1, ctx := apiFixture(t)
 
-	// Create a second session to switch between
 	session2, err := server.NewSession(ctx, tmux.NewSessionOptions{
 		Window:  "s2-win",
 		Program: tmux.Shell("sleep 60"),
@@ -391,17 +384,14 @@ func TestIntegrationUIControls(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 
-	// 1. Client.MessageWith with Duration
 	if err := client.MessageWith(ctx, "hello from ui controls test", tmux.MessageOptions{Duration: 200 * time.Millisecond}); err != nil {
 		t.Fatalf("MessageWith failed: %v", err)
 	}
 
-	// 2. Client.ClosePopup when popup is active or closed
 	if err := client.ClosePopup(ctx); err != nil {
 		t.Fatalf("ClosePopup failed: %v", err)
 	}
 
-	// 3. Client.Menu with keyless item, Style, and SelectedStyle
 	cmd := testCommand(t, "display-message", "menu_clicked")
 	items := []tmux.MenuItem{
 		{Label: "TGO_KEYLESS_ITEM", Key: "", Commands: testSequence(t, cmd)},
@@ -426,7 +416,6 @@ func TestIntegrationUIControls(t *testing.T) {
 
 	waitUIResult(t, ctx, result)
 
-	// 4. Client.LockScreen
 	if err := client.LockScreen(ctx); err != nil {
 		t.Fatalf("Client.LockScreen failed: %v", err)
 	}

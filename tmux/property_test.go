@@ -10,8 +10,6 @@ import (
 	tmux "github.com/zigai/gotmux/tmux"
 )
 
-// TestRapidVersionProperties validates algebraic ordering properties of version comparisons.
-//
 //nolint:cyclop,gocognit // property testing loop exercises multiple algebraic relations
 func TestRapidVersionProperties(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
@@ -51,12 +49,10 @@ func TestRapidVersionProperties(t *testing.T) {
 			rt.Fatalf("canonical version %s should be recognized", raw)
 		}
 
-		// Reflexivity
 		if !v.AtLeast(major, minor) {
 			rt.Fatalf("version %s is not at least itself (%d, %d)", raw, major, minor)
 		}
 
-		// Strictly greater
 		if major > 0 && !v.AtLeast(major-1, minor) {
 			rt.Fatalf("version %s should be at least (%d, %d)", raw, major-1, minor)
 		}
@@ -65,7 +61,6 @@ func TestRapidVersionProperties(t *testing.T) {
 			rt.Fatalf("version %s should be at least (%d, %d)", raw, major, minor-1)
 		}
 
-		// Strictly smaller
 		if v.AtLeast(major+1, minor) {
 			rt.Fatalf("version %s should not be at least (%d, %d)", raw, major+1, minor)
 		}
@@ -80,8 +75,6 @@ func TestRapidVersionProperties(t *testing.T) {
 	})
 }
 
-// TestRapidCommandAndSequenceProperties validates argument ownership and immutability.
-//
 //nolint:cyclop,gocognit // property testing loop exercises multiple command and sequence properties
 func TestRapidCommandAndSequenceProperties(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
@@ -111,7 +104,6 @@ func TestRapidCommandAndSequenceProperties(t *testing.T) {
 				rt.Fatalf("Name mismatch: got %q, want %q", cmd.Name(), name)
 			}
 
-			// Defensive copy check: mutating the returned slice must not affect cmd
 			retArgs := cmd.Args()
 			if !slices.Equal(retArgs, args) {
 				rt.Fatalf("Args mismatch: got %v, want %v", retArgs, args)

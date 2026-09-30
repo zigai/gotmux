@@ -188,8 +188,6 @@ func TestIntegrationPipeLifecycle(t *testing.T) {
 	}
 }
 
-// TestIntegrationPipeInputDirection verifies that PipeOptions.Input connects the shell command's stdout
-// into the pane as if typed.
 func TestIntegrationPipeInputDirection(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	dir := t.TempDir()
@@ -202,14 +200,12 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 	pane := panes[0].Handle()
 	targetFile := filepath.Join(dir, "input_received.txt")
 
-	// Start cat > targetFile in the pane
 	if err := pane.SendText(ctx, "cat > "+targetFile+"\n"); err != nil {
 		t.Fatalf("SendText failed: %v", err)
 	}
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Pipe a script with Input: true. The script prints a test token.
 	token := "TGO_PIPE_INPUT_TOKEN_12345" //nolint:gosec // G101 false positive: a marker the piped script echoes, not a credential.
 
 	script := "echo " + token
@@ -217,12 +213,10 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 		t.Fatalf("pane.Pipe with Input:true failed: %v", err)
 	}
 
-	// Allow script to run and write to pane
 	time.Sleep(300 * time.Millisecond)
 
 	_ = pane.StopPipe(ctx)
 
-	// Close cat in pane with Ctrl-D
 	_ = pane.SendKeys(ctx, "C-d")
 
 	awaitFile(t, ctx, targetFile)
@@ -282,11 +276,9 @@ done`
 func TestIntegrationLoadBufferStdinAndFlags(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	// 1. Raw RunWith loading arbitrary binary data including NUL bytes via stdin
 	wantBytes := []byte("binary\x00data\x01\x02\xff\xfe\r\n\x00trailing")
 	assertStdinLoad(t, ctx, server, "r3-bin-buf", wantBytes)
 
-	// 2. Raw RunWith with -w flag (sending to clipboard)
 	assertStdinLoad(t, ctx, server, "r3-clip-buf", wantBytes, "-w")
 
 	// 3. Verify WriteBuffer's documented contract: zero-length data is rejected with ErrUnsupported
@@ -332,7 +324,6 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 
 	pane := panes[0]
 
-	// 1. RenameBuffer
 	if err := server.SetBufferWith(ctx, "test-buf-original", []byte("rename test content"), tmux.SetBufferOptions{Append: false}); err != nil {
 		t.Fatalf("SetBufferWith failed: %v", err)
 	}
@@ -347,7 +338,6 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 
 	assertBufferAbsent(t, ctx, server, "test-buf-original")
 
-	// 2. SetBufferWith with Append: true
 	bufAppend := "test-buf-append"
 	if err := server.SetBufferWith(ctx, bufAppend, []byte("part1"), tmux.SetBufferOptions{Append: false}); err != nil {
 		t.Fatalf("SetBufferWith initial failed: %v", err)
@@ -361,7 +351,6 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 		t.Fatalf("unexpected content after append: %q", appData)
 	}
 
-	// 3. PasteWith with Delete: true
 	bufPaste := "test-buf-paste"
 	if err := server.SetBufferWith(ctx, bufPaste, []byte("echo paste_success\n"), tmux.SetBufferOptions{Append: false}); err != nil {
 		t.Fatalf("SetBufferWith for paste failed: %v", err)
@@ -377,7 +366,6 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 		t.Fatalf("PasteWith failed: %v", err)
 	}
 
-	// Verify buffer was deleted after paste (-d)
 	assertBufferAbsent(t, ctx, server, bufPaste)
 }
 

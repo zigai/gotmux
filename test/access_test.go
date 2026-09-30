@@ -24,7 +24,6 @@ func TestIntegrationServerAccess(t *testing.T) {
 		t.Fatal("expected at least one access entry for current user/owner")
 	}
 
-	// Grant read-only access to a user
 	const testUser = "nobody"
 	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{IsGroup: false, ReadOnly: true}); err != nil {
 		t.Fatalf("GrantAccess(RO) failed: %v", err)
@@ -35,7 +34,6 @@ func TestIntegrationServerAccess(t *testing.T) {
 		t.Errorf("expected user %q with ReadOnly=true and IsGroup=false, got: %+v", testUser, entry)
 	}
 
-	// Grant read-write access to the same user
 	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{IsGroup: false, ReadOnly: false}); err != nil {
 		t.Fatalf("GrantAccess(RW) failed: %v", err)
 	}
@@ -44,7 +42,6 @@ func TestIntegrationServerAccess(t *testing.T) {
 		t.Errorf("expected user %q to have ReadOnly=false, got: %+v", testUser, entry)
 	}
 
-	// Revoke user access
 	if err := server.RevokeAccess(ctx, testUser, tmux.RevokeAccessOptions{IsGroup: false}); err != nil {
 		t.Fatalf("RevokeAccess failed: %v", err)
 	}

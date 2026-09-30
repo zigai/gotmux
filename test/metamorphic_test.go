@@ -26,7 +26,6 @@ var metamorphicCandidateKeys = []string{
 }
 
 var metamorphicValuePartitions = []string{
-	// Semicolons
 	";",
 	`\;`,
 	"trailing;",
@@ -36,34 +35,29 @@ var metamorphicValuePartitions = []string{
 	"x; y; z",
 	`\\;`,
 
-	// Quotes
 	"'single'",
 	`"double"`,
 	`'"mixed"'`,
 	"unmatched ' quote",
 	`unmatched " quote`,
 
-	// Whitespace & newlines
 	"",
 	"  leading space",
 	"trailing space  ",
 	"\twith\ttabs\t",
 	"line1\nline2",
 
-	// Expansions & formats
 	"$HOME",
 	"$(touch " + injectionMarker + ")",
 	"`date`",
 	"#{pane_id}",
 	"#{==:1,1}",
 
-	// Backslashes & escapes
 	`\`,
 	`\\`,
 	`\n`,
 	`\t`,
 
-	// Non-ASCII & UTF-8
 	"日本語", //nolint:gosmopolitan // metamorphic UTF-8 corpus intentionally contains Han script
 	"emoji 🚀",
 	"àáâãäå",
@@ -158,8 +152,6 @@ func assertMetamorphicEquivalence(ctx context.Context, rt *rapid.T, server *tmux
 	}
 }
 
-// TestMetamorphicSequenceEquivalence validates that executing an atomic command batch via
-// RunSequence produces the exact same terminal daemon state as executing each command sequentially via Run.
 func TestMetamorphicSequenceEquivalence(t *testing.T) {
 	_ = os.Remove(injectionMarker)
 
@@ -216,7 +208,6 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 			cmdsB = append(cmdsB, cmdB)
 		}
 
-		// Branch A: Atomic Batch
 		seq, err := tmux.Sequence(cmdsA...)
 		if err != nil {
 			rt.Fatalf("tmux.Sequence failed: %v", err)
@@ -227,7 +218,6 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 			rt.Fatalf("server.RunSequence failed: %v, stderr: %s", err, resBatch.Stderr)
 		}
 
-		// Branch B: Sequential Loop
 		for idx, cmd := range cmdsB {
 			resSeq, err := server.Run(trialCtx, cmd)
 			if err != nil {
@@ -239,9 +229,6 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 	})
 }
 
-// TestMetamorphicSequenceAssociativity validates sequence composition associativity:
-// RunSequence(seq1 o seq2) produces identical state to RunSequence(seq1) followed by RunSequence(seq2).
-//
 //nolint:cyclop,gocognit // metamorphic property verification loop exercises multiple execution branches
 func TestMetamorphicSequenceAssociativity(t *testing.T) {
 	_ = os.Remove(injectionMarker)
@@ -310,7 +297,6 @@ func TestMetamorphicSequenceAssociativity(t *testing.T) {
 			cmds2B = append(cmds2B, c2B)
 		}
 
-		// Session A: Single combined sequence
 		allCmdsA := append(append([]tmux.Command{}, cmds1A...), cmds2A...)
 
 		seqCombinedA, err := tmux.Sequence(allCmdsA...)
@@ -323,7 +309,6 @@ func TestMetamorphicSequenceAssociativity(t *testing.T) {
 			rt.Fatalf("server.RunSequence combined A failed: %v, stderr: %s", err, resCombinedA.Stderr)
 		}
 
-		// Session B: Sequential execution of seq1B then seq2B
 		seq1B, err := tmux.Sequence(cmds1B...)
 		if err != nil {
 			rt.Fatalf("tmux.Sequence 1B failed: %v", err)

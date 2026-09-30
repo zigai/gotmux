@@ -226,7 +226,6 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 
 	stream := controlEvents(t, ctx, connection)
 
-	// 1. TargetAllPanes (%*)
 	if err := connection.WatchFormat(ctx, "all_panes", tmux.TargetAllPanes(), "#{pane_title}"); err != nil {
 		t.Fatalf("WatchFormat TargetAllPanes failed: %v", err)
 	}
@@ -238,7 +237,6 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	event := nextSubscription(t, ctx, stream, "all_panes", "sub-all-panes-val")
 	assertPresent(t, "all_panes subscription pane", event.PaneID, pane.ID())
 
-	// 2. TargetSession (empty target)
 	if err := connection.WatchFormat(ctx, "session_sub", tmux.TargetSession(), "#{session_name}"); err != nil {
 		t.Fatalf("WatchFormat TargetSession failed: %v", err)
 	}
@@ -251,7 +249,6 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	sessEvent := nextSubscription(t, ctx, stream, "session_sub", sessionInfo.Name)
 	assertPresent(t, "session subscription session", sessEvent.SessionID, session.ID())
 
-	// 3. Target Window
 	window, _ := firstWindowPane(t, ctx, session)
 
 	boundWin, err := connection.Server().Window(ctx, window.ID())
@@ -271,7 +268,6 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	assertPresent(t, "window subscription window", winEvent.WindowID, window.ID())
 	assertPresent(t, "window subscription index", winEvent.WindowIndex, 0)
 
-	// 4. TargetAllWindows (@*)
 	if err := connection.WatchFormat(ctx, "all_windows", tmux.TargetAllWindows(), "#{window_name}"); err != nil {
 		t.Fatalf("WatchFormat TargetAllWindows failed: %v", err)
 	}

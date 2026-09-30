@@ -76,25 +76,21 @@ func TestIntegrationTypedOptionKey(t *testing.T) {
 func TestIntegrationArrayOptions_ArbitraryAndSparse(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	// Set sparse array entries via indexed Set
 	for name, value := range map[string]string{"codepoint-widths[100]": "2", "codepoint-widths[500]": "1"} {
 		if err := server.Options().Set(ctx, name, value); err != nil {
 			t.Fatalf("failed to set sparse array entry %s: %v", name, err)
 		}
 	}
 
-	// Read single entry via indexed Get
 	val100, err := server.Options().Get(ctx, "codepoint-widths[100]")
 	if v, ok := val100.Effective.Get(); err != nil || !ok || v != "2" {
 		t.Fatalf("unexpected value for codepoint-widths[100]: %+v, err: %v", val100, err)
 	}
 
-	// Read full sparse array via Array
 	if entries := arrayEntries(t, ctx, server, "codepoint-widths"); entries[100] != "2" || entries[500] != "1" {
 		t.Fatalf("expected indices 100 and 500 in array, got entries: %+v", entries)
 	}
 
-	// Update array using UpdateArray
 	updateRes, err := server.Options().UpdateArray(ctx, "codepoint-widths", []tmux.ArrayUpdate{
 		{Index: 200, Value: "2", Unset: false},
 		{Index: 100, Value: "", Unset: true},
@@ -107,13 +103,11 @@ func TestIntegrationArrayOptions_ArbitraryAndSparse(t *testing.T) {
 		t.Fatalf("expected 2 applied updates, got %v", updateRes.Applied)
 	}
 
-	// Verify index 100 was unset
 	after := arrayEntries(t, ctx, server, "codepoint-widths")
 	if _, ok := after[100]; ok {
 		t.Fatalf("index 100 should have been unset, still found: %+v", after)
 	}
 
-	// Calling Array on a scalar option must fail with not an array error
 	if _, err := server.Options().Array(ctx, "escape-time"); err == nil {
 		t.Fatal("expected error calling Array on scalar option escape-time, got nil")
 	}
@@ -138,7 +132,6 @@ func arrayEntries(t *testing.T, ctx context.Context, server *tmux.Server, name s
 func TestIntegrationScalarMutationFlags(t *testing.T) {
 	_, session, ctx := apiFixture(t)
 
-	// 1. Native toggle: omitting Value toggles flag options
 	if err := session.Options().Set(ctx, "monitor-activity", "on"); err != nil {
 		t.Fatalf("failed to set monitor-activity: %v", err)
 	}
@@ -146,7 +139,6 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	got, err := session.Options().Get(ctx, "monitor-activity")
 	assertLocal(t, "monitor-activity", got, err, "on")
 
-	// Toggle to off via SetWith with absent Value, then back to on
 	for _, want := range []string{"off", "on"} {
 		if err := session.Options().SetWith(ctx, "monitor-activity", tmux.SetOptionOptions{}); err != nil {
 			t.Fatalf("failed to toggle monitor-activity: %v", err)
@@ -156,7 +148,6 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 		assertLocal(t, "toggled monitor-activity", got, err, want)
 	}
 
-	// 2. Format expansion (-F)
 	if err := session.Options().SetWith(ctx, "@test_format", tmux.SetOptionOptions{
 		Value:        tmux.PresentValue("#{session_windows}"),
 		ExpandFormat: true,
@@ -167,7 +158,6 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	got, err = session.Options().User(ctx, "@test_format")
 	assertLocal(t, "expanded format user option", got, err, "1")
 
-	// 3. Append (-a)
 	if err := session.Options().Set(ctx, "@test_append", "hello"); err != nil {
 		t.Fatalf("failed to set @test_append: %v", err)
 	}
@@ -178,7 +168,7 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("failed to append to @test_append: %v", err)
 	}
-	// 4. OnlyIfUnset (-o): succeeds on unset option, errors and prevents overwrite on already set option
+
 	if err := session.Options().SetWith(ctx, "@test_nounset", tmux.SetOptionOptions{
 		Value:       tmux.PresentValue("first"),
 		OnlyIfUnset: true,
@@ -189,7 +179,6 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	got, err = session.Options().User(ctx, "@test_nounset")
 	assertLocal(t, "@test_nounset", got, err, "first")
 
-	// Attempting to set an already set option with OnlyIfUnset fails in tmux and prevents overwrite
 	if err := session.Options().SetWith(ctx, "@test_nounset", tmux.SetOptionOptions{
 		Value:       tmux.PresentValue("second"),
 		OnlyIfUnset: true,
@@ -200,7 +189,6 @@ func TestIntegrationScalarMutationFlags(t *testing.T) {
 	got, err = session.Options().User(ctx, "@test_nounset")
 	assertLocal(t, "@test_nounset after OnlyIfUnset", got, err, "first")
 
-	// 5. Cascade unset (-U)
 	if err := session.Options().UnsetWith(ctx, "monitor-activity", tmux.UnsetOptionOptions{Cascade: true}); err != nil {
 		t.Fatalf("UnsetWith cascade failed: %v", err)
 	}
@@ -217,13 +205,11 @@ func assertLocal(t *testing.T, option string, got tmux.OptionValue[string], err 
 func TestIntegrationOptionsList(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	// Server options list
 	serverOpts, err := server.Options().List(ctx)
 	if err != nil || len(serverOpts) == 0 {
 		t.Fatalf("expected server options list, got %v, err: %v", len(serverOpts), err)
 	}
 
-	// Session options with inherited (-A)
 	sessionOpts, err := session.Options().ListWith(ctx, tmux.ListOptionOptions{Inherited: true})
 	if err != nil || len(sessionOpts) == 0 {
 		t.Fatalf("expected session options with inherited, got %v, err: %v", len(sessionOpts), err)
@@ -242,7 +228,6 @@ func TestIntegrationOptionsList(t *testing.T) {
 		t.Fatal("expected at least one inherited option with -A")
 	}
 
-	// List with hooks (-H)
 	hooksList, err := server.Options().ListWith(ctx, tmux.ListOptionOptions{Hooks: true})
 	if err != nil || len(hooksList) == 0 {
 		t.Fatalf("expected options list with hooks, got %v, err: %v", len(hooksList), err)
@@ -340,7 +325,6 @@ func TestIntegrationEnvironmentListInheritedNames(t *testing.T) {
 func TestIntegrationEnvironmentList(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	// Set regular variable, empty variable, removed variable, hidden variable
 	if err := session.Environment().Set(ctx, "GOTMUX_TEST_REGULAR", "val123"); err != nil {
 		t.Fatalf("failed to set regular env: %v", err)
 	}

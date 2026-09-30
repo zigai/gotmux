@@ -107,7 +107,6 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 	c.work.Go(c.reader)
 	c.work.Go(func() { c.dispatch(ctx, ready, newGuard(c.identity)) })
 
-	// Monitor stdin writes from connection
 	go func() {
 		defer close(f.done)
 
@@ -131,7 +130,6 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		close(c.done)
 	}()
 
-	// Send handshake through stdout pipe so reader processes it
 	handshake := fmt.Sprintf("%%begin 100 1 0\n%s%%end 100 1 0\n%%begin 100 2 0\n%s%%end 100 2 0\n", guardOK, ready)
 	if _, err := io.WriteString(outWr, handshake); err != nil {
 		t.Fatal(err)
@@ -172,7 +170,6 @@ func (f *controlWireFixture) assertCleanup(t *testing.T) {
 
 	c := f.c
 
-	// Verify c.Close() completes within 500ms without deadlocking.
 	closeDone := make(chan error, 1)
 	start := time.Now()
 
@@ -194,14 +191,12 @@ func (f *controlWireFixture) assertCleanup(t *testing.T) {
 		t.Fatal("c.Close() deadlocked")
 	}
 
-	// Verify background goroutines in c.work finish cleanly
 	select {
 	case <-c.done:
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("background goroutines in c.work did not finish cleanly")
 	}
 
-	// Verify semaphore permits (c.count and c.bytes) are properly released / accounted for
 	if !c.count.TryAcquire(int64(c.opts.QueueDepth)) {
 		t.Errorf("semaphore permit leak: could not acquire all %d count permits", c.opts.QueueDepth)
 	} else {
@@ -215,8 +210,6 @@ func (f *controlWireFixture) assertCleanup(t *testing.T) {
 	}
 }
 
-// 1. Truncated control frame %begin 1 4 1\n followed by immediate EOF.
-// Verify request fails with an error wrapping ErrProtocol and EffectUnknown.
 func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 	f := newControlWireFixture(t, 1)
 
@@ -229,7 +222,6 @@ func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 
 	f.waitWrite(t)
 
-	// Inject truncated control frame followed by immediate EOF
 	if _, err := io.WriteString(f.stdoutWr, "%begin 1 4 1\n"); err != nil {
 		t.Fatal(err)
 	}
@@ -256,8 +248,6 @@ func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 	f.assertCleanup(t)
 }
 
-// 2. Premature pipe closure / broken pipe while multiple requests are queued.
-// The in-flight request fails with EffectUnknown; the queued requests fail with EffectNotSent.
 func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 	f := newControlWireFixture(t, 3)
 	inflightErr := make(chan error, 1)
@@ -281,7 +271,6 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 		queued2Err <- err
 	}()
 
-	// Wait for requests to be queued
 	deadline := time.Now().Add(time.Second)
 	for len(f.c.requests) < 2 {
 		if time.Now().After(deadline) {
@@ -291,7 +280,6 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	// Close pipe prematurely
 	_ = f.stdoutWr.Close()
 
 	select {
@@ -325,17 +313,13 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 	f.assertCleanup(t)
 }
 
-// 3. Unsolicited %exit notification from tmux.
-// Verify connection marks itself closed, and subsequent operations return ErrClosed.
 func TestControlWireFault_UnsolicitedExit(t *testing.T) {
 	f := newControlWireFixture(t, 2)
 
-	// Send unsolicited %exit notification
 	if _, err := io.WriteString(f.stdoutWr, "%exit\n"); err != nil {
 		t.Fatal(err)
 	}
 
-	// Verify connection marks itself closed
 	select {
 	case <-f.c.stopCh:
 	case <-time.After(2 * time.Second):
@@ -350,7 +334,6 @@ func TestControlWireFault_UnsolicitedExit(t *testing.T) {
 		t.Errorf("expected Wait to return ErrClosed, got %v", err)
 	}
 
-	// Subsequent operations must return ErrClosed
 	_, err := peerCall(f.c, context.Background(), "subsequent")
 	if !errors.Is(err, ErrClosed) {
 		t.Errorf("expected subsequent operation to return ErrClosed, got %v", err)
@@ -363,8 +346,6 @@ func TestControlWireFault_UnsolicitedExit(t *testing.T) {
 	f.assertCleanup(t)
 }
 
-// 4. Wire data exceeding Limits.OutputBytes (e.g. 10MB of garbage).
-// Verify reader stops with ErrOutputLimit.
 func TestControlWireFault_OutputLimitExceeded(t *testing.T) {
 	f := newControlWireFixture(t, 2)
 
@@ -373,8 +354,8 @@ func TestControlWireFault_OutputLimitExceeded(t *testing.T) {
 		defer close(garbageDone)
 
 		chunk := bytes.Repeat([]byte("A"), 64*1024)
+
 		total := 0
-		// Stream up to 10MB of garbage
 		for total < 10<<20 {
 			_, err := f.stdoutWr.Write(chunk)
 			if err != nil {
@@ -385,7 +366,6 @@ func TestControlWireFault_OutputLimitExceeded(t *testing.T) {
 		}
 	}()
 
-	// Verify reader stops with ErrOutputLimit
 	select {
 	case <-f.c.stopCh:
 	case <-time.After(3 * time.Second):

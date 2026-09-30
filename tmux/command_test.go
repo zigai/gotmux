@@ -288,11 +288,9 @@ func TestSequenceCopies(t *testing.T) {
 }
 
 func TestDiscoverSockets(t *testing.T) {
-	// Create a temp dir simulating a tmux socket directory
 	dir := t.TempDir()
 	t.Setenv("TMUX_TMPDIR", dir)
 
-	// In real environment, DiscoverSockets returns whatever active sockets exist
 	sockets, err := DiscoverSockets()
 	if err != nil {
 		t.Fatalf("DiscoverSockets failed: %v", err)
@@ -332,19 +330,17 @@ func TestDiscoverSockets(t *testing.T) {
 func TestPrepareAttachTargetValidation(t *testing.T) {
 	s := localServer(t)
 
-	// Valid target string (session name)
 	streams := Streams{
 		In:  os.Stdin,
 		Out: os.Stdout,
 		Err: os.Stderr,
 	}
-	// Invalid streams (non-terminal) should return ErrInvalidArgument
+
 	_, err := s.PrepareAttachTarget(t.Context(), "dev", streams, AttachOptions{ReadOnly: false, PreserveEnvironment: false, Detach: DetachNone, Dir: "", Flags: nil})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for non-terminal streams, got: %v", err)
 	}
 
-	// Target containing NUL byte should fail immediately
 	if _, err := s.PrepareAttachTarget(t.Context(), "bad\x00target", streams, AttachOptions{ReadOnly: false, PreserveEnvironment: false, Detach: DetachNone, Dir: "", Flags: nil}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for target with NUL, got: %v", err)
 	}
@@ -387,13 +383,11 @@ func FuzzParseSequence(f *testing.F) {
 func TestRunWithValidation(t *testing.T) {
 	s := localServer(t)
 
-	// Invalid command
 	badCmd := Command{name: "invalid name with space", args: nil}
 	if _, err := s.RunWith(t.Context(), badCmd, RunOptions{Start: StartPolicyAllowStart, Input: nil}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid command, got %v", err)
 	}
 
-	// Invalid StartPolicy
 	validCmd, _ := NewCommand("display-message", "hello")
 	if _, err := s.RunWith(t.Context(), validCmd, RunOptions{Start: StartPolicy(99), Input: nil}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for invalid StartPolicy, got %v", err)
@@ -403,7 +397,6 @@ func TestRunWithValidation(t *testing.T) {
 func TestRunSequenceWithValidation(t *testing.T) {
 	s := localServer(t)
 
-	// Empty sequence short-circuit
 	emptySeq := CommandSequence{commands: nil}
 
 	res, err := s.RunSequenceWith(t.Context(), emptySeq, RunOptions{Start: StartPolicyAllowStart, Input: nil})
@@ -415,7 +408,6 @@ func TestRunSequenceWithValidation(t *testing.T) {
 		t.Errorf("unexpected result for empty sequence: %+v", res)
 	}
 
-	// Invalid StartPolicy on non-empty sequence
 	cmd, _ := NewCommand("display-message", "hello")
 
 	seq, _ := Sequence(cmd)
@@ -460,12 +452,10 @@ func TestControlModeUpfrontRejection(t *testing.T) {
 func TestSourceTextValidation(t *testing.T) {
 	s := localServer(t)
 
-	// Invalid string with NUL byte
 	if _, err := s.SourceText(t.Context(), "invalid\x00text", SourceOptions{QuietMissing: false, ParseOnly: false, Verbose: false}); !errors.Is(err, ErrInvalidArgument) {
 		t.Fatalf("expected ErrInvalidArgument for SourceText with NUL, got %v", err)
 	}
 
-	// String exceeding InputBytes limit
 	sLimits, err := New(Config{
 		Binary:           "/bin/sh",
 		SocketPath:       filepath.Join(t.TempDir(), "s"),

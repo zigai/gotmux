@@ -30,7 +30,6 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 
-	// Empty label WITH Separator=true should succeed
 	args, err := menuItemArg(MenuItem{Label: "", IsSeparator: true, Key: Key(""), Commands: CommandSequence{commands: nil}, Command: "", Disabled: false})
 	if err != nil {
 		t.Fatalf("expected Separator=true to succeed, got %v", err)
@@ -64,7 +63,6 @@ func TestMenuItemWithCommandString(t *testing.T) {
 }
 
 func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
-	// Keyless menu item (mouse/arrow navigation only)
 	keylessArgs, err := menuItemArg(MenuItem{
 		Label:       "Mouse Click Only",
 		Key:         "",
@@ -81,7 +79,6 @@ func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
 		t.Fatalf("expected empty key in wireArgs, got %+v", keylessArgs)
 	}
 
-	// Section header: disabled item with empty key and empty command
 	headerArgs, err := menuItemArg(MenuItem{
 		Label:       "Section Header",
 		Key:         "",
@@ -252,7 +249,6 @@ func TestMenuArgsRequireClick(t *testing.T) {
 }
 
 func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
-	// Default MenuOptions (Mouse: false, RequireClick: false) must emit neither -M nor -O
 	argsDefault, err := menuArgsWithTarget("-t", "%0", MenuOptions{
 		Title:         "",
 		Mouse:         false,
@@ -274,7 +270,6 @@ func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
 		t.Fatalf("expected no -O flag when RequireClick=false, got %v", argsDefault)
 	}
 
-	// Explicit Mouse: true must emit -M
 	argsMouse, err := menuArgsWithTarget("-c", "c0", MenuOptions{
 		Title:         "",
 		Mouse:         true,
@@ -345,7 +340,6 @@ func TestUIOperationsRejectNilContext(t *testing.T) {
 }
 
 func TestClientFlagExtendedValidation(t *testing.T) {
-	// Base and new flags
 	for _, f := range []ClientFlag{
 		ClientFlagIgnoreSize, ClientFlagNoOutput, ClientFlagReadOnly,
 		ClientFlagActivePane, ClientFlagNoDetachOnDestroy, ClientFlagWaitExit,
@@ -354,18 +348,17 @@ func TestClientFlagExtendedValidation(t *testing.T) {
 		if !f.Valid() {
 			t.Errorf("expected flag %q to be valid", f)
 		}
-		// Negation should also be valid
+
 		neg := f.Negate()
 		if !neg.Valid() {
 			t.Errorf("expected negated flag %q to be valid", neg)
 		}
-		// Double negation returns original
+
 		if neg.Negate() != f {
 			t.Errorf("double negate mismatch: got %q, want %q", neg.Negate(), f)
 		}
 	}
 
-	// Invalid flags
 	for _, f := range []ClientFlag{
 		"invalid", "!invalid",
 	} {
@@ -444,56 +437,48 @@ func TestClientRefreshValidation(t *testing.T) {
 	c := Client{h: handle{id: "/dev/pts/1", server: s}}
 	ctx := t.Context()
 
-	// Incomplete Size
 	//nolint:exhaustruct_v5 // testing partial Size
 	err := c.Refresh(ctx, RefreshOptions{Size: Size{Width: 10, Height: 0}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for incomplete Size, got %v", err)
 	}
 
-	// Incomplete WindowSize
 	//nolint:exhaustruct_v5 // testing partial WindowSizes
 	err = c.Refresh(ctx, RefreshOptions{WindowSizes: []WindowSizeOverride{{Window: "@1", Size: Size{Width: 10, Height: 0}}}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for incomplete WindowSize, got %v", err)
 	}
 
-	// Invalid WindowID
 	//nolint:exhaustruct_v5 // testing invalid WindowID
 	err = c.Refresh(ctx, RefreshOptions{WindowSizes: []WindowSizeOverride{{Window: "invalid", Size: Size{Width: 80, Height: 24}}}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid WindowID, got %v", err)
 	}
 
-	// Invalid ScrollDirection
 	//nolint:exhaustruct_v5 // testing invalid ScrollDirection
 	err = c.Refresh(ctx, RefreshOptions{Scroll: ScrollAdjustment{Direction: ScrollDirection(99), Amount: 0}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ScrollDirection, got %v", err)
 	}
 
-	// Invalid ClipboardPane
 	//nolint:exhaustruct_v5 // testing invalid ClipboardPane
 	err = c.Refresh(ctx, RefreshOptions{Clipboard: true, ClipboardPane: "invalid"})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ClipboardPane, got %v", err)
 	}
 
-	// Invalid ClientFlag
 	//nolint:exhaustruct_v5 // testing invalid ClientFlag
 	err = c.Refresh(ctx, RefreshOptions{Flags: []ClientFlag{"invalid"}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ClientFlag, got %v", err)
 	}
 
-	// Invalid PaneAction
 	pane, _ := s.PaneHandle("%1")
 	//nolint:exhaustruct_v5 // testing invalid PaneAction
 	err = c.Refresh(ctx, RefreshOptions{PaneActions: []PaneOutputSetting{{Pane: pane, Action: "invalid"}}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid PaneAction, got %v", err)
 	}
-	// Invalid PaneReport
 	//nolint:exhaustruct_v5 // testing invalid PaneReport
 	err = c.Refresh(ctx, RefreshOptions{PaneReports: []PaneReport{{PaneID: "invalid", Report: "ok"}}})
 	if !errors.Is(err, ErrInvalidArgument) {
@@ -506,7 +491,6 @@ func TestControlNewSessionValidation(t *testing.T) {
 
 	ctx := t.Context()
 
-	// Nil server
 	//nolint:exhaustruct_v5 // testing nil server
 	_, _, err := nilServer.OpenControlNewSession(ctx, ControlNewSessionOptions{})
 	if !errors.Is(err, ErrInvalidHandle) {
@@ -514,28 +498,24 @@ func TestControlNewSessionValidation(t *testing.T) {
 	}
 
 	s := localServer(t)
-	// Nil context
 	//nolint:exhaustruct_v5,staticcheck // testing nil context validation
 	_, _, err = s.OpenControlNewSession(nil, ControlNewSessionOptions{})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for nil context, got %v", err)
 	}
 
-	// Invalid session name with NUL
 	//nolint:exhaustruct_v5 // testing NUL name
 	_, _, err = s.OpenControlNewSession(ctx, ControlNewSessionOptions{Name: "bad\x00name"})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for NUL session name, got %v", err)
 	}
 
-	// Invalid size
 	//nolint:exhaustruct_v5 // testing negative size
 	_, _, err = s.OpenControlNewSession(ctx, ControlNewSessionOptions{Size: Size{Width: -5, Height: 10}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for negative size, got %v", err)
 	}
 
-	// Control-bound server
 	boundServer := localServer(t)
 	//nolint:exhaustruct_v5 // mock control connection
 	boundServer.conn = &Connection{}

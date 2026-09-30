@@ -295,7 +295,6 @@ func FuzzEmbeddedFrameDelimiters(f *testing.F) {
 }
 
 func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
-	// Test that \x1bP1000p prefix before a frame is stripped cleanly
 	raw := "\x1bP1000p%begin 1 10 1\nTGO-READY:hello\n%end 1 10 1\n"
 
 	u, err := readControlUnit(bufio.NewReader(strings.NewReader(raw)), 4096, func(Event) {})
@@ -307,7 +306,6 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 		t.Fatalf("unexpected frame data: %#v", u.frame)
 	}
 
-	// Test boundedLine with trailing \r
 	r := bufio.NewReader(strings.NewReader("%session-changed $0 s1\r\n"))
 
 	line, err := boundedLine(r, 4096)
@@ -319,7 +317,6 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 		t.Fatalf("expected \\r to be stripped, got: %q", string(line))
 	}
 
-	// Test boundedLine EOF with exit trailer \x1b\
 	r = bufio.NewReader(strings.NewReader("\x1b\\"))
 
 	_, err = boundedLine(r, 4096)
@@ -329,7 +326,6 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 }
 
 func TestControlStreamReader(t *testing.T) {
-	// Stream contains DSC preamble, CRLF lines, a wire record, and exit trailer
 	raw := "\x1bP1000p%begin 1 1 0\r\nTGO1:1:5:hello,\r\n%end 1 1 0\r\n%exit\r\n\x1b\\"
 	cr := newControlStreamReader(strings.NewReader(raw))
 
@@ -351,7 +347,6 @@ func TestWireCodec_BufferBoundarySplits(t *testing.T) {
 	prefixLen := bufSize - len("%begin 1 1 0\n") - 1 // 1 byte before boundary
 	padding := strings.Repeat("a", prefixLen)
 
-	// 3-byte UTF-8 check mark: \xe2\x9c\x93
 	checkMark := "✓"
 	rawRecord := wire.EncodeRecord([]string{padding + checkMark + "suffix"})
 	frame := fmt.Sprintf("%%begin 1 1 0\n%s%%end 1 1 0\n", rawRecord)
@@ -378,7 +373,6 @@ func TestWireCodec_BufferBoundarySplits(t *testing.T) {
 }
 
 func TestControlStreamReader_CorruptedDSCAndTerminalNoise(t *testing.T) {
-	// Terminal noise: incomplete ESC sequence, cursor movement, window title, raw bytes
 	noise := "\x1b[?1049h\x1b[2J\x1b]0;terminal title\a\x1bP1000p"
 	payload := "%begin 1 1 0\r\nTGO1:1:4:done,\r\n%end 1 1 0\r\n"
 	trailer := "\x1b[?1049l\x1b\\"

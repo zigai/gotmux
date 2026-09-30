@@ -351,7 +351,6 @@ func TestConfigRootOptionsValidation(t *testing.T) {
 		LoginShell:       false,
 	}
 
-	// Valid configurations
 	validCfg := baseCfg
 	validCfg.UTF8 = UTF8Omit
 	validCfg.Colors256 = true
@@ -365,14 +364,12 @@ func TestConfigRootOptionsValidation(t *testing.T) {
 		t.Fatalf("expected valid config to succeed, got %v", err)
 	}
 
-	// Verify slice was cloned
 	features[0] = "mutated"
 
 	if s.config.TerminalFeatures[0] == "mutated" {
 		t.Fatal("expected TerminalFeatures slice to be copied, but was mutated")
 	}
 
-	// Invalid UTF8Mode
 	badUTF8 := baseCfg
 	badUTF8.UTF8 = UTF8Mode(99)
 
@@ -380,7 +377,6 @@ func TestConfigRootOptionsValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for bad UTF8Mode, got %v", err)
 	}
 
-	// Invalid LogLevel
 	badLog := baseCfg
 	badLog.LogLevel = LogLevel(99)
 
@@ -388,7 +384,6 @@ func TestConfigRootOptionsValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for bad LogLevel, got %v", err)
 	}
 
-	// Invalid TerminalFeatures (contains comma, space, empty, or NUL)
 	for _, badFeature := range [][]string{
 		{""},
 		{" "},
@@ -427,7 +422,6 @@ func TestBaseArgsRootFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// allowStart: false -> includes -N
 	argsNoStart := s.baseArgs(false)
 
 	expectedNoStart := []string{
@@ -444,13 +438,11 @@ func TestBaseArgsRootFlags(t *testing.T) {
 		t.Errorf("baseArgs(false) mismatch:\ngot:  %v\nwant: %v", argsNoStart, expectedNoStart)
 	}
 
-	// allowStart: true -> omits -N
 	argsStart := s.baseArgs(true)
 	if slices.Contains(argsStart, "-N") {
 		t.Errorf("expected baseArgs(true) to omit -N, got %v", argsStart)
 	}
 
-	// UTF8Omit -> omits -u
 	sOmit, err := New(Config{
 		Binary:           "/bin/sh",
 		SocketPath:       filepath.Join(dir, "sock"),

@@ -606,7 +606,6 @@ func TestResolveClientEqualityRecyclingAndDaemonIsolation(t *testing.T) {
 
 	h1 := c1.Handle()
 
-	// Different PID (same name and daemon)
 	mDiffPID := clientFixture(s1)
 	mDiffPID["client_pid"] = "9999"
 
@@ -619,7 +618,6 @@ func TestResolveClientEqualityRecyclingAndDaemonIsolation(t *testing.T) {
 		t.Fatal("expected different client PID to break handle equality")
 	}
 
-	// Different creation timestamp (same name, PID, and daemon)
 	mDiffCreated := clientFixture(s1)
 	mDiffCreated["client_created"] = "500"
 
@@ -632,7 +630,6 @@ func TestResolveClientEqualityRecyclingAndDaemonIsolation(t *testing.T) {
 		t.Fatal("expected different client creation timestamp to break handle equality")
 	}
 
-	// Different daemon origin (different localServer)
 	s2 := localServer(t)
 	mDiffDaemon := clientFixture(s2)
 

@@ -77,17 +77,14 @@ func FuzzParseCommandLine(f *testing.F) {
 			}
 		}
 
-		// Test newline-delimited args (handles arbitrary strings per arg)
 		if raw == "" {
 			testCommandLine([]string{})
 		} else {
 			testCommandLine(strings.Split(raw, "\n"))
 		}
 
-		// Test whitespace-separated args
 		testCommandLine(strings.Fields(raw))
 
-		// Test null-byte-separated args
 		testCommandLine(strings.Split(raw, "\x00"))
 	})
 }

@@ -219,7 +219,6 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 		signal.Reset(syscall.SIGHUP)
 	})
 
-	// 1. Attach with working directory (-c) and client flags (-f)
 	dir := t.TempDir()
 	client1, done1 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{
 		PreserveEnvironment: true,
@@ -230,7 +229,6 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 
 	assertReadOnly(t, ctx, client1, true)
 
-	// Verify session path was updated by -c
 	pathBytes, err := session.Format(ctx, tmux.Format("#{session_path}"))
 	if err != nil {
 		t.Fatalf("session.Format failed: %v", err)
@@ -240,7 +238,6 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 		t.Errorf("expected session path %q, got %q", dir, string(pathBytes))
 	}
 
-	// 2. Client 2 with DetachOtherClients (-d) detaches client 1.
 	client2, done2 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{Detach: tmux.DetachOtherClients})
 	if err := awaitReturn(t, done1, "client 1 after DetachOtherClients"); !endedByDetach(err) {
 		t.Fatalf("client 1 unexpected error on detach: %v", err)
@@ -248,11 +245,9 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 
 	detachAndAwait(t, ctx, client2, done2, "client 2")
 
-	// 3. Client 3 read-only through AttachOptions.ReadOnly (without Flags)
 	client3, done3 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{ReadOnly: true, Detach: tmux.DetachNone})
 	assertReadOnly(t, ctx, client3, true)
 
-	// 4. Client 4 with DetachParentSignal (-x) detaches client 3.
 	client4, done4 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{Detach: tmux.DetachParentSignal})
 	if err := awaitReturn(t, done3, "client 3 after DetachParentSignal"); !endedByDetach(err) {
 		t.Fatalf("client 3 unexpected error on detach by signal: %v", err)
@@ -547,7 +542,6 @@ func TestIntegrationServerPrepareAttach(t *testing.T) {
 
 	var options tmux.AttachOptions
 
-	// 1. server.PrepareAttach with valid session ID
 	term1 := attachmentTerminal(t)
 
 	termCtx1, cancel1 := context.WithCancel(ctx)
@@ -561,7 +555,6 @@ func TestIntegrationServerPrepareAttach(t *testing.T) {
 	done1 := startPrepared(t, execCmd1)
 	detachAndAwaitExit(t, ctx, waitTerminalClient(t, ctx, server, term1, done1), done1, "client 1")
 
-	// 2. server.PrepareAttachTarget with empty target (attaching to default session)
 	term2 := attachmentTerminal(t)
 
 	termCtx2, cancel2 := context.WithCancel(ctx)
@@ -594,19 +587,16 @@ func TestIntegrationAttach_MasterHangupTeardown(t *testing.T) {
 		t.Fatal("expected valid client attached")
 	}
 
-	// Abruptly close master PTY to trigger kernel hangup (SIGHUP)
 	if err := master.Close(); err != nil {
 		t.Fatalf("master.Close failed: %v", err)
 	}
 
-	// Verify Attach unblocks and finishes within timeout
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("session.Attach did not unblock within 5 seconds of master PTY hangup")
 	}
 
-	// Verify the client terminal is cleaned up on the server
 	awaitObservation(t, ctx, "client terminal disconnected after hangup", func() bool {
 		clients, err := server.Clients(ctx)
 		if err != nil {
