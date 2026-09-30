@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func testCommand(t *testing.T, name string, args ...string) tmux.Command {

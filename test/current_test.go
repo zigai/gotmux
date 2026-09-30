@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func currentVars(identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID) tmux.TmuxVars {
@@ -84,7 +84,7 @@ func assertCurrentContext(t *testing.T, info tmux.CurrentInfo, identity tmux.Ser
 
 func TestIntegrationCurrentFromRejectsInvalidContext(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	pane := firstPane(t, server, ctx)
+	pane := firstPane(t, ctx, server)
 
 	identity, err := server.Probe(ctx)
 	if err != nil {

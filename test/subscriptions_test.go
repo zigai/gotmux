@@ -1,13 +1,13 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
 	"context"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func nextSubscription(t *testing.T, ctx context.Context, stream *tmux.EventStream, name, value string) tmux.SubscriptionEvent {
@@ -27,8 +27,8 @@ func nextSubscription(t *testing.T, ctx context.Context, stream *tmux.EventStrea
 
 func TestIntegrationSubscriptions(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	pane := firstPane(t, server, ctx)
-	connection := apiControl(t, server, session, ctx)
+	pane := firstPane(t, ctx, server)
+	connection := apiControl(t, ctx, server, session)
 
 	bound, err := connection.Server().Pane(ctx, pane.ID())
 	if err != nil {
@@ -221,8 +221,8 @@ func controlEvents(t *testing.T, ctx context.Context, connection *tmux.Connectio
 
 func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	pane := firstPane(t, server, ctx)
-	connection := apiControl(t, server, session, ctx)
+	pane := firstPane(t, ctx, server)
+	connection := apiControl(t, ctx, server, session)
 
 	stream := controlEvents(t, ctx, connection)
 

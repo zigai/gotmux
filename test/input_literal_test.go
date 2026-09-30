@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationLiteral(t *testing.T) {

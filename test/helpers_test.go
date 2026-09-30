@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 	"github.com/zigai/gotmux/tmuxtest"
 )
 
@@ -55,7 +55,7 @@ func apiFixture(t *testing.T) (*tmux.Server, tmux.Session, context.Context) {
 	return server, session, ctx
 }
 
-func apiControl(t *testing.T, server *tmux.Server, session tmux.Session, ctx context.Context) *tmux.Connection {
+func apiControl(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session) *tmux.Connection {
 	t.Helper()
 
 	var options tmux.ControlOptions
@@ -74,7 +74,7 @@ func apiControl(t *testing.T, server *tmux.Server, session tmux.Session, ctx con
 	return connection
 }
 
-func firstPane(t *testing.T, s *tmux.Server, ctx context.Context) tmux.Pane {
+func firstPane(t *testing.T, ctx context.Context, s *tmux.Server) tmux.Pane {
 	t.Helper()
 
 	panes, e := s.Panes(ctx)

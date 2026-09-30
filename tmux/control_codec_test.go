@@ -15,20 +15,20 @@ import (
 func TestControlFramingAdversarialRecord(t *testing.T) {
 	data := []string{"\n%end 5 99 1\n%begin 7 123 1\nTGO-DONE:fake\n\xff", ""}
 	payload := wire.EncodeRecord(data)
-	wire := append([]byte("%begin 5 99 1\n"), payload...)
-	wire = append(wire, []byte("%end 5 99 1\n")...)
+	stream := append([]byte("%begin 5 99 1\n"), payload...)
+	stream = append(stream, []byte("%end 5 99 1\n")...)
 
-	u, e := readControlUnit(bufio.NewReaderSize(bytes.NewReader(wire), 16), 4096, func(Event) { t.Fatal("field misread as event") })
+	u, e := readControlUnit(bufio.NewReaderSize(bytes.NewReader(stream), 16), 4096, func(Event) { t.Fatal("field misread as event") })
 	if e != nil || u.frame == nil || !bytes.Equal(u.frame.data, payload) {
 		t.Fatalf("%#v %v", u, e)
 	}
 }
 
 func TestControlFramingMalformed(t *testing.T) {
-	for _, wire := range []string{"%begin 1 3 1\n%end 1 4 1\n", "%begin 1 3 1\n%end 2 3 1\n", "%begin 1 3 1\n%end 1 3 0\n", "%begin 1 3 2\n%end 1 3 2\n", "%begin 1 3 1\n%begin 1 4 1\n", "%end 1 3 1\n", "%begin 1 3 1\nordinary unframed output\n%end 1 3 1\n", "%begin 1 3 1\nTGO1:1:99999999999999:x,\n"} {
-		_, e := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 4096, func(Event) {})
+	for _, stream := range []string{"%begin 1 3 1\n%end 1 4 1\n", "%begin 1 3 1\n%end 2 3 1\n", "%begin 1 3 1\n%end 1 3 0\n", "%begin 1 3 2\n%end 1 3 2\n", "%begin 1 3 1\n%begin 1 4 1\n", "%end 1 3 1\n", "%begin 1 3 1\nordinary unframed output\n%end 1 3 1\n", "%begin 1 3 1\nTGO1:1:99999999999999:x,\n"} {
+		_, e := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 4096, func(Event) {})
 		if e == nil {
-			t.Fatalf("accepted %q", wire)
+			t.Fatalf("accepted %q", stream)
 		}
 	}
 }
@@ -164,9 +164,9 @@ func TestControlLayoutChangeNotifications(t *testing.T) {
 }
 
 func TestControlCommandErrorStartingWithPercent(t *testing.T) {
-	wire := "%begin 1 4 1\n%: not a real event\n%error 1 4 1\n"
+	stream := "%begin 1 4 1\n%: not a real event\n%error 1 4 1\n"
 
-	u, err := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 4096, func(Event) {})
+	u, err := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 4096, func(Event) {})
 	if err != nil {
 		t.Fatalf("readControlUnit failed on percent-prefixed error: %v", err)
 	}
@@ -177,9 +177,9 @@ func TestControlCommandErrorStartingWithPercent(t *testing.T) {
 }
 
 func TestControlPercentPrefixedFrameDataCountsTowardLimit(t *testing.T) {
-	wire := "%begin 1 4 1\n%: " + strings.Repeat("x", 35) + "\n%error 1 4 1\n"
+	stream := "%begin 1 4 1\n%: " + strings.Repeat("x", 35) + "\n%error 1 4 1\n"
 
-	_, err := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 45, func(Event) {})
+	_, err := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 45, func(Event) {})
 	if !errors.Is(err, ErrOutputLimit) {
 		t.Fatalf("readControlUnit error = %v, want ErrOutputLimit", err)
 	}
@@ -224,9 +224,9 @@ func TestControlTornRecordFramePreserved(t *testing.T) {
 	// readControlUnit should align on the line boundary and preserve the frame output
 	// so higher-level query retry (parseOrRetry) can inspect the torn record and retry,
 	// rather than killing the entire control connection with a fatal protocol error.
-	wire := "%begin 1 10 1\nTGO1:2:10:mismatched,5:extra,\n%end 1 10 1\n"
+	stream := "%begin 1 10 1\nTGO1:2:10:mismatched,5:extra,\n%end 1 10 1\n"
 
-	u, err := readControlUnit(bufio.NewReader(strings.NewReader(wire)), 4096, func(Event) {})
+	u, err := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 4096, func(Event) {})
 	if err != nil {
 		t.Fatalf("expected torn record line to be preserved within frame, got err: %v", err)
 	}

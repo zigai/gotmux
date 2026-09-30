@@ -1,12 +1,12 @@
 //go:build integration && go1.24
 
-package tmux_test
+package test
 
 import (
 	"context"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 	"github.com/zigai/gotmux/tmuxtest"
 )
 

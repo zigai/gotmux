@@ -141,7 +141,7 @@ func parseEndWords(end string) ([]string, bool) {
 	return words, true
 }
 
-func peerCall(c *Connection, ctx context.Context, label string) (Result, error) {
+func peerCall(ctx context.Context, c *Connection, label string) (Result, error) {
 	opCtx, op, e := c.original.begin(ctx)
 	if e != nil {
 		return Result{}, e
@@ -175,7 +175,7 @@ func TestDispatcherCancellationDrainsBeforeNext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	first := make(chan error, 1)
 
-	go func() { _, e := peerCall(p.c, ctx, "first"); first <- e }()
+	go func() { _, e := peerCall(ctx, p.c, "first"); first <- e }()
 
 	waitWrite(t, p)
 	cancel()
@@ -193,7 +193,7 @@ func TestDispatcherCancellationDrainsBeforeNext(t *testing.T) {
 	second := make(chan controlReply, 1)
 
 	go func() {
-		r, e := peerCall(p.c, context.Background(), "second")
+		r, e := peerCall(context.Background(), p.c, "second")
 		second <- controlReply{result: r, err: e}
 	}()
 
@@ -230,14 +230,14 @@ func TestDispatcherQueuedCancellationNotSent(t *testing.T) {
 	p := dispatcherFixture(t, 2)
 	first := make(chan error, 1)
 
-	go func() { _, e := peerCall(p.c, context.Background(), "first"); first <- e }()
+	go func() { _, e := peerCall(context.Background(), p.c, "first"); first <- e }()
 
 	waitWrite(t, p)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	queued := make(chan error, 1)
 
-	go func() { _, e := peerCall(p.c, ctx, "queued"); queued <- e }()
+	go func() { _, e := peerCall(ctx, p.c, "queued"); queued <- e }()
 
 	deadline := time.Now().Add(time.Second)
 	for len(p.c.requests) == 0 {
@@ -261,7 +261,7 @@ func TestDispatcherQueuedCancellationNotSent(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	r, e := peerCall(p.c, context.Background(), "second")
+	r, e := peerCall(context.Background(), p.c, "second")
 	if e != nil || !strings.Contains(string(r.Stdout), "second") {
 		t.Fatal(r, e)
 	}
@@ -298,7 +298,7 @@ func TestDispatcherCloseConcurrentAndWait(t *testing.T) {
 	p := dispatcherFixture(t, 2)
 	result := make(chan error, 1)
 
-	go func() { _, e := peerCall(p.c, context.Background(), "first"); result <- e }()
+	go func() { _, e := peerCall(context.Background(), p.c, "first"); result <- e }()
 
 	waitWrite(t, p)
 
@@ -327,7 +327,7 @@ func TestDispatcherCloseConcurrentAndWait(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	_, e := peerCall(p.c, context.Background(), "second")
+	_, e := peerCall(context.Background(), p.c, "second")
 	if !errors.Is(e, ErrClosed) {
 		t.Fatal(e)
 	}
@@ -337,7 +337,7 @@ func TestDispatcherFrameFailureFailsPending(t *testing.T) {
 	p := dispatcherFixture(t, 1)
 	result := make(chan error, 1)
 
-	go func() { _, e := peerCall(p.c, context.Background(), "first"); result <- e }()
+	go func() { _, e := peerCall(context.Background(), p.c, "first"); result <- e }()
 
 	waitWrite(t, p)
 	p.c.stop(io.ErrUnexpectedEOF, false)

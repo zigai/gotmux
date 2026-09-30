@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func assertEnvironment(t *testing.T, ctx context.Context, scope tmux.EnvironmentScope, name string, hidden bool, value string, present, removed bool) {

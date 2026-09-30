@@ -10,7 +10,7 @@ import (
 
 // TmuxVars holds the $TMUX and $TMUX_PANE environment variables tmux sets for
 // the processes it runs, which locate the caller's server, session, and pane.
-type TmuxVars struct {
+type TmuxVars struct { //nolint:revive // named for the $TMUX variables it holds, not the package
 	// TMUX is the value of $TMUX (formatted as "socket,pid,session").
 	TMUX string
 
@@ -19,7 +19,7 @@ type TmuxVars struct {
 }
 
 // TmuxVarsInfo holds the structured fields parsed from [TmuxVars].
-type TmuxVarsInfo struct {
+type TmuxVarsInfo struct { //nolint:revive // pairs with TmuxVars
 	// SocketPath is the absolute path to the tmux server socket.
 	SocketPath string
 

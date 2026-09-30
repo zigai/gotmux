@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -99,10 +99,10 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 					t.Cleanup(func() { _ = os.Remove(injectionMarker) })
 
 					// -l prints format expressions literally.
-					assertDisplayEchoes(t, server, ctx, input, "-l")
+					assertDisplayEchoes(t, ctx, server, input, "-l")
 
 					if !strings.Contains(input, "#") {
-						assertDisplayEchoes(t, server, ctx, input)
+						assertDisplayEchoes(t, ctx, server, input)
 					}
 				})
 			}
@@ -112,7 +112,7 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 	assertNoInjection(t, "at end of differential quoting tests")
 }
 
-func assertDisplayEchoes(t *testing.T, server *tmux.Server, ctx context.Context, input string, flags ...string) {
+func assertDisplayEchoes(t *testing.T, ctx context.Context, server *tmux.Server, input string, flags ...string) {
 	t.Helper()
 
 	args := append(append([]string{"display-message", "-p"}, flags...), "--", input)

@@ -1,13 +1,13 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"errors"
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationClockModeAndSendPrefix(t *testing.T) {

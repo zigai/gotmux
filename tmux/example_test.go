@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 //nolint:testableexamples // compile-only example requires live tmux server socket; covered by integration_test.go

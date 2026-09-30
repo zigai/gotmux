@@ -1,13 +1,13 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"slices"
 	"strings"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func validIdentity(id tmux.ServerIdentity) bool {

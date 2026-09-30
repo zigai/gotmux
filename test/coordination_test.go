@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationCoordinationWait(t *testing.T) {
@@ -125,7 +125,7 @@ func TestIntegrationCoordinationCallerDeadlineBoundsWaits(t *testing.T) {
 
 func TestIntegrationCoordinationWaitsRefuseControlTransport(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	bound := apiControl(t, server, session, ctx).Server()
+	bound := apiControl(t, ctx, server, session).Server()
 
 	for _, tc := range []struct {
 		name string

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 const (

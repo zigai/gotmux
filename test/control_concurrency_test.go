@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 // errEmptyResult marks a concurrent query that succeeded but returned nothing.
@@ -34,7 +34,7 @@ func isContextError(err error) bool {
 
 func TestControlConcurrentRequests(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	connection := apiControl(t, server, session, ctx)
+	connection := apiControl(t, ctx, server, session)
 	bound := connection.Server()
 
 	const concurrency = 40

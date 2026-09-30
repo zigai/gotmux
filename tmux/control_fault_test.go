@@ -216,7 +216,7 @@ func TestControlWireFault_TruncatedFrameEOF(t *testing.T) {
 	errCh := make(chan error, 1)
 
 	go func() {
-		_, err := peerCall(f.c, context.Background(), "req1")
+		_, err := peerCall(context.Background(), f.c, "req1")
 		errCh <- err
 	}()
 
@@ -253,7 +253,7 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 	inflightErr := make(chan error, 1)
 
 	go func() {
-		_, err := peerCall(f.c, context.Background(), "inflight")
+		_, err := peerCall(context.Background(), f.c, "inflight")
 		inflightErr <- err
 	}()
 
@@ -263,11 +263,11 @@ func TestControlWireFault_PrematurePipeClosureQueuedRequests(t *testing.T) {
 	queued2Err := make(chan error, 1)
 
 	go func() {
-		_, err := peerCall(f.c, context.Background(), "queued1")
+		_, err := peerCall(context.Background(), f.c, "queued1")
 		queued1Err <- err
 	}()
 	go func() {
-		_, err := peerCall(f.c, context.Background(), "queued2")
+		_, err := peerCall(context.Background(), f.c, "queued2")
 		queued2Err <- err
 	}()
 
@@ -334,7 +334,7 @@ func TestControlWireFault_UnsolicitedExit(t *testing.T) {
 		t.Errorf("expected Wait to return ErrClosed, got %v", err)
 	}
 
-	_, err := peerCall(f.c, context.Background(), "subsequent")
+	_, err := peerCall(context.Background(), f.c, "subsequent")
 	if !errors.Is(err, ErrClosed) {
 		t.Errorf("expected subsequent operation to return ErrClosed, got %v", err)
 	}

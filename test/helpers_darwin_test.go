@@ -1,6 +1,6 @@
 //go:build integration && darwin
 
-package tmux_test
+package test
 
 import (
 	"bytes"

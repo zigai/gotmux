@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 	"github.com/zigai/gotmux/tmuxtest"
 )
 
@@ -40,14 +40,14 @@ func TestDaemonReplacement(t *testing.T) {
 		t.Fatalf("serverA.FindSession failed: %v", err)
 	}
 
-	paneA := firstPane(t, serverA, ctx)
+	paneA := firstPane(t, ctx, serverA)
 	staleEnv := currentVars(infoA.Identity, sessionA.ID(), paneA.ID())
 
 	killDaemon(t, infoA.Identity.PID)
 
 	serverB, sessionB := startReplacementDaemon(t, ctx, infoA.Identity)
 
-	paneB := firstPane(t, serverB, ctx)
+	paneB := firstPane(t, ctx, serverB)
 	if sessionB.ID() != sessionA.ID() || paneB.ID() != paneA.ID() {
 		t.Fatalf("replacement did not reuse context IDs: session %s/%s, pane %s/%s", sessionA.ID(), sessionB.ID(), paneA.ID(), paneB.ID())
 	}

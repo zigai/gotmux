@@ -1,11 +1,11 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationMessagesAndPromptHistory(t *testing.T) {

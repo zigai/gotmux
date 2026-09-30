@@ -1,6 +1,6 @@
 //go:build integration && (linux || darwin)
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 const terminalLogBytes = 64 << 10

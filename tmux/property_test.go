@@ -7,7 +7,7 @@ import (
 
 	"pgregory.net/rapid"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 //nolint:cyclop,gocognit // property testing loop exercises multiple algebraic relations

@@ -1,6 +1,6 @@
 //go:build integration && linux
 
-package tmux_test
+package test
 
 import (
 	"fmt"

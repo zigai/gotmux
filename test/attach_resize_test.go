@@ -1,6 +1,6 @@
 //go:build integration && (linux || darwin)
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/term"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestAttachResizeAndSignal(t *testing.T) {

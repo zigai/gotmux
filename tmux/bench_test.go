@@ -27,14 +27,14 @@ func BenchmarkMetadataDecode(b *testing.B) {
 }
 
 func BenchmarkControlFramedMetadata(b *testing.B) {
-	wire := append([]byte("%begin 1 8 1\n"), wire.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...)
-	wire = append(wire, []byte("%end 1 8 1\n")...)
+	stream := append([]byte("%begin 1 8 1\n"), wire.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...)
+	stream = append(stream, []byte("%end 1 8 1\n")...)
 
 	b.ReportAllocs()
-	b.SetBytes(int64(len(wire)))
+	b.SetBytes(int64(len(stream)))
 
 	for b.Loop() {
-		if _, err := readControlUnit(bufio.NewReader(bytes.NewReader(wire)), 4096, func(Event) {}); err != nil {
+		if _, err := readControlUnit(bufio.NewReader(bytes.NewReader(stream)), 4096, func(Event) {}); err != nil {
 			b.Fatal(err)
 		}
 	}

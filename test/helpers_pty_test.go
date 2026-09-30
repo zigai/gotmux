@@ -1,6 +1,6 @@
 //go:build integration && (linux || darwin)
 
-package tmux_test
+package test
 
 import (
 	"io"

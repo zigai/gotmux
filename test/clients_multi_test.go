@@ -1,6 +1,6 @@
 //go:build integration && (linux || darwin)
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func attachOn(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, slave *os.File) (tmux.Client, chan error) {
@@ -376,8 +376,8 @@ func TestIntegrationClientMessageStaysLiteral(t *testing.T) {
 
 func TestIntegrationConnectionClientIsItsOwn(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	first := apiControl(t, server, session, ctx)
-	second := apiControl(t, server, session, ctx)
+	first := apiControl(t, ctx, server, session)
+	second := apiControl(t, ctx, server, session)
 
 	firstClient, err := first.Client(ctx)
 	if err != nil {
@@ -408,7 +408,7 @@ func TestIntegrationConnectionClientIsItsOwn(t *testing.T) {
 
 func TestIntegrationConcurrentCallersGetTheirOwnReplies(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	connection := apiControl(t, server, session, ctx)
+	connection := apiControl(t, ctx, server, session)
 
 	panes, err := connection.Server().Panes(ctx)
 	if err != nil || len(panes) == 0 {

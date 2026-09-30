@@ -1,13 +1,13 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
 	"slices"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationTypedOptionInteger(t *testing.T) {

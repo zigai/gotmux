@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 	"github.com/zigai/gotmux/tmuxtest"
 )
 
@@ -458,7 +458,7 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 			server, session, ctx := apiFixture(t)
 			_, source := graphWindow(t, ctx, session)
 			other := tmuxtest.NewServer(t)
-			target := firstPane(t, other, ctx)
+			target := firstPane(t, ctx, other)
 			before := graphState(t, ctx, server)
 			otherBefore := graphState(t, ctx, other)
 			// The foreign ID must name a pane in a different source window,
@@ -530,7 +530,7 @@ func TestIntegrationGraphHandleLifetimes(t *testing.T) {
 			server, session, ctx := apiFixture(t)
 			_, first := graphWindow(t, ctx, session)
 			_, second := graphWindow(t, ctx, session)
-			connection := apiControl(t, server, session, ctx)
+			connection := apiControl(t, ctx, server, session)
 			targetServer := lifetimeTarget(t, ctx, server, session, connection, test.name)
 
 			source, err := connection.Server().PaneHandle(first.ID())
@@ -567,7 +567,7 @@ func lifetimeTarget(t *testing.T, ctx context.Context, server *tmux.Server, sess
 
 	switch name {
 	case "different-connections":
-		return apiControl(t, server, session, ctx).Server()
+		return apiControl(t, ctx, server, session).Server()
 	case "unbound-target":
 		return server
 	case "closed-connection":

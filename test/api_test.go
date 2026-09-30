@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 	"slices"
 	"testing"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 )
 
 func TestIntegrationAPIScalarOptions(t *testing.T) {
@@ -164,7 +164,7 @@ func TestIntegrationAPIWindowNavigation(t *testing.T) {
 
 func TestIntegrationAPIPaneNavigationAndCopy(t *testing.T) {
 	server, _, ctx := apiFixture(t)
-	pane := firstPane(t, server, ctx)
+	pane := firstPane(t, ctx, server)
 
 	var options tmux.SplitOptions
 
@@ -239,7 +239,7 @@ func TestIntegrationAPIAutomaticSlots(t *testing.T) {
 
 func TestIntegrationAPIControlSupport(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	bound := apiControl(t, server, session, ctx).Server()
+	bound := apiControl(t, ctx, server, session).Server()
 
 	support := bound.Support()
 	if support.RawCommands || support.ScalarReads || support.TerminalAttach {
@@ -283,7 +283,7 @@ func assertFormatValues(t *testing.T, call string, got [][]byte, err error, want
 
 func TestIntegrationAPISubprocessLifetime(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	connection := apiControl(t, server, session, ctx)
+	connection := apiControl(t, ctx, server, session)
 	bound := connection.Server()
 
 	controlSession, err := bound.Session(ctx, session.ID())
@@ -315,7 +315,7 @@ func TestIntegrationAPISubprocessLifetime(t *testing.T) {
 
 func TestIntegrationAPIRawSubprocess(t *testing.T) {
 	server, session, ctx := apiFixture(t)
-	bound := apiControl(t, server, session, ctx).Server()
+	bound := apiControl(t, ctx, server, session).Server()
 
 	subprocess, err := bound.ViaSubprocess()
 	if err != nil || !subprocess.Support().RawCommands {
@@ -358,7 +358,7 @@ func TestIntegrationAPIAutomaticSlotConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	installSlotConflict(t, destination, ctx)
+	installSlotConflict(t, ctx, destination)
 
 	var options tmux.LinkOptions
 	if _, err := source[0].Window().Link(ctx, destination, options); err == nil {
@@ -383,7 +383,7 @@ func TestIntegrationAPIAutomaticSlotConflict(t *testing.T) {
 	t.Fatal("conflict fixture did not create its window")
 }
 
-func installSlotConflict(t *testing.T, destination tmux.Session, ctx context.Context) {
+func installSlotConflict(t *testing.T, ctx context.Context, destination tmux.Session) {
 	t.Helper()
 	// Claim the chosen slot after its discovery snapshot but before the mutation.
 	remove, err := tmux.NewCommand("set-hook", "-u", "-t", string(destination.ID()), "after-list-windows[0]")
@@ -630,7 +630,7 @@ func TestStaleSessionEnvironmentReportsNotFound(t *testing.T) {
 func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	pane := firstPane(t, server, ctx)
+	pane := firstPane(t, ctx, server)
 	if err := pane.Submit(ctx, `printf '\033]8;;https://example.invalid\033\\LINK\033]8;;\033\\\n'`); err != nil {
 		t.Fatal(err)
 	}
@@ -661,7 +661,7 @@ func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
 
 func TestCaptureRangeEntireHistoryWithEnd(t *testing.T) {
 	server, _, ctx := apiFixture(t)
-	pane := firstPane(t, server, ctx)
+	pane := firstPane(t, ctx, server)
 
 	end := 10
 

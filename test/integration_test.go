@@ -1,6 +1,6 @@
 //go:build integration
 
-package tmux_test
+package test
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	tmux "github.com/zigai/gotmux/tmux"
+	"github.com/zigai/gotmux/tmux"
 	"github.com/zigai/gotmux/tmuxtest"
 )
 
@@ -112,7 +112,7 @@ func assertConsistentSnapshot(t *testing.T, ctx context.Context, s *tmux.Server,
 func TestIntegrationBinaryBufferAndLiteralInput(t *testing.T) {
 	s := tmuxtest.NewServer(t)
 	ctx := integrationContext(t)
-	pane := firstPane(t, s, ctx)
+	pane := firstPane(t, ctx, s)
 
 	b, e := tmux.NamedBuffer("name;#{literal}")
 	if e != nil {
@@ -146,7 +146,7 @@ func TestIntegrationOptionsInheritanceAndEmpty(t *testing.T) {
 	s := tmuxtest.NewServer(t)
 	ctx := integrationContext(t)
 
-	pane := firstPane(t, s, ctx)
+	pane := firstPane(t, ctx, s)
 	if e := s.GlobalWindowOptions().SetUser(ctx, "@probe", "global"); e != nil {
 		t.Fatal(e)
 	}
@@ -263,9 +263,9 @@ func TestIntegrationTwoServersAndReplacement(t *testing.T) {
 	a := tmuxtest.NewServer(t)
 	b := tmuxtest.NewServer(t)
 	ctx := integrationContext(t)
-	pa := firstPane(t, a, ctx)
+	pa := firstPane(t, ctx, a)
 
-	pb := firstPane(t, b, ctx)
+	pb := firstPane(t, ctx, b)
 	if pa.ID() != pb.ID() {
 		t.Fatal("fixtures should initially reuse the same pane id")
 	}
@@ -318,7 +318,7 @@ func TestIntegrationControlParityAndExplicitSubprocess(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	conn := apiControl(t, s, session, ctx)
+	conn := apiControl(t, ctx, s, session)
 
 	stream, e := conn.Events(ctx, tmux.EventOptions{})
 	if e != nil {
