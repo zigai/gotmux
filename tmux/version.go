@@ -138,7 +138,7 @@ func (s *Server) Version(ctx context.Context) (Version, error) {
 	defer op.close()
 
 	if s.bound != nil {
-		info, err := s.probe(opCtx, op)
+		info, err := s.verifiedInfo(opCtx, op)
 		return info.Version, opError("Server.Version", err)
 	}
 
@@ -193,7 +193,7 @@ func (s *Server) Capabilities(ctx context.Context) (Capabilities, error) {
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return Capabilities{}, opError("Server.Capabilities", err)
 	}

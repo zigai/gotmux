@@ -111,6 +111,7 @@ type Connection struct {
 	server        *Server
 	original      *Server
 	identity      ServerIdentity
+	info          ServerInfo
 	generation    uint64
 	opts          ControlOptions
 	cancel        context.CancelCauseFunc
@@ -139,11 +140,13 @@ type Connection struct {
 	hasClient     bool
 }
 
-// OpenControl starts one owned control client attached to session. It does not
-// create a scratch session, detach any other client, or reconnect. ctx owns the
-// entire lifetime. The original Server continues to use subprocess execution.
-func (s *Server) OpenControl(ctx context.Context, session Session, opts ControlOptions) (*Connection, error) {
-	if err := s.validateOpenControl(ctx, session); err != nil {
+// OpenControl starts one owned control client attached to the session with the given ID.
+// The daemon's identity and version are verified in the attach command itself, and
+// returns [ErrNotFound] when the session does not exist. It does not create a scratch
+// session, detach any other client, or reconnect. ctx owns the entire lifetime. The
+// original Server continues to use subprocess execution.
+func (s *Server) OpenControl(ctx context.Context, id SessionID, opts ControlOptions) (*Connection, error) {
+	if err := s.validateOpenControl(ctx, id); err != nil {
 		return nil, opError("Server.OpenControl", err)
 	}
 
@@ -157,19 +160,19 @@ func (s *Server) OpenControl(ctx context.Context, session Session, opts ControlO
 		return nil, opError("Server.OpenControl", err)
 	}
 
-	args, err := s.controlAttachArgs(session, opts, nonce)
+	args, err := s.controlAttachArgs(id, opts, nonce)
 	if err != nil {
 		return nil, opError("Server.OpenControl", err)
 	}
 
 	connCtx, cancel := context.WithCancelCause(ctx)
-	c := newConnection(s, session, opts, cancel)
+	c := newConnection(s, opts, cancel)
 
 	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
 		return nil, opError("Server.OpenControl", err)
 	}
 
-	c.startWorkers(connCtx, nonce, session.h.guard())
+	c.startWorkers(connCtx, nonce)
 
 	if err = c.awaitReady(ctx); err != nil {
 		return nil, opError("Server.OpenControl", err)
@@ -250,20 +253,14 @@ func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessi
 		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
-	info, err := s.Probe(ctx)
-	if err != nil {
-		return nil, Session{}, opError("Server.OpenControlNewSession", err)
-	}
-
 	connCtx, cancel := context.WithCancelCause(ctx)
-	dummySession := Session{h: handle{server: nil, origin: info.Identity, id: "", kind: ObjectKindSession, client: clientCheck{name: "", pid: 0, created: 0}}}
 
-	c := newConnection(s, dummySession, opts.Control, cancel)
+	c := newConnection(s, opts.Control, cancel)
 	if err = s.setupControlProcess(connCtx, c, args, cancel); err != nil {
 		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
 
-	c.startWorkers(connCtx, nonce, nil)
+	c.startWorkers(connCtx, nonce)
 
 	if err = c.awaitReady(ctx); err != nil {
 		return nil, Session{}, opError("Server.OpenControlNewSession", err)
@@ -556,15 +553,14 @@ func token(prefix string) (string, error) {
 	return prefix + hex.EncodeToString(b[:]) + "\n", nil
 }
 
-func newConnection(s *Server, session Session, opts ControlOptions, cancel context.CancelCauseFunc) *Connection {
+func newConnection(s *Server, opts ControlOptions, cancel context.CancelCauseFunc) *Connection {
 	gen := connectionGeneration.Add(1)
-	id := session.h.origin
-	id.Generation = gen
 
 	c := &Connection{
 		server:        nil,
 		original:      s,
-		identity:      id,
+		identity:      ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen},
+		info:          ServerInfo{rawRecord: rawRecord{raw: nil}, Identity: ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen}, Version: Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false}},
 		generation:    gen,
 		opts:          opts,
 		cancel:        cancel,
@@ -644,14 +640,14 @@ func (s *Server) controlFlags(opts ControlOptions) (string, error) {
 	return formatClientFlags(flags), nil
 }
 
-func (s *Server) controlAttachArgs(session Session, opts ControlOptions, nonce string) ([]string, error) {
+func (s *Server) controlAttachArgs(id SessionID, opts ControlOptions, nonce string) ([]string, error) {
 	flags, err := s.controlFlags(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	p := session.h.guard().wrap(emptyPlan(command("attach-session", "-t", session.h.id, "-f", flags)))
-	p.nodes = append(p.nodes, markerNode(nonce))
+	p := emptyPlan(command("attach-session", "-t", string(id), "-f", flags))
+	p.nodes = append(p.nodes, identityNode(), markerNode(nonce))
 
 	args, err := p.argv()
 	if err != nil {
@@ -732,7 +728,7 @@ func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce stri
 	cmdArgs = append(cmdArgs, progArgs...)
 
 	p := emptyPlan(command(cmdArgs[0], cmdArgs[1:]...))
-	p.nodes = append(p.nodes, markerNode(nonce))
+	p.nodes = append(p.nodes, identityNode(), markerNode(nonce))
 
 	args, err := p.argv()
 	if err != nil {
@@ -845,7 +841,7 @@ func (s *Server) setupControlProcess(connCtx context.Context, c *Connection, arg
 	return nil
 }
 
-func (s *Server) validateOpenControl(ctx context.Context, session Session) error {
+func (s *Server) validateOpenControl(ctx context.Context, id SessionID) error {
 	if s == nil || s.runner == nil {
 		return ErrInvalidHandle
 	}
@@ -858,18 +854,18 @@ func (s *Server) validateOpenControl(ctx context.Context, session Session) error
 		return err //nolint:wrapcheck // context cancellation is intentionally returned unwrapped
 	}
 
-	if err := session.h.check(); err != nil {
-		return err
+	if s.conn != nil || s.bound != nil {
+		return unsupportedControl("open control connection on control-bound server", ErrTransportUnsupported)
 	}
 
-	if s.conn != nil || session.h.origin.Generation != 0 || session.h.origin.Endpoint != s.endpoint {
-		return ErrInvalidHandle
+	if !id.Valid() {
+		return invalid("session ID")
 	}
 
 	return nil
 }
 
-func (c *Connection) startWorkers(connCtx context.Context, nonce string, guard *guard) {
+func (c *Connection) startWorkers(connCtx context.Context, nonce string) {
 	c.work.Go(c.reader)
 	c.work.Go(func() {
 		_, copyErr := io.Copy(c.diagnostics, c.stderr)
@@ -883,7 +879,7 @@ func (c *Connection) startWorkers(connCtx context.Context, nonce string, guard *
 			c.stop(errors.Join(ErrClosed, waitErr), false)
 		}
 	})
-	c.work.Go(func() { c.dispatch(connCtx, nonce, guard) })
+	c.work.Go(func() { c.dispatch(connCtx, nonce) })
 
 	c.work.Go(func() {
 		<-connCtx.Done()

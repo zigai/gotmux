@@ -114,7 +114,7 @@ func ExampleConnection_Events() {
 		return
 	}
 
-	conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{PaneOutput: true}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: true}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
 	if err != nil {
 		return
 	}

@@ -194,7 +194,7 @@ func (s *Server) RunShell(ctx context.Context, script string, opts RunShellOptio
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return failedResult(), opError("Server.RunShell", err)
 	}
@@ -230,7 +230,7 @@ func (s *Server) IfShell(ctx context.Context, shellCommand string, ifTrue, ifFal
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return opError("Server.IfShell", err)
 	}
@@ -276,7 +276,7 @@ func (s *Server) source(ctx context.Context, opName, target string, input []byte
 		return failedResult(), opError(opName, ErrInputLimit)
 	}
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return failedResult(), opError(opName, err)
 	}
@@ -328,7 +328,7 @@ func (s *Server) IfFormat(ctx context.Context, condition Format, yes, no Command
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return failedResult(), opError("Server.IfFormat", err)
 	}

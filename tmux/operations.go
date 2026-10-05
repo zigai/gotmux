@@ -119,7 +119,7 @@ func (s *Server) endpointActionFrom(ctx context.Context, label string, begin fun
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return opError(label, err)
 	}

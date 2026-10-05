@@ -400,7 +400,7 @@ func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands Com
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return opError("Server.Bind", err)
 	}
@@ -511,7 +511,7 @@ func (s *Server) FindBindings(ctx context.Context, opts BindingsOptions) ([]Bind
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.FindBindings", err)
 	}
@@ -553,7 +553,7 @@ func (s *Server) BindingNotes(ctx context.Context, opts BindingsOptions) ([]Bind
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.BindingNotes", err)
 	}

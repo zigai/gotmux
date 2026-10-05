@@ -60,7 +60,7 @@ func apiControl(t *testing.T, ctx context.Context, server *tmux.Server, session 
 
 	var options tmux.ControlOptions
 
-	connection, err := server.OpenControl(ctx, session, options)
+	connection, err := server.OpenControl(ctx, session.ID(), options)
 	if err != nil {
 		t.Fatal(err)
 	}

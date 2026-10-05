@@ -48,12 +48,12 @@ func dispatcherFixture(t *testing.T, depth int) *dispatcherPeer {
 
 	const ready = "TGO-READY:fixture\n"
 
-	c.work.Go(func() { c.dispatch(ctx, ready, newGuard(c.identity)) })
+	c.work.Go(func() { c.dispatch(ctx, ready) })
 
 	c.work.Go(func() { p.mockTmuxLoop(rd, c) })
 	go func() { c.work.Wait(); close(c.done) }()
 
-	c.frames <- controlFrame{id: frameID{time: 1, number: 42, flags: 0}, data: []byte(guardOK), failed: false}
+	c.frames <- controlFrame{id: frameID{time: 1, number: 42, flags: 0}, data: []byte(fixtureIdentityRecord(s)), failed: false}
 
 	c.frames <- controlFrame{id: frameID{time: 1, number: 51, flags: 0}, data: []byte(ready), failed: false}
 

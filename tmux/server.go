@@ -219,7 +219,7 @@ func (s *Server) signalDaemon(ctx context.Context, opName string, sig syscall.Si
 	}
 	defer op.close()
 
-	srvInfo, err := s.probe(opCtx, op)
+	srvInfo, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return opError(opName, err)
 	}

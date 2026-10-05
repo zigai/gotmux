@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"golang.org/x/sync/semaphore"
+
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 type controlWireFixture struct {
@@ -105,7 +107,7 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 	const ready = "TGO-READY:fixture\n"
 
 	c.work.Go(c.reader)
-	c.work.Go(func() { c.dispatch(ctx, ready, newGuard(c.identity)) })
+	c.work.Go(func() { c.dispatch(ctx, ready) })
 
 	go func() {
 		defer close(f.done)
@@ -130,7 +132,7 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		close(c.done)
 	}()
 
-	handshake := fmt.Sprintf("%%begin 100 1 0\n%s%%end 100 1 0\n%%begin 100 2 0\n%s%%end 100 2 0\n", guardOK, ready)
+	handshake := fmt.Sprintf("%%begin 100 1 0\n%s%%end 100 1 0\n%%begin 100 2 0\n%s%%end 100 2 0\n", fixtureIdentityRecord(s), ready)
 	if _, err := io.WriteString(outWr, handshake); err != nil {
 		t.Fatal(err)
 	}
@@ -385,6 +387,38 @@ func TestControlWireFault_OutputLimitExceeded(t *testing.T) {
 	f.assertCleanup(t)
 }
 
+func TestControlStartupBindsVerifiedIdentity(t *testing.T) {
+	s := localServer(t)
+
+	_, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+
+	for name, stdout := range map[string]string{
+		"missing identity record": "",
+		"unsupported version":     string(wire.EncodeRecord([]string{"42", "100", s.endpoint.String(), "3.2"})),
+		"two identity records":    fixtureIdentityRecord(s) + fixtureIdentityRecord(s),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := testConnection(s, cancel).verifyStartup([]byte(stdout)); err == nil {
+				t.Fatal("startup accepted without one supported identity record")
+			}
+		})
+	}
+
+	c := testConnection(s, cancel)
+	if err := c.verifyStartup([]byte(fixtureIdentityRecord(s))); err != nil {
+		t.Fatal(err)
+	}
+
+	if !c.server.bound.sameDaemon(fixtureIdentity(s)) || c.server.bound.Generation != c.generation {
+		t.Fatalf("bound identity = %+v, want fixture daemon with generation %d", *c.server.bound, c.generation)
+	}
+
+	if v := c.verified().Version; v.Major != 3 || v.Minor != 8 {
+		t.Fatalf("verified version = %+v, want 3.8", v)
+	}
+}
+
 func TestControlStartFailureClosesPipes(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("counts descriptors with /proc/self/fd")
@@ -455,19 +489,5 @@ func testConnection(s *Server, cancel context.CancelCauseFunc) *Connection {
 		MaxStreams:       0,
 	})
 
-	dummySession := Session{h: handle{
-		server: nil,
-		origin: ServerIdentity{
-			Endpoint:       Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0},
-			ReportedSocket: "",
-			PID:            0,
-			Started:        time.Time{},
-			Generation:     0,
-		},
-		id:     "",
-		kind:   ObjectKindSession,
-		client: clientCheck{name: "", pid: 0, created: 0},
-	}}
-
-	return newConnection(s, dummySession, opts, cancel)
+	return newConnection(s, opts, cancel)
 }

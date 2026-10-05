@@ -145,7 +145,7 @@ func outputControl(t *testing.T, ctx context.Context, server *tmux.Server, sessi
 
 	options.PaneOutput = true
 
-	connection, err := server.OpenControl(ctx, session, options)
+	connection, err := server.OpenControl(ctx, session.ID(), options)
 	if err != nil {
 		t.Fatal(err)
 	}

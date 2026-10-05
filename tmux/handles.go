@@ -5,8 +5,6 @@ import (
 	"sort"
 	"strconv"
 	"time"
-
-	"github.com/zigai/gotmux/internal/wire"
 )
 
 var zeroHandle handle
@@ -436,7 +434,7 @@ func sharedHandleIdentity(ctx context.Context, op *operation, a, b *handle) (Ser
 		return *a.server.bound, nil
 	}
 
-	info, err := a.server.probe(ctx, op)
+	info, err := a.server.verifiedInfo(ctx, op)
 
 	return info.Identity, err
 }
@@ -553,6 +551,13 @@ func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
 
 // Panes queries all panes currently belonging to this session, sorted by numeric pane ID.
 func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
+	return s.PanesWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+}
+
+// PanesWith queries panes in all windows linked into this session that match the
+// [QueryOptions] filter, and extracts any additional requested format fields into
+// [rawRecord.Raw]. Results are sorted by numeric pane ID.
+func (s Session) PanesWith(ctx context.Context, opts QueryOptions) ([]PaneInfo, error) {
 	if err := s.h.check(); err != nil {
 		return nil, opError("Session.Panes", err)
 	}
@@ -563,42 +568,7 @@ func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
 	}
 	defer op.close()
 
-	fields, err := queryFields(fieldsFor(ObjectKindPane), nil)
-	if err != nil {
-		return nil, opError("Session.Panes", err)
-	}
+	out, err := s.h.server.panes(opCtx, "Session.Panes", op, s.h.origin, opts, s.h.id, "-s")
 
-	args := []string{"-s", "-t", s.h.id, "-F", wire.RecordFormat(fields)}
-	p := recordsPlan(command("list-panes", args...))
-	g := s.h.guard()
-
-	r, err := s.h.server.execute(opCtx, op, p, g, nil)
-	if err != nil {
-		return nil, opError("Session.Panes", err)
-	}
-
-	rows, err := s.h.server.parseOrRetry(opCtx, op, p, g, r, fields, "pane")
-	if err != nil {
-		return nil, afterError("Session.Panes", err)
-	}
-
-	out := make([]PaneInfo, 0, len(rows))
-
-	seen := make(map[PaneID]bool, len(rows))
-
-	for _, m := range rows {
-		v, err := s.h.server.decodePane(m, &s.h.origin)
-		if err != nil {
-			return nil, afterError("Session.Panes", err)
-		}
-
-		if !seen[v.ID] {
-			seen[v.ID] = true
-			out = append(out, v)
-		}
-	}
-
-	sort.Slice(out, func(i, j int) bool { return numericID(string(out[i].ID)) < numericID(string(out[j].ID)) })
-
-	return out, nil
+	return out, opError("Session.Panes", err)
 }

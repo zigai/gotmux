@@ -87,7 +87,7 @@ if err != nil {
 	}
 }
 
-conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{PaneOutput: false})
+conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: false})
 if err != nil {
 	log.Fatal(err)
 }

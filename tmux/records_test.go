@@ -682,3 +682,60 @@ func TestOptionalNonnegativeDecoder(t *testing.T) {
 		t.Error("expected error on non-numeric string")
 	}
 }
+
+func TestRecordSetRejectsMalformedData(t *testing.T) {
+	s := localServer(t)
+	header := wire.EncodeRecord([]string{"42", "100", s.Endpoint().String(), "3.6"})
+
+	req, err := recordQueryRequest(RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: ""})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		data []byte
+	}{
+		{name: "missing identity", data: wire.EncodeRecord([]string{"%1"})},
+		{name: "extra identity field", data: wire.EncodeRecord([]string{"42", "100", s.Endpoint().String(), "3.6", "extra"})},
+		{name: "invalid identity", data: wire.EncodeRecord([]string{"0", "100", s.Endpoint().String(), "3.6"})},
+		{name: "torn identity", data: header[:len(header)-1]},
+		{name: "wrong row count", data: append(append([]byte{}, header...), wire.EncodeRecord([]string{"%1", "extra"})...)},
+		{name: "torn row", data: append(append([]byte{}, header...), []byte("TGO1:1:2:%")...)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			info, rows, err := s.decodeRead(tc.data, true, []readRequest{req})
+			if _, ok := errors.AsType[*DecodeError](err); !ok {
+				t.Fatalf("expected decode error, got %+v, %+v, %v", info, rows, err)
+			}
+
+			if rows != nil || !info.Identity.isZero() {
+				t.Fatalf("partial result returned: %+v, %+v", info, rows)
+			}
+		})
+	}
+}
+
+func TestQueryRecordsRejectsInvalidSelection(t *testing.T) {
+	s := localServer(t)
+
+	cases := []struct {
+		name  string
+		query RecordQuery
+	}{
+		{name: "empty fields", query: RecordQuery{Kind: ObjectKindPane, Fields: nil, Filter: ""}},
+		{name: "expression instead of name", query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"#{pane_id}"}, Filter: ""}},
+		{name: "unknown kind", query: RecordQuery{Kind: ObjectKind("unknown"), Fields: []string{"pane_id"}, Filter: ""}},
+		{name: "window link kind", query: RecordQuery{Kind: ObjectKindWindowLink, Fields: []string{"window_id"}, Filter: ""}},
+		{name: "nul filter", query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: "\x00"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.QueryRecords(t.Context(), tc.query)
+			if !errors.Is(err, ErrInvalidArgument) {
+				t.Fatalf("expected invalid argument, got %v", err)
+			}
+		})
+	}
+}

@@ -56,7 +56,7 @@ func (s *Server) AccessList(ctx context.Context) ([]AccessEntry, error) {
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.AccessList", err)
 	}

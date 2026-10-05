@@ -1110,10 +1110,55 @@ func TestIntegrationRootFlagsExecution(t *testing.T) {
 
 // TestIntegrationSubprocessServerNeverAutoSpawns verifies that a connection's subprocess servers
 // strictly forbid auto-spawning replacement daemons across all execution paths.
+func TestIntegrationOpenControlMissingSessionIsNotFound(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	if _, err := server.OpenControl(ctx, "$999", tmux.ControlOptions{}); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("missing session: %v, want ErrNotFound", err)
+	}
+
+	if clients, err := server.Clients(ctx); err != nil || len(clients) != 0 {
+		t.Fatalf("clients after failed open = %d %v, want none", len(clients), err)
+	}
+}
+
+func TestIntegrationOpenControlBindsAnsweringDaemon(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	conn := apiControl(t, ctx, server, session)
+
+	probe, err := server.Probe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sessions, err := conn.Server().Sessions(ctx)
+	if err != nil || len(sessions) == 0 {
+		t.Fatal("control sessions", err)
+	}
+
+	bound := sessions[0].Handle().ServerIdentity()
+	if bound.PID != probe.Identity.PID || !bound.Started.Equal(probe.Identity.Started) || bound.ReportedSocket != probe.Identity.ReportedSocket || bound.Generation == 0 {
+		t.Fatalf("control-bound identity = %+v, daemon = %+v", bound, probe.Identity)
+	}
+
+	version, err := conn.Server().Version(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if version.Major != probe.Version.Major || version.Minor != probe.Version.Minor {
+		t.Fatalf("control version = %+v, daemon reports %+v", version, probe.Version)
+	}
+
+	if _, err := conn.SubprocessServer().OpenControl(ctx, session.ID(), tmux.ControlOptions{}); !errors.Is(err, tmux.ErrTransportUnsupported) {
+		t.Fatalf("open from bound server: %v, want ErrTransportUnsupported", err)
+	}
+}
+
 func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	connection, err := server.OpenControl(ctx, session, tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0})
+	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1747,7 +1792,7 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 func TestIntegrationControlNoEchoPTY(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{
 		NoEcho:     true,
 		PaneOutput: true,
 	})
@@ -1775,7 +1820,7 @@ func TestIntegrationControlNoEchoPTY(t *testing.T) {
 func TestIntegrationSetPaneOutputAction(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{
 		PaneOutput: true,
 	})
 	if err != nil {
@@ -1848,7 +1893,7 @@ func awaitEvent(ctx context.Context, stream *tmux.EventStream, match func(tmux.E
 func TestIntegrationClientRefreshExtended(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{
 		PaneOutput: false,
 	})
 	if err != nil {
@@ -1885,7 +1930,7 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 func TestIntegrationControlExitLifecycle(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	conn, err := server.OpenControl(ctx, session, tmux.ControlOptions{
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{
 		PaneOutput: false,
 	})
 	if err != nil {

@@ -584,7 +584,7 @@ func newSessionPlan(args []string, sg startGuard) plan {
 }
 
 func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start StartPolicy) (startGuard, error) {
-	info, err := s.probe(ctx, op)
+	info, err := s.verifiedInfo(ctx, op)
 	switch {
 	case err == nil:
 		return startGuard{guard: newGuard(info.Identity), allowStart: false}, nil

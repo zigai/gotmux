@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"testing"
 
@@ -480,6 +481,145 @@ func TestIntegrationInfoWithExtraFields(t *testing.T) {
 	raw, ok := info.Raw("session_name")
 	if !ok || len(raw) == 0 {
 		t.Fatalf("expected Raw('session_name') to be present, got %q (ok=%v)", string(raw), ok)
+	}
+}
+
+func TestIntegrationQueryRecords(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+	connection := apiControl(t, ctx, server, session)
+
+	const text = "line\nbreak\t;#{literal}\xff"
+	if err := pane.Options().SetUser(ctx, "@record_text", text); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, transport := range []struct {
+		name   string
+		server *tmux.Server
+	}{
+		{name: "subprocess", server: server},
+		{name: "control", server: connection.Server()},
+		{name: "bound subprocess", server: connection.SubprocessServer()},
+	} {
+		t.Run(transport.name, func(t *testing.T) {
+			query := tmux.RecordQuery{
+				Kind:   tmux.ObjectKindPane,
+				Fields: []string{"@record_text", "pane_id", "@unset", "@record_text"},
+				Filter: tmux.Format("#{==:#{pane_id}," + string(pane.ID()) + "}"),
+			}
+
+			records, err := transport.server.QueryRecords(ctx, query)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if len(records.Rows) != 1 {
+				t.Fatalf("rows = %+v", records.Rows)
+			}
+
+			want := map[string]string{
+				"@record_text": text,
+				"pane_id":      string(pane.ID()),
+				"@unset":       "",
+			}
+			if !maps.Equal(records.Rows[0], want) {
+				t.Fatalf("selected values = %+v, want %+v", records.Rows[0], want)
+			}
+
+			if records.Identity.ReportedSocket != server.Endpoint().SocketPath || !records.Version.AtLeast(3, 6) {
+				t.Fatalf("identity/version = %+v, %+v", records.Identity, records.Version)
+			}
+
+			if transport.name != "subprocess" && records.Identity.Generation == 0 {
+				t.Fatal("missing control generation")
+			}
+		})
+	}
+}
+
+func TestIntegrationQueryRecordsEmptyFilter(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	connection := apiControl(t, ctx, server, session)
+
+	query := tmux.RecordQuery{Kind: tmux.ObjectKindPane, Fields: []string{"pane_id"}, Filter: "0"}
+
+	for _, reader := range []*tmux.Server{server, connection.Server(), connection.SubprocessServer()} {
+		records, err := reader.QueryRecords(ctx, query)
+		if err != nil || len(records.Rows) != 0 || records.Identity.PID <= 0 {
+			t.Fatalf("empty filtered query = %+v, %v", records, err)
+		}
+	}
+}
+
+func TestIntegrationQueryRecordsPreservesWindowLinks(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+
+	info, err := pane.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	window, err := server.Window(ctx, info.WindowID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	destination, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "destination"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := window.Link(ctx, destination, tmux.LinkOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, kind := range []tmux.ObjectKind{tmux.ObjectKindWindow, tmux.ObjectKindPane} {
+		records, queryErr := server.QueryRecords(ctx, tmux.RecordQuery{
+			Kind:   kind,
+			Fields: []string{"session_id", "window_id"},
+			Filter: tmux.Format("#{==:#{window_id}," + string(window.ID()) + "}"),
+		})
+		if queryErr != nil {
+			t.Fatal(queryErr)
+		}
+
+		links := make(map[string]string, len(records.Rows))
+		for _, row := range records.Rows {
+			links[row["session_id"]] = row["window_id"]
+		}
+
+		want := map[string]string{
+			string(session.ID()):     string(window.ID()),
+			string(destination.ID()): string(window.ID()),
+		}
+		if len(records.Rows) != 2 || !maps.Equal(links, want) {
+			t.Fatalf("%s links = %+v", kind, records.Rows)
+		}
+	}
+}
+
+func TestIntegrationQueryRecordsNoServerAndClosedConnection(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	connection := apiControl(t, ctx, server, session)
+
+	bound := connection.SubprocessServer()
+	if err := connection.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	query := tmux.RecordQuery{Kind: tmux.ObjectKindPane, Fields: []string{"pane_id"}, Filter: ""}
+	if _, err := bound.QueryRecords(ctx, query); !errors.Is(err, tmux.ErrClosed) {
+		t.Fatalf("closed connection query = %v", err)
+	}
+
+	if err := server.KillMatching(ctx, session.ServerIdentity()); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := server.QueryRecords(ctx, query); !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("missing server query = %v", err)
 	}
 }
 

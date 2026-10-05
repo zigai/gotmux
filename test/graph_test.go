@@ -617,7 +617,7 @@ func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 
 	var ctrlOpts tmux.ControlOptions
 
-	conn, err := server.OpenControl(ctx, session, ctrlOpts)
+	conn, err := server.OpenControl(ctx, session.ID(), ctrlOpts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -760,4 +760,179 @@ func assertDecoysUnresolved(t *testing.T, snap tmux.Snapshot) {
 	if session || window || client {
 		t.Fatalf("decoy IDs resolved: session=%v window=%v client=%v", session, window, client)
 	}
+}
+
+// readFixture adds a two-pane "other" session and returns a request whose middle list is empty.
+func readFixture(t *testing.T) (*tmux.Server, tmux.Session, context.Context, tmux.ReadRequest) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherPanes, err := other.Panes(ctx)
+	if err != nil || len(otherPanes) == 0 {
+		t.Fatal("other session has no pane", err)
+	}
+
+	if _, err := otherPanes[0].Handle().Split(ctx, tmux.SplitOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	return server, session, ctx, tmux.ReadRequest{
+		Sessions: tmux.PresentValue(tmux.QueryOptions{ExtraFields: []string{"session_last_attached"}}),
+		Windows:  tmux.PresentValue(tmux.QueryOptions{Filter: "#{==:#{window_name},absent-window}"}),
+		Panes:    tmux.PresentValue(tmux.QueryOptions{Filter: "#{==:#{session_name},other}"}),
+		Clients:  tmux.PresentValue(tmux.QueryOptions{}),
+	}
+}
+
+func TestIntegrationReadMatchesSeparateQueries(t *testing.T) {
+	server, _, ctx, request := readFixture(t)
+	sessionsOpts, _ := request.Sessions.Get()
+	panesOpts, _ := request.Panes.Get()
+
+	got, err := server.Read(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertSameListing(t, func() ([]string, error) { return sessionKeys(server.SessionsWith(ctx, sessionsOpts)) }, func() ([]string, error) { return sessionKeys(got.Sessions, nil) })
+	assertSameListing(t, func() ([]string, error) { return paneKeys(server.PanesWith(ctx, panesOpts)) }, func() ([]string, error) { return paneKeys(got.Panes, nil) })
+	assertRawField(t, got.Sessions, "session_last_attached")
+
+	if len(got.Panes) != 2 || len(got.Windows) != 0 || len(got.Links) != 0 || len(got.Clients) != 0 {
+		t.Fatalf("panes=%d windows=%d links=%d clients=%d, want the other session's 2 panes and empty lists", len(got.Panes), len(got.Windows), len(got.Links), len(got.Clients))
+	}
+
+	probe, err := server.Probe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !got.Server.Identity.Equal(probe.Identity) {
+		t.Fatalf("read identity = %+v, probe identity = %+v", got.Server.Identity, probe.Identity)
+	}
+}
+
+func TestIntegrationReadOverControlMatchesSubprocess(t *testing.T) {
+	server, session, ctx, request := readFixture(t)
+
+	viaSubprocess, err := server.Read(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	conn := apiControl(t, ctx, server, session)
+
+	viaControl, err := conn.Server().Read(ctx, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertSameListing(t, func() ([]string, error) { return sessionKeys(viaSubprocess.Sessions, nil) }, func() ([]string, error) { return sessionKeys(viaControl.Sessions, nil) })
+	assertSameListing(t, func() ([]string, error) { return paneKeys(viaSubprocess.Panes, nil) }, func() ([]string, error) { return paneKeys(viaControl.Panes, nil) })
+
+	if len(viaControl.Clients) != 1 {
+		t.Fatalf("control read clients = %d, want the control client", len(viaControl.Clients))
+	}
+}
+
+func TestIntegrationReadReportsMissingServer(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	if err := server.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := server.Read(ctx, tmux.ReadRequest{Panes: tmux.PresentValue(tmux.QueryOptions{})})
+	if !errors.Is(err, tmux.ErrNoServer) {
+		t.Fatalf("err = %v, want ErrNoServer", err)
+	}
+}
+
+// linkedPaneFixture links a window from an "other" session into the fixture session and
+// returns the linked window's pane and a pane that only the other session contains.
+func linkedPaneFixture(t *testing.T) (tmux.Session, context.Context, tmux.PaneID, tmux.PaneID) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	otherPanes, err := other.Panes(ctx)
+	if err != nil || len(otherPanes) == 0 {
+		t.Fatal("other session has no pane", err)
+	}
+
+	shared, err := other.NewWindow(ctx, tmux.NewWindowOptions{Name: "shared"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	sharedPane, err := shared.Window().ActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	slot := 5
+	if _, err := shared.Window().Link(ctx, session, tmux.LinkOptions{Index: &slot}); err != nil {
+		t.Fatal(err)
+	}
+
+	return session, ctx, sharedPane.ID(), otherPanes[0].ID
+}
+
+func TestIntegrationSessionPanesWithStaysInSession(t *testing.T) {
+	session, ctx, linkedPane, outsidePane := linkedPaneFixture(t)
+
+	byID := func(id tmux.PaneID) tmux.QueryOptions {
+		return tmux.QueryOptions{Filter: tmux.Format("#{==:#{pane_id}," + string(id) + "}")}
+	}
+
+	linked, err := paneKeys(session.PanesWith(ctx, byID(linkedPane)))
+	if err != nil || len(linked) != 1 || linked[0] != string(linkedPane) {
+		t.Fatalf("linked pane lookup = %v %v, want %s", linked, err, linkedPane)
+	}
+
+	outside, err := paneKeys(session.PanesWith(ctx, byID(outsidePane)))
+	if err != nil || len(outside) != 0 {
+		t.Fatalf("pane outside session = %v %v, want none", outside, err)
+	}
+
+	withExtra, err := session.PanesWith(ctx, tmux.QueryOptions{ExtraFields: []string{"window_active"}})
+	if err != nil || len(withExtra) == 0 {
+		t.Fatal("session panes with extra field", err)
+	}
+
+	assertRawField(t, withExtra, "window_active")
+}
+
+type rawFields interface {
+	Raw(name string) ([]byte, bool)
+}
+
+func assertRawField[R rawFields](t *testing.T, records []R, field string) {
+	t.Helper()
+
+	for i, record := range records {
+		if _, ok := record.Raw(field); !ok {
+			t.Fatalf("record %d missing requested field %s", i, field)
+		}
+	}
+}
+
+func sessionKeys(sessions []tmux.SessionInfo, err error) ([]string, error) {
+	keys := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		keys = append(keys, string(s.ID))
+	}
+
+	return keys, err
 }

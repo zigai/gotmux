@@ -8,6 +8,9 @@ import (
 	"io"
 	"sync/atomic"
 	"time"
+
+	"github.com/zigai/gotmux/internal/schema"
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 const readerBufferSize = 32 << 10
@@ -74,10 +77,13 @@ func (c *Connection) reader() {
 }
 
 func (c *Connection) collect(ctx context.Context, nonce string, outLimit, errLimit int64) (Result, error) {
-	return c.collectRequest(ctx.Done(), nonce, outLimit, errLimit)
+	return c.collectRequest(ctx.Done(), nonce, outLimit, errLimit, true)
 }
 
-func (c *Connection) collectRequest(done <-chan struct{}, nonce string, outLimit, errLimit int64) (Result, error) {
+// collectRequest gathers frames until nonce. During startup, tmux reports the client's
+// own command line with unflagged frames, so a failed unflagged frame is that command's
+// failure rather than unrelated protocol output.
+func (c *Connection) collectRequest(done <-chan struct{}, nonce string, outLimit, errLimit int64, startup bool) (Result, error) {
 	result := Result{Stdout: []byte{}, Stderr: []byte{}, ExitCode: -1}
 
 	var (
@@ -104,7 +110,7 @@ func (c *Connection) collectRequest(done <-chan struct{}, nonce string, outLimit
 			c.stop(errors.Join(ErrProtocol, ErrShutdownIncomplete), false)
 			return result, errors.Join(failure, ErrProtocol, ErrShutdownIncomplete)
 		case f := <-c.frames:
-			if c.handleCollectFrame(f, nonce, &result, outLimit, errLimit, &failure) {
+			if c.handleCollectFrame(f, nonce, startup, &result, outLimit, errLimit, &failure) {
 				return result, failure
 			}
 		}
@@ -126,21 +132,17 @@ func appendFrameData(dst *[]byte, data []byte, limit int64) bool {
 	return true
 }
 
-func (c *Connection) handleCollectFrame(f controlFrame, nonce string, result *Result, outLimit, errLimit int64, failure *error) bool {
+func (c *Connection) handleCollectFrame(f controlFrame, nonce string, startup bool, result *Result, outLimit, errLimit int64, failure *error) bool {
 	if bytes.Equal(f.data, []byte(nonce)) && !f.failed {
 		return true
 	}
 
-	if f.id.flags == 0 {
-		if len(f.data) == 0 {
+	if f.id.flags == 0 && !f.libraryOutput() {
+		switch {
+		case len(f.data) == 0 || !f.failed:
 			return false
-		}
-
-		if !bytes.HasPrefix(f.data, []byte("TGO-GUARD-1:")) && !bytes.HasPrefix(f.data, []byte("TGO1:")) {
-			if f.failed {
-				*failure = errors.Join(*failure, ErrProtocol)
-			}
-
+		case !startup:
+			*failure = errors.Join(*failure, ErrProtocol)
 			return false
 		}
 	}
@@ -158,6 +160,11 @@ func (c *Connection) handleCollectFrame(f controlFrame, nonce string, result *Re
 	return false
 }
 
+// libraryOutput reports whether an unflagged frame carries a record or guard marker that this library emitted.
+func (f controlFrame) libraryOutput() bool {
+	return bytes.HasPrefix(f.data, []byte("TGO-GUARD-1:")) || bytes.HasPrefix(f.data, []byte("TGO1:"))
+}
+
 func (c *Connection) releaseRequest(r *controlRequest) { c.bytes.Release(r.bytes); c.count.Release(1) }
 
 func (c *Connection) deliver(r *controlRequest, result Result, err error, effect Effect) {
@@ -171,14 +178,13 @@ func (c *Connection) deliver(r *controlRequest, result Result, err error, effect
 	c.releaseRequest(r)
 }
 
-func (c *Connection) performStartupHandshake(ctx context.Context, nonce string, g *guard) error {
+func (c *Connection) performStartupHandshake(ctx context.Context, nonce string) error {
 	startupCtx, cancel := context.WithTimeout(ctx, c.original.config.Limits.CommandTimeout)
 	defer cancel()
 
 	result, err := c.collect(startupCtx, nonce, c.original.config.Limits.OutputBytes, c.original.config.Limits.OutputBytes)
-
-	if g != nil {
-		_, err = g.unwrap(result, err)
+	if err == nil {
+		err = c.verifyStartup(result.Stdout)
 	}
 
 	c.ready <- err
@@ -189,6 +195,31 @@ func (c *Connection) performStartupHandshake(ctx context.Context, nonce string, 
 
 	return err
 }
+
+// verifyStartup binds the connection to the daemon that answered the identity record
+// sent in its attach command.
+func (c *Connection) verifyStartup(stdout []byte) error {
+	rows, err := parseRaw(stdout, schema.Identity, "server")
+	if err != nil {
+		return err
+	}
+
+	if len(rows) != 1 {
+		return decodeError("server", "record count", wire.ErrRecord)
+	}
+
+	info, err := c.server.serverInfo(rows[0])
+	if err != nil {
+		return err
+	}
+
+	c.identity = info.Identity
+	c.info = info
+
+	return nil
+}
+
+func (c *Connection) verified() ServerInfo { return c.info }
 
 func (c *Connection) drainRequests() {
 	for {
@@ -238,7 +269,7 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 		return true
 	}
 
-	wire, nonce, err := buildRequestWire(r)
+	payload, nonce, err := buildRequestWire(r)
 	if err != nil {
 		c.deliver(r, failedResult(), err, EffectNotSent)
 		return true
@@ -251,14 +282,14 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 
 	_ = c.stdin.SetWriteDeadline(deadline)
 
-	if _, err := io.WriteString(c.stdin, wire); err != nil {
+	if _, err := io.WriteString(c.stdin, payload); err != nil {
 		c.stop(err, false)
 		c.deliver(r, failedResult(), err, EffectUnknown)
 
 		return false
 	}
 
-	result, err := c.collectRequest(r.done, nonce, r.stdout, r.stderr)
+	result, err := c.collectRequest(r.done, nonce, r.stdout, r.stderr, false)
 
 	effect := EffectUnknown
 	if err == nil {
@@ -270,8 +301,8 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 	return true
 }
 
-func (c *Connection) dispatch(ctx context.Context, nonce string, g *guard) {
-	if err := c.performStartupHandshake(ctx, nonce, g); err != nil {
+func (c *Connection) dispatch(ctx context.Context, nonce string) {
+	if err := c.performStartupHandshake(ctx, nonce); err != nil {
 		return
 	}
 

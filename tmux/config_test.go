@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/zigai/gotmux/internal/wire"
 )
 
 func localServer(t *testing.T) *Server {
@@ -26,6 +28,10 @@ func localServer(t *testing.T) *Server {
 
 func fixtureIdentity(s *Server) ServerIdentity {
 	return ServerIdentity{Endpoint: s.endpoint, ReportedSocket: s.endpoint.String(), PID: 42, Started: time.Unix(100, 0), Generation: 0}
+}
+
+func fixtureIdentityRecord(s *Server) string {
+	return string(wire.EncodeRecord([]string{"42", "100", s.endpoint.String(), "3.8"}))
 }
 
 func TestNewIsPureAndCopiesConfig(t *testing.T) {

@@ -737,7 +737,7 @@ func (s *Server) Messages(ctx context.Context, opts MessagesOptions) ([]string, 
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.Messages", err)
 	}
@@ -987,7 +987,7 @@ func (s *Server) PromptHistory(ctx context.Context, promptType string) ([]string
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.PromptHistory", err)
 	}

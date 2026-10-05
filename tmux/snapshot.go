@@ -158,7 +158,7 @@ func (v Snapshot) ResolveClient(name ClientName) (Client, bool) {
 }
 
 // Snapshot collects a point-in-time observation of the entire daemon's sessions,
-// windows, links, panes, and clients in a small number of batched queries.
+// windows, links, panes, and clients in one tmux command list (see [Server.Read]).
 //
 // It validates cross-entity references and marks the snapshot [ConsistencyComplete] or [ConsistencyIncomplete].
 func (s *Server) Snapshot(ctx context.Context) (Snapshot, error) {
@@ -172,32 +172,19 @@ func (s *Server) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	out.Started = time.Now()
 
-	info, err := s.probe(opCtx, op)
+	all := PresentValue(QueryOptions{Filter: "", ExtraFields: nil})
+
+	lists, err := s.readLists(opCtx, "Server.Snapshot", op, ReadRequest{Sessions: all, Windows: all, Panes: all, Clients: all})
 	if err != nil {
 		return Snapshot{}, opError("Server.Snapshot", err)
 	}
 
-	out.Identity = info.Identity
-
-	out.sessions, err = s.sessions(opCtx, "Server.Snapshot", op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil})
-	if err != nil {
-		return Snapshot{}, opError("Server.Snapshot", err)
-	}
-
-	out.windows, out.links, err = s.windows(opCtx, "Server.Snapshot", op, info.Identity, "")
-	if err != nil {
-		return Snapshot{}, opError("Server.Snapshot", err)
-	}
-
-	out.panes, err = s.panes(opCtx, "Server.Snapshot", op, info.Identity, QueryOptions{Filter: "", ExtraFields: nil}, "")
-	if err != nil {
-		return Snapshot{}, opError("Server.Snapshot", err)
-	}
-
-	out.clients, err = s.clients(opCtx, "Server.Snapshot", op, info.Identity)
-	if err != nil {
-		return Snapshot{}, opError("Server.Snapshot", err)
-	}
+	out.Identity = lists.Server.Identity
+	out.sessions = lists.Sessions
+	out.windows = lists.Windows
+	out.links = lists.Links
+	out.panes = lists.Panes
+	out.clients = lists.Clients
 
 	if err = opCtx.Err(); err != nil {
 		return Snapshot{}, afterError("Server.Snapshot", err)

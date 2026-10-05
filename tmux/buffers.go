@@ -113,7 +113,7 @@ func (s *Server) Buffers(ctx context.Context) ([]BufferInfo, error) {
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return nil, opError("Server.Buffers", err)
 	}
@@ -176,7 +176,7 @@ func (s *Server) bufferOperation(ctx context.Context, label string, name string,
 		return failedResult(), opError(label, ErrInputLimit)
 	}
 
-	info, err := s.probe(opCtx, op)
+	info, err := s.verifiedInfo(opCtx, op)
 	if err != nil {
 		return failedResult(), opError(label, err)
 	}

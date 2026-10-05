@@ -142,7 +142,7 @@ func (t optionTarget) prepare(ctx context.Context) (context.Context, *operation,
 		return opCtx, op, t.h.guard(), nil
 	}
 
-	info, err := t.server.probe(opCtx, op)
+	info, err := t.server.verifiedInfo(opCtx, op)
 	if err != nil {
 		op.close()
 		return nil, nil, nil, err

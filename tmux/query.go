@@ -25,10 +25,45 @@ type QueryOptions struct {
 	ExtraFields []string
 }
 
-func queryFields(base []string, extra []string) ([]string, error) {
-	out := append([]string{}, base...)
+type RecordQuery struct {
+	Kind   ObjectKind
+	Fields []string
+	Filter Format
+}
 
-	seen := map[string]bool{}
+type RecordSet struct {
+	Identity ServerIdentity
+	Version  Version
+	Rows     []map[string]string
+}
+
+func (s *Server) QueryRecords(ctx context.Context, query RecordQuery) (RecordSet, error) {
+	const label = "Server.QueryRecords"
+
+	opCtx, op, err := s.begin(ctx)
+	if err != nil {
+		return RecordSet{}, opError(label, err)
+	}
+	defer op.close()
+
+	req, err := recordQueryRequest(query)
+	if err != nil {
+		return RecordSet{}, opError(label, err)
+	}
+
+	info, rows, err := s.readRecords(opCtx, label, op, []readRequest{req})
+	if err != nil {
+		return RecordSet{}, opError(label, err)
+	}
+
+	return RecordSet{Identity: info.Identity, Version: info.Version, Rows: rows[0]}, nil
+}
+
+func queryFields(base []string, extra []string) ([]string, error) {
+	out := make([]string, len(base), len(base)+len(extra))
+	copy(out, base)
+
+	seen := make(map[string]bool, len(base)+len(extra))
 	for _, s := range out {
 		seen[s] = true
 	}
@@ -117,19 +152,12 @@ func (s *Server) probe(ctx context.Context, op *operation) (ServerInfo, error) {
 		return wrapErr(afterError("Server.Probe", decodeError("server", "record count", wire.ErrRecord)))
 	}
 
-	d := &recordDecoder{kind: "server", raw: rows[0], err: nil}
-	id := s.decodeIdentity(d)
-
-	v := ParseVersion(d.str("version"))
-	if d.err != nil {
-		return wrapErr(afterError("Server.Probe", d.err))
-	}
-
-	if err := supportedVersion(v); err != nil {
+	info, err := s.serverInfo(rows[0])
+	if err != nil {
 		return wrapErr(err)
 	}
 
-	return ServerInfo{rawRecord: rawRecord{raw: rows[0]}, Identity: id, Version: v}, nil
+	return info, nil
 }
 
 func listCommandAndArgs(kind ObjectKind, target string) (string, []string, error) {
@@ -178,31 +206,13 @@ func (s *Server) parseOrRetry(ctx context.Context, op *operation, p plan, g *gua
 	return retriedRows, nil
 }
 
-func (s *Server) listRaw(ctx context.Context, label string, op *operation, kind ObjectKind, expected ServerIdentity, opts QueryOptions, target string) ([]map[string]string, error) {
-	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
+func (s *Server) listRaw(ctx context.Context, label string, op *operation, kind ObjectKind, expected ServerIdentity, opts QueryOptions, target string, scope ...string) ([]map[string]string, error) {
+	req, err := listRequest(kind, opts, target, scope...)
 	if err != nil {
 		return nil, err
 	}
 
-	name, args, err := listCommandAndArgs(kind, target)
-	if err != nil {
-		return nil, err
-	}
-
-	if target != "" {
-		args = append(args, "-t", target)
-	}
-
-	if opts.Filter != "" {
-		if !wire.ValidString(string(opts.Filter)) {
-			return nil, invalid("filter")
-		}
-
-		args = append(args, "-f", string(opts.Filter))
-	}
-
-	args = append(args, "-F", wire.RecordFormat(fields))
-	p := recordsPlan(command(name, args...))
+	p := plan{nodes: []wireNode{req.node}, mode: replyRecords, allowStart: false}
 
 	var g *guard
 	if expected.valid() {
@@ -214,7 +224,7 @@ func (s *Server) listRaw(ctx context.Context, label string, op *operation, kind 
 		return nil, err
 	}
 
-	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
+	rows, err := s.parseOrRetry(ctx, op, p, g, r, req.fields, string(kind))
 	if err != nil {
 		return nil, afterError(label, err)
 	}
@@ -237,12 +247,17 @@ func (s *Server) SessionsWith(ctx context.Context, opts QueryOptions) ([]Session
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	req, err := listRequest(ObjectKindSession, opts, "")
 	if err != nil {
 		return nil, opError("Server.Sessions", err)
 	}
 
-	out, err := s.sessions(opCtx, "Server.Sessions", op, info.Identity, opts)
+	info, rows, err := s.readRecords(opCtx, "Server.Sessions", op, []readRequest{req})
+	if err != nil {
+		return nil, opError("Server.Sessions", err)
+	}
+
+	out, err := s.decodeSessions("Server.Sessions", rows[0], info.Identity)
 
 	return out, opError("Server.Sessions", err)
 }
@@ -253,6 +268,10 @@ func (s *Server) sessions(ctx context.Context, label string, op *operation, id S
 		return nil, err
 	}
 
+	return s.decodeSessions(label, rows, id)
+}
+
+func (s *Server) decodeSessions(label string, rows []map[string]string, id ServerIdentity) ([]SessionInfo, error) {
 	out := make([]SessionInfo, 0, len(rows))
 	for _, m := range rows {
 		v, err := s.decodeSession(m, &id)
@@ -287,14 +306,19 @@ func (s *Server) WindowsWith(ctx context.Context, opts QueryOptions) ([]WindowIn
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	req, err := listRequest(ObjectKindWindow, opts, "")
 	if err != nil {
 		return nil, opError("Server.Windows", err)
 	}
 
-	w, _, err := s.windowsWith(opCtx, "Server.Windows", op, info.Identity, opts, "")
+	info, rows, err := s.readRecords(opCtx, "Server.Windows", op, []readRequest{req})
+	if err != nil {
+		return nil, opError("Server.Windows", err)
+	}
 
-	return w, opError("Server.Windows", err)
+	out, _, err := s.decodeWindows("Server.Windows", rows[0], info.Identity)
+
+	return out, opError("Server.Windows", err)
 }
 
 func (s *Server) windows(ctx context.Context, label string, op *operation, id ServerIdentity, target string) ([]WindowInfo, []WindowLinkInfo, error) {
@@ -307,6 +331,10 @@ func (s *Server) windowsWith(ctx context.Context, label string, op *operation, i
 		return nil, nil, err
 	}
 
+	return s.decodeWindows(label, rows, id)
+}
+
+func (s *Server) decodeWindows(label string, rows []map[string]string, id ServerIdentity) ([]WindowInfo, []WindowLinkInfo, error) {
 	out := make([]WindowInfo, 0, len(rows))
 	links := make([]WindowLinkInfo, 0, len(rows))
 	seen := map[WindowID]bool{}
@@ -352,22 +380,31 @@ func (s *Server) PanesWith(ctx context.Context, opts QueryOptions) ([]PaneInfo, 
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	req, err := listRequest(ObjectKindPane, opts, "")
 	if err != nil {
 		return nil, opError("Server.Panes", err)
 	}
 
-	out, err := s.panes(opCtx, "Server.Panes", op, info.Identity, opts, "")
+	info, rows, err := s.readRecords(opCtx, "Server.Panes", op, []readRequest{req})
+	if err != nil {
+		return nil, opError("Server.Panes", err)
+	}
+
+	out, err := s.decodePanes("Server.Panes", rows[0], info.Identity)
 
 	return out, opError("Server.Panes", err)
 }
 
-func (s *Server) panes(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions, target string) ([]PaneInfo, error) {
-	rows, err := s.listRaw(ctx, label, op, ObjectKindPane, id, opts, target)
+func (s *Server) panes(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions, target string, scope ...string) ([]PaneInfo, error) {
+	rows, err := s.listRaw(ctx, label, op, ObjectKindPane, id, opts, target, scope...)
 	if err != nil {
 		return nil, err
 	}
 
+	return s.decodePanes(label, rows, id)
+}
+
+func (s *Server) decodePanes(label string, rows []map[string]string, id ServerIdentity) ([]PaneInfo, error) {
 	out := make([]PaneInfo, 0, len(rows))
 
 	seen := make(map[PaneID]bool, len(rows))
@@ -377,7 +414,7 @@ func (s *Server) panes(ctx context.Context, label string, op *operation, id Serv
 			return nil, afterError(label, err)
 		}
 
-		// list-panes -a repeats panes for windows linked into multiple sessions.
+		// list-panes -a and -s repeat panes for windows linked into multiple sessions.
 		if !seen[v.ID] {
 			seen[v.ID] = true
 			out = append(out, v)
@@ -403,26 +440,22 @@ func (s *Server) ClientsWith(ctx context.Context, opts QueryOptions) ([]ClientIn
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	req, err := listRequest(ObjectKindClient, opts, "")
 	if err != nil {
 		return nil, opError("Server.Clients", err)
 	}
 
-	out, err := s.clientsWith(opCtx, "Server.Clients", op, info.Identity, opts)
+	info, rows, err := s.readRecords(opCtx, "Server.Clients", op, []readRequest{req})
+	if err != nil {
+		return nil, opError("Server.Clients", err)
+	}
+
+	out, err := s.decodeClients("Server.Clients", rows[0], info.Identity)
 
 	return out, opError("Server.Clients", err)
 }
 
-func (s *Server) clients(ctx context.Context, label string, op *operation, id ServerIdentity) ([]ClientInfo, error) {
-	return s.clientsWith(ctx, label, op, id, QueryOptions{Filter: "", ExtraFields: nil})
-}
-
-func (s *Server) clientsWith(ctx context.Context, label string, op *operation, id ServerIdentity, opts QueryOptions) ([]ClientInfo, error) {
-	rows, err := s.listRaw(ctx, label, op, ObjectKindClient, id, opts, "")
-	if err != nil {
-		return nil, err
-	}
-
+func (s *Server) decodeClients(label string, rows []map[string]string, id ServerIdentity) ([]ClientInfo, error) {
 	out := make([]ClientInfo, 0, len(rows))
 	for _, m := range rows {
 		v, err := s.decodeClient(m, &id)
@@ -449,36 +482,41 @@ func (s *Server) lookup(ctx context.Context, label string, kind ObjectKind, id s
 	}
 	defer op.close()
 
-	info, err := s.probe(opCtx, op)
+	req, err := inspectRequest(kind, id, QueryOptions{Filter: "", ExtraFields: nil})
 	if err != nil {
 		return nil, err
 	}
 
-	return s.inspect(opCtx, label, op, kind, id, newGuard(info.Identity), QueryOptions{Filter: "", ExtraFields: nil})
+	_, rows, err := s.readRecords(opCtx, label, op, []readRequest{req})
+	if err != nil {
+		return nil, err
+	}
+
+	return inspectedRow(label, kind, rows[0])
 }
 
 func (s *Server) inspect(ctx context.Context, label string, op *operation, kind ObjectKind, target string, g *guard, opts QueryOptions) (map[string]string, error) {
-	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
+	req, err := inspectRequest(kind, target, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	p := recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat(fields)))
-	if kind == ObjectKindClient {
-		// display-message -c expands session fields from the default target, not the client's session.
-		p = recordsPlan(command("list-clients", "-f", clientFilter(target), "-F", wire.RecordFormat(fields)))
-	}
+	p := plan{nodes: []wireNode{req.node}, mode: replyRecords, allowStart: false}
 
 	r, err := s.execute(ctx, op, p, g, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	rows, err := s.parseOrRetry(ctx, op, p, g, r, fields, string(kind))
+	rows, err := s.parseOrRetry(ctx, op, p, g, r, req.fields, string(kind))
 	if err != nil {
 		return nil, afterError(label, err)
 	}
 
+	return inspectedRow(label, kind, rows)
+}
+
+func inspectedRow(label string, kind ObjectKind, rows []map[string]string) (map[string]string, error) {
 	if kind == ObjectKindClient && len(rows) == 0 {
 		return nil, opError(label, ErrNotFound)
 	}
@@ -881,7 +919,7 @@ func (w Window) Links(ctx context.Context) ([]WindowLink, error) {
 	}
 	defer op.close()
 
-	_, links, err := w.h.server.windows(opCtx, "Window.Links", op, w.h.origin, "")
+	_, links, err := w.h.server.windowsWith(opCtx, "Window.Links", op, w.h.origin, QueryOptions{Filter: Format(eqFormat("window_id", w.h.id)), ExtraFields: nil}, "")
 	if err != nil {
 		return nil, opError("Window.Links", err)
 	}

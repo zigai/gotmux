@@ -17,7 +17,7 @@ const (
 	wantFields
 
 	minRecordOverhead = 3
-	maxHeaderFields   = 1024
+	MaxRecordFields   = 1024
 	octalBase         = 8
 	maxByteValue      = 255
 )
@@ -181,7 +181,7 @@ func scanRecordHeader(r Reader, maxBytes int64) (int64, int64, error) {
 		return 0, 0, ErrRecord
 	}
 
-	count, n, err := decimal(r, maxHeaderFields)
+	count, n, err := decimal(r, MaxRecordFields)
 	if err != nil {
 		return 0, 0, err
 	}
