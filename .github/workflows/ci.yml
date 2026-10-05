@@ -38,7 +38,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
-        tmux: ['3.6', '3.6a', '3.6b', '3.7c', '3.8-rc2']
+        tmux: ['3.6', '3.6a', '3.6b', '3.7c', '3.8-rc3']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
