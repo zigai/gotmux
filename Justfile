@@ -108,7 +108,7 @@ check:
     go run ./internal/schema/generate -check
     golangci-lint run
     golangci-lint fmt --diff
-    go test ./...
+    TMUX_INTEGRATION_REQUIRED=1 go test -race -tags=integration ./...
 
 # Regenerate scoped option accessors
 generate:
