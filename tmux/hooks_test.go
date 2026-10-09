@@ -1,6 +1,7 @@
 package tmux
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -103,6 +104,27 @@ func TestKeyValidCaseAndAliases(t *testing.T) {
 		got := Key(k).Valid()
 		if got != want {
 			t.Errorf("Key(%q).Valid() = %v, want %v", k, got, want)
+		}
+	}
+}
+
+func TestBindingNoMatchKeepsTransportFailures(t *testing.T) {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, ErrOutputLimit, ErrProtocol, ErrClosed} {
+		err := &CommandError{
+			Command: "list-keys",
+			Result:  Result{Stdout: nil, Stderr: []byte("unknown key: x\n"), ExitCode: 1},
+			Outcome: Outcome{Effect: EffectUnspecified, Steps: nil, Created: nil},
+			Timeout: TimeoutSourceNone,
+			Err:     cause,
+		}
+		if bindingQueryNoMatch(err, BindingsOptions{
+			Table:      "",
+			Key:        "x",
+			FirstMatch: false,
+			NotesOnly:  false,
+			Prefix:     "",
+		}) {
+			t.Errorf("transport failure %v was classified as no match", cause)
 		}
 	}
 }

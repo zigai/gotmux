@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -471,16 +472,12 @@ func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, e
 func listKeysArgs(opts BindingsOptions) []string {
 	var args []string
 
-	if opts.FirstMatch {
-		args = append(args, "-1")
-	}
-
 	if opts.Table != "" {
 		args = append(args, "-T", string(opts.Table))
 	}
 
 	if opts.Key != "" {
-		args = append(args, string(opts.Key))
+		args = append(args, "--", string(opts.Key))
 	}
 
 	return args
@@ -518,7 +515,7 @@ func (s *Server) FindBindings(ctx context.Context, opts BindingsOptions) ([]Bind
 
 	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", listKeysArgs(opts)...)), newGuard(info.Identity), nil)
 	if err != nil {
-		if opts.Table != "" && strings.Contains(string(r.Stderr), "doesn't exist") {
+		if bindingQueryNoMatch(err, opts) {
 			return []BindingInfo{}, nil
 		}
 
@@ -526,12 +523,15 @@ func (s *Server) FindBindings(ctx context.Context, opts BindingsOptions) ([]Bind
 	}
 
 	out := parseBindingsLines(r.Stdout, opts.Table, opts.Table)
-	if opts.Key != "" {
-		out = filterBindingsByKey(out, opts.Key)
+	if opts.NotesOnly {
+		out, err = s.notedBindings(opCtx, op, info, out)
+		if err != nil {
+			return nil, opError("Server.FindBindings", err)
+		}
 	}
 
-	if len(out) == 0 && opts.Table != "" && !opts.FirstMatch {
-		out = s.fallbackBindings(opCtx, op, info, opts.Table, opts.Key)
+	if opts.FirstMatch && len(out) > 1 {
+		out = out[:1]
 	}
 
 	return out, nil
@@ -560,28 +560,53 @@ func (s *Server) BindingNotes(ctx context.Context, opts BindingsOptions) ([]Bind
 
 	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", bindingNotesArgs(opts)...)), newGuard(info.Identity), nil)
 	if err != nil {
-		if opts.Table != "" && strings.Contains(string(r.Stderr), "doesn't exist") {
+		if bindingQueryNoMatch(err, opts) {
 			return []BindingNote{}, nil
 		}
 
 		return nil, opError("Server.BindingNotes", err)
 	}
 
-	notes := parseNotesOutput(r.Stdout, opts)
-	if len(notes) == 0 && opts.Key != "" && opts.Table != "" {
-		notes = s.fallbackBindingNotes(opCtx, op, info, opts)
-	}
-
-	return notes, nil
+	return parseNotesOutput(r.Stdout, opts), nil
 }
 
 func bindingNotesArgs(opts BindingsOptions) []string {
-	args := append([]string{"-N"}, listKeysArgs(opts)...)
+	args := []string{"-N"}
+	if opts.FirstMatch {
+		args = append(args, "-1")
+	}
+
+	if opts.Table != "" {
+		args = append(args, "-T", string(opts.Table))
+	}
+
 	if opts.Prefix != "" {
 		args = append(args, "-P", opts.Prefix)
 	}
 
+	if opts.Key != "" {
+		args = append(args, "--", string(opts.Key))
+	}
+
 	return args
+}
+
+func bindingQueryNoMatch(err error, opts BindingsOptions) bool {
+	for _, cause := range []error{context.Canceled, context.DeadlineExceeded, ErrOutputLimit, ErrProtocol, ErrClosed} {
+		if errors.Is(err, cause) {
+			return false
+		}
+	}
+
+	commandError, ok := errors.AsType[*CommandError](err)
+	if !ok || commandError.Command != "list-keys" || commandError.Timeout != TimeoutSourceNone || len(commandError.Result.Stdout) != 0 {
+		return false
+	}
+
+	message := strings.TrimSuffix(string(commandError.Result.Stderr), "\n")
+
+	return (opts.Table != "" && message == "table "+string(opts.Table)+" doesn't exist") ||
+		(opts.Key != "" && message == "unknown key: "+string(opts.Key))
 }
 
 func parseNotesOutput(stdout []byte, opts BindingsOptions) []BindingNote {
@@ -599,51 +624,18 @@ func parseNotesOutput(stdout []byte, opts BindingsOptions) []BindingNote {
 	return notes
 }
 
-func (s *Server) fallbackBindingNotes(ctx context.Context, op *operation, info ServerInfo, opts BindingsOptions) []BindingNote {
-	fallbackArgs := []string{"-a"}
-	if opts.Table != "" {
-		fallbackArgs = append(fallbackArgs, "-T", string(opts.Table))
-	}
-
-	if opts.Prefix != "" {
-		fallbackArgs = append(fallbackArgs, "-P", opts.Prefix)
-	}
-
-	fallbackArgs = append(fallbackArgs, "-F", "#{?key_note,#{key_string}\t#{key_note},}")
-
-	rAll, errAll := s.execute(ctx, op, plainPlan(command("list-keys", fallbackArgs...)), newGuard(info.Identity), nil)
-	if errAll != nil || len(rAll.Stdout) == 0 {
-		return nil
-	}
-
-	var notes []BindingNote
-
-	for line := range bytes.SplitSeq(bytes.TrimSuffix(rAll.Stdout, []byte{'\n'}), []byte{'\n'}) {
-		trimmed := strings.TrimRight(string(line), "\r\n")
-		if len(trimmed) == 0 {
-			continue
-		}
-
-		if keyPart, notePart, ok := strings.Cut(trimmed, "\t"); ok {
-			k := strings.TrimSpace(keyPart)
-			noteText := strings.TrimSpace(notePart)
-
-			if opts.Key != "" && k != string(opts.Key) {
-				continue
-			}
-
-			notes = append(notes, BindingNote{
-				Raw:  k + "  " + noteText,
-				Key:  k,
-				Note: noteText,
-			})
-		}
-	}
-
-	return notes
-}
-
 func parseBindingNote(trimmed string, opts BindingsOptions) BindingNote {
+	if opts.Prefix != "" && strings.HasPrefix(trimmed, opts.Prefix) {
+		rest := strings.TrimLeft(strings.TrimPrefix(trimmed, opts.Prefix), " ")
+		key, note, _ := strings.Cut(rest, " ")
+
+		return BindingNote{
+			Raw:  trimmed,
+			Key:  strings.TrimSpace(opts.Prefix + key),
+			Note: strings.TrimSpace(note),
+		}
+	}
+
 	if i := strings.Index(trimmed, "  "); i >= 0 {
 		return BindingNote{
 			Raw:  trimmed,
@@ -659,17 +651,6 @@ func parseBindingNote(trimmed string, opts BindingsOptions) BindingNote {
 			Raw:  trimmed,
 			Key:  strings.TrimSpace(trimmed[:idx+len(opts.Key)]),
 			Note: strings.TrimSpace(trimmed[idx+len(opts.Key):]),
-		}
-	}
-
-	if opts.Prefix != "" && strings.HasPrefix(trimmed, opts.Prefix) {
-		rest := strings.TrimLeft(strings.TrimPrefix(trimmed, opts.Prefix), " ")
-		k, n, _ := strings.Cut(rest, " ")
-
-		return BindingNote{
-			Raw:  trimmed,
-			Key:  strings.TrimSpace(opts.Prefix + k),
-			Note: strings.TrimSpace(n),
 		}
 	}
 
@@ -707,43 +688,44 @@ func parseBindingsLines(stdout []byte, defaultTable, filterTable KeyTable) []Bin
 	return out
 }
 
-func (s *Server) fallbackBindings(ctx context.Context, op *operation, info ServerInfo, table KeyTable, key Key) []BindingInfo {
-	args := []string{}
-	if table != "" {
-		args = append(args, "-T", string(table))
-	}
+func (s *Server) notedBindings(ctx context.Context, op *operation, info ServerInfo, bindings []BindingInfo) ([]BindingInfo, error) {
+	noted := make(map[KeyTable]map[Key]bool)
+	out := []BindingInfo{}
 
-	defaultTable := table
+	for _, binding := range bindings {
+		keys, queried := noted[binding.Table]
+		if !queried {
+			args := []string{"-N", "-P", "", "-T", string(binding.Table)}
 
-	r, err := s.execute(ctx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
-	if err != nil || len(r.Stdout) == 0 {
-		rAll, errAll := s.execute(ctx, op, plainPlan(command("list-keys")), newGuard(info.Identity), nil)
-		if errAll != nil {
-			return nil
+			result, err := s.execute(ctx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
+			if err != nil && !bindingQueryNoMatch(err, BindingsOptions{
+				Table:      binding.Table,
+				Key:        "",
+				FirstMatch: false,
+				NotesOnly:  false,
+				Prefix:     "",
+			}) {
+				return nil, err
+			}
+
+			keys = make(map[Key]bool)
+
+			for line := range bytes.SplitSeq(result.Stdout, []byte{'\n'}) {
+				key, _, ok := strings.Cut(strings.TrimSpace(string(line)), " ")
+				if ok {
+					keys[Key(key)] = true
+				}
+			}
+
+			noted[binding.Table] = keys
 		}
 
-		r = rAll
-		defaultTable = KeyTablePrefix
-	}
-
-	out := parseBindingsLines(r.Stdout, defaultTable, table)
-	if key != "" {
-		out = filterBindingsByKey(out, key)
-	}
-
-	return out
-}
-
-func filterBindingsByKey(bindings []BindingInfo, key Key) []BindingInfo {
-	var filtered []BindingInfo
-
-	for _, b := range bindings {
-		if b.Key == key {
-			filtered = append(filtered, b)
+		if keys[binding.Key] {
+			out = append(out, binding)
 		}
 	}
 
-	return filtered
+	return out, nil
 }
 
 func parseBinding(raw string, table KeyTable) BindingInfo {

@@ -4,6 +4,7 @@ package test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -161,6 +162,208 @@ func TestIntegrationBindingsLifecycle(t *testing.T) {
 	bindings, err = server.Bindings(ctx, table)
 	if err != nil || len(bindings) != 1 || bindings[0].Key != "y" {
 		t.Fatalf("unbind changed sentinel: %+v, %v", bindings, err)
+	}
+}
+
+func TestIntegrationBindingQueriesMatchNativeKeys(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const table tmux.KeyTable = "query-keys"
+
+	command := testCommand(t, "display-message", "pressed")
+	sequence := testSequence(t, command)
+
+	for _, key := range []tmux.Key{"Enter", "PPage", "IC", "C-Up"} {
+		if err := server.Bind(ctx, table, key, sequence, tmux.BindOptions{Note: "note"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, key := range []tmux.Key{"enter", "ENTER", "PgUp", "PageUp", "ppage", "Insert", "ic", "c-up"} {
+		t.Run(string(key), func(t *testing.T) {
+			got, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, Key: key})
+			if err != nil || len(got) != 1 {
+				t.Fatalf("key %s: %+v, %v", key, got, err)
+			}
+
+			assertPayload(t, got[0].Payload, command)
+		})
+	}
+}
+
+func TestIntegrationBindingQueriesEmptyAndErrors(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const table tmux.KeyTable = "query-empty"
+
+	command := testCommand(t, "display-message", "pressed")
+	if err := server.Bind(ctx, table, "x", testSequence(t, command), tmux.BindOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, options := range []tmux.BindingsOptions{{Table: table, Key: "z"}, {Table: "absent-table"}, {Table: table, Key: "x", NotesOnly: true}} {
+		got, err := server.FindBindings(ctx, options)
+		if err != nil || len(got) != 0 {
+			t.Fatalf("no match %+v: %+v, %v", options, got, err)
+		}
+	}
+
+	notes, err := server.BindingNotes(ctx, tmux.BindingsOptions{Table: table, Key: "z"})
+	if err != nil || len(notes) != 0 {
+		t.Fatalf("unbound notes: %+v, %v", notes, err)
+	}
+
+	if _, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, Key: "unsupported-key"}); !errors.Is(err, tmux.ErrInvalidArgument) {
+		t.Fatalf("invalid key error = %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	cancel()
+
+	if _, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, Key: "x"}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled query error = %v", err)
+	}
+}
+
+func TestIntegrationBindingsNotesOnlyAndFirstMatch(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const table tmux.KeyTable = "query-notes"
+
+	command := testCommand(t, "display-message", "pressed")
+	sequence := testSequence(t, command)
+
+	for _, binding := range []struct {
+		key  tmux.Key
+		note string
+	}{{key: "a"}, {key: "b", note: "first note"}, {key: "c", note: "second note"}} {
+		if err := server.Bind(ctx, table, binding.key, sequence, tmux.BindOptions{Repeat: true, Note: binding.note}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, NotesOnly: true})
+	if err != nil || len(got) != 2 || got[0].Key != "b" || got[1].Key != "c" {
+		t.Fatalf("noted bindings: %+v, %v", got, err)
+	}
+
+	for _, binding := range got {
+		assertBinding(t, binding, table, command)
+	}
+
+	got, err = server.FindBindings(ctx, tmux.BindingsOptions{Table: table, NotesOnly: true, FirstMatch: true})
+	if err != nil || len(got) != 1 || got[0].Key != "b" {
+		t.Fatalf("first noted binding: %+v, %v", got, err)
+	}
+}
+
+func TestIntegrationBindingNotesKeyAndPrefix(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const table tmux.KeyTable = "query-prefix"
+
+	command := testCommand(t, "display-message", "pressed")
+	if err := server.Bind(ctx, table, "Enter", testSequence(t, command), tmux.BindOptions{Note: "accept input"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := server.BindingNotes(ctx, tmux.BindingsOptions{Table: table, Key: "enter", Prefix: "PRE "})
+	if err != nil || len(got) != 1 || got[0].Key != "PRE Enter" || got[0].Note != "accept input" {
+		t.Fatalf("key plus prefix notes: %+v, %v", got, err)
+	}
+}
+
+func TestIntegrationBindingQueriesSingletons(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	const table tmux.KeyTable = "query-singleton"
+
+	command := testCommand(t, "display-message", "pressed")
+	sequence := testSequence(t, command)
+
+	if err := server.Bind(ctx, table, "Enter", sequence, tmux.BindOptions{Note: "accept input"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, options := range []tmux.BindingsOptions{
+		{Table: table},
+		{Table: table, Key: "enter"},
+		{Table: table, FirstMatch: true},
+		{Table: table, NotesOnly: true},
+		{Table: table, NotesOnly: true, FirstMatch: true},
+	} {
+		assertSingleBindingQuery(t, ctx, server, options, "Enter")
+	}
+
+	if err := server.Bind(ctx, table, "x", sequence, tmux.BindOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, options := range []tmux.BindingsOptions{
+		{Table: table, NotesOnly: true},
+		{Table: table, NotesOnly: true, FirstMatch: true},
+	} {
+		assertSingleBindingQuery(t, ctx, server, options, "Enter")
+	}
+
+	for _, options := range []tmux.BindingsOptions{
+		{Table: table, Prefix: "PRE "},
+		{Table: table, Key: "enter", Prefix: "PRE "},
+		{Table: table, FirstMatch: true, Prefix: "PRE "},
+	} {
+		got, err := server.BindingNotes(ctx, options)
+		if err != nil || len(got) != 1 || got[0].Note != "accept input" {
+			t.Errorf("single note %+v: %+v, %v", options, got, err)
+		}
+	}
+}
+
+func TestIntegrationBindingQueriesGlobalSingleton(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	bindings, err := server.Bindings(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tables := make(map[tmux.KeyTable]bool)
+	for _, binding := range bindings {
+		tables[binding.Table] = true
+	}
+
+	for table := range tables {
+		if err := server.UnbindWith(ctx, table, "", tmux.UnbindOptions{All: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	command := testCommand(t, "display-message", "only binding")
+	if err := server.Bind(ctx, "root", "Enter", testSequence(t, command), tmux.BindOptions{Note: "only note"}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, options := range []tmux.BindingsOptions{
+		{},
+		{Key: "enter"},
+		{Table: "root"},
+		{NotesOnly: true},
+		{FirstMatch: true},
+	} {
+		assertSingleBindingQuery(t, ctx, server, options, "Enter")
+	}
+
+	got, err := server.BindingNotes(ctx, tmux.BindingsOptions{Table: "root", Prefix: "PRE "})
+	if err != nil || len(got) != 1 || got[0].Note != "only note" {
+		t.Errorf("global singleton note: %+v, %v", got, err)
+	}
+}
+
+func assertSingleBindingQuery(t *testing.T, ctx context.Context, server *tmux.Server, options tmux.BindingsOptions, key tmux.Key) {
+	t.Helper()
+
+	got, err := server.FindBindings(ctx, options)
+	if err != nil || len(got) != 1 || got[0].Key != key {
+		t.Errorf("singleton binding %+v: %+v, %v", options, got, err)
 	}
 }
 
