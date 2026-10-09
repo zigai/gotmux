@@ -4,6 +4,9 @@ package test
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,7 +42,7 @@ func TestIntegrationClockModeAndSendPrefix(t *testing.T) {
 	_ = pane.SendKeys(ctx, "q")
 }
 
-func TestIntegrationSplitAppearanceAndKillTargetOptions(t *testing.T) {
+func TestIntegrationSplitAppearanceOptions(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	requireTmux38(t, ctx, server)
 
@@ -70,26 +73,145 @@ func TestIntegrationSplitAppearanceAndKillTargetOptions(t *testing.T) {
 	}
 
 	assertPaneTitle(t, ctx, newPane, testTitle)
+}
 
-	paneWithK, err := newPane.Split(ctx, tmux.SplitOptions{
-		Direction:  tmux.Horizontal,
+func TestIntegrationSplitKillTargetReplacesPane(t *testing.T) {
+	for _, control := range []bool{false, true} {
+		t.Run(map[bool]string{false: "subprocess", true: "control"}[control], func(t *testing.T) {
+			assertSplitReplacesPane(t, control)
+		})
+	}
+}
+
+func assertSplitReplacesPane(t *testing.T, control bool) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+	if control {
+		server = apiControl(t, ctx, server, session).Server()
+	}
+
+	pane := firstPane(t, ctx, server)
+
+	before, err := server.Panes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	marker := filepath.Join(t.TempDir(), "replacement")
+
+	replacement, err := pane.Split(ctx, tmux.SplitOptions{
 		KillTarget: true,
+		Program:    tmux.Exec("/bin/sh", "-c", `printf ready > "$1"; exec sleep 60`, "replacement", marker),
 	})
 	if err != nil {
-		t.Fatalf("Split with KillTarget failed: %v", err)
+		fatalCommand(t, "Split(KillTarget)", err)
 	}
 
-	if !paneWithK.Valid() {
-		t.Fatal("expected valid pane from Split with KillTarget")
+	if replacement.ID() == pane.ID() {
+		t.Fatal("replacement reused the target pane")
 	}
 
-	optVal, err := paneWithK.Options().Get(ctx, "remain-on-exit")
+	if _, err := pane.Info(ctx); !errors.Is(err, tmux.ErrNotFound) {
+		t.Fatalf("target Info error = %v, want ErrNotFound", err)
+	}
+
+	after, err := server.Panes(ctx)
 	if err != nil {
-		t.Fatalf("failed to query remain-on-exit: %v", err)
+		t.Fatal(err)
 	}
 
-	if val, ok := optVal.Local.Get(); !ok || val != "key" {
-		t.Errorf("expected remain-on-exit to be 'key', got: %q (ok=%v)", val, ok)
+	if len(after) != len(before) || after[0].ID != replacement.ID() {
+		t.Fatalf("panes after replacement = %v, want only %s", after, replacement.ID())
+	}
+
+	awaitObservation(t, ctx, "replacement program", func() bool {
+		output, err := os.ReadFile(marker)
+		return err == nil && string(output) == "ready"
+	})
+}
+
+func TestIntegrationSplitKillTargetFailureLeavesTarget(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+
+	window, err := pane.Window(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := window.Resize(ctx, tmux.Size{Width: 10, Height: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = pane.Split(ctx, tmux.SplitOptions{KillTarget: true})
+	if err == nil {
+		t.Fatal("replacement in an undersized window unexpectedly succeeded")
+	}
+
+	if _, err := pane.Info(ctx); err != nil {
+		t.Fatalf("failed replacement removed target: %v", err)
+	}
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 || panes[0].ID != pane.ID() {
+		t.Fatalf("panes after failed replacement = %v, error %v", panes, err)
+	}
+}
+
+func TestIntegrationCreationTitlesAreLiteral(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	requireTmux38(t, ctx, server)
+	pane := firstPane(t, ctx, server)
+
+	const title = "literal-#{pane_id}-##-é"
+
+	split, err := pane.Split(ctx, tmux.SplitOptions{Title: title, Program: tmux.Exec("/bin/sh")})
+	if err != nil {
+		fatalCommand(t, "Split", err)
+	}
+
+	assertPaneTitle(t, ctx, split, title)
+
+	floating, err := split.NewPane(ctx, tmux.NewPaneOptions{Title: title, Program: tmux.Exec("/bin/sh")})
+	if err != nil {
+		fatalCommand(t, "NewPane", err)
+	}
+
+	assertPaneTitle(t, ctx, floating, title)
+}
+
+func TestIntegrationSplitMessageIsLiteral(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	requireTmux38(t, ctx, server)
+	pane := firstPane(t, ctx, server)
+	marker := filepath.Join(shortTempDir(t), "executed")
+	message := "literal-#{pane_id}-#(touch " + marker + ")"
+
+	dead, err := pane.Split(ctx, tmux.SplitOptions{
+		Message: message,
+		Program: tmux.Exec("/bin/sh", "-c", "exit 0"),
+	})
+	if err != nil {
+		fatalCommand(t, "Split(Message)", err)
+	}
+
+	awaitObservation(t, ctx, "pane exit", func() bool {
+		info, err := dead.Info(ctx)
+		return err == nil && info.Dead
+	})
+
+	output, err := dead.Capture(ctx, tmux.CaptureOptions{JoinWrapped: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(string(output), message) {
+		t.Fatalf("exit output = %q, want literal message %q", output, message)
+	}
+
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("message executed a shell job: marker stat = %v", err)
 	}
 }
 

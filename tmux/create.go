@@ -126,7 +126,8 @@ type (
 		// FullSize splits across the full window span (-f flag) rather than just the target pane.
 		FullSize bool
 
-		// KillTarget kills the target pane instead of splitting (-k flag).
+		// KillTarget removes the target pane after successfully creating its replacement.
+		// The target remains intact if creating the new pane fails.
 		KillTarget bool
 
 		// Zoom keeps the window zoomed or zooms the new pane (-Z flag).
@@ -147,7 +148,7 @@ type (
 		// InactiveBorderStyle specifies the inactive border style (-R flag).
 		InactiveBorderStyle string
 
-		// Message specifies an optional message to display in the pane (-m flag).
+		// Message specifies an optional literal exit message to display in the pane (-m flag).
 		Message string
 	}
 
@@ -402,7 +403,12 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 		return Pane{}, opError("Pane.Split", err)
 	}
 
-	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("split-window", args...)), p.h.guard(), nil)
+	splitPlan := recordsPlan(command("split-window", args...))
+	if opts.KillTarget {
+		splitPlan.nodes = append(splitPlan.nodes, leaf(command("kill-pane", "-t", p.h.id)))
+	}
+
+	r, err := p.h.server.execute(opCtx, op, splitPlan, p.h.guard(), nil)
 	if err != nil {
 		return Pane{}, creationError("Split", err, r.Stdout, ObjectKindPane)
 	}
@@ -679,10 +685,6 @@ func splitLayoutFlags(opts SplitOptions) []string {
 		flags = append(flags, "-f")
 	}
 
-	if opts.KillTarget {
-		flags = append(flags, "-k")
-	}
-
 	if opts.Zoom {
 		flags = append(flags, "-Z")
 	}
@@ -698,7 +700,7 @@ func splitTitleBorderFlags(opts SplitOptions) ([]string, error) {
 			return nil, invalid("title")
 		}
 
-		flags = append(flags, "-T", opts.Title)
+		flags = append(flags, "-T", wire.LiteralFormat(opts.Title))
 	}
 
 	if opts.BorderLines != "" {
@@ -744,7 +746,7 @@ func splitColorStyleFlags(opts SplitOptions) ([]string, error) {
 			return nil, invalid("message")
 		}
 
-		flags = append(flags, "-m", opts.Message)
+		flags = append(flags, "-m", wire.LiteralFormat(opts.Message))
 	}
 
 	return flags, nil
@@ -998,7 +1000,7 @@ func newPaneStyleFlags(opts NewPaneOptions) ([]string, error) {
 			return nil, invalid("title")
 		}
 
-		flags = append(flags, "-T", opts.Title)
+		flags = append(flags, "-T", wire.LiteralFormat(opts.Title))
 	}
 
 	if opts.BorderLines != "" {

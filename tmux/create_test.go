@@ -55,7 +55,7 @@ func TestSplitArgsAppearanceAndBehaviorFlags(t *testing.T) {
 		t.Fatalf("splitArgs failed: %v", err)
 	}
 
-	expectedFlags := []string{"-k", "-Z", "-T", "MyPane", "-B", "double", "-s", "bg=black", "-S", "fg=green", "-R", "fg=red", "-m", "hello"}
+	expectedFlags := []string{"-Z", "-T", "MyPane", "-B", "double", "-s", "bg=black", "-S", "fg=green", "-R", "fg=red", "-m", "hello"}
 	for _, ef := range expectedFlags {
 		if !slices.Contains(args, ef) {
 			t.Errorf("expected splitArgs to contain %q, got: %v", ef, args)
