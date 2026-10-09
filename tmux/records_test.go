@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -181,6 +182,35 @@ func TestDecodeChangedDaemon(t *testing.T) {
 	_, e := s.decodePane(m, &id)
 	if !errors.Is(e, ErrServerChanged) {
 		t.Fatal(e)
+	}
+}
+
+func TestDecodePaneModeStack(t *testing.T) {
+	server := localServer(t)
+	for _, count := range []string{"1", "2", "3"} {
+		t.Run(count, func(t *testing.T) {
+			raw := paneFixture(server)
+			raw["pane_in_mode"] = count
+			raw["pane_mode"] = "tree-mode"
+
+			pane, err := server.decodePane(raw, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if mode, ok := pane.Mode.Get(); !ok || mode != "tree-mode" {
+				t.Fatalf("mode = %q, present = %v", mode, ok)
+			}
+		})
+	}
+
+	for _, count := range []string{"-1", "invalid"} {
+		raw := paneFixture(server)
+
+		raw["pane_in_mode"] = count
+		if _, err := server.decodePane(raw, nil); err == nil {
+			t.Fatalf("accepted mode count %q", count)
+		}
 	}
 }
 
@@ -422,6 +452,25 @@ func TestQueryFieldsDeduplication(t *testing.T) {
 		if fields[i] != f {
 			t.Fatalf("at %d: expected %s, got %s", i, f, fields[i])
 		}
+	}
+}
+
+func TestQueryFieldCountLimit(t *testing.T) {
+	base := fieldsFor(ObjectKindPane)
+
+	extra := make([]string, 0, wire.MaxRecordFields-len(base)+1)
+	for index := range wire.MaxRecordFields - len(base) {
+		extra = append(extra, "extra_"+strconv.Itoa(index))
+	}
+
+	fields, err := queryFields(base, extra)
+	if err != nil || len(fields) != wire.MaxRecordFields {
+		t.Fatalf("maximum field count: %d, %v", len(fields), err)
+	}
+
+	extra = append(extra, "overflow")
+	if _, err := queryFields(base, extra); !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("excess fields: %v", err)
 	}
 }
 

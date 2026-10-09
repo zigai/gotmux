@@ -60,6 +60,10 @@ func (s *Server) QueryRecords(ctx context.Context, query RecordQuery) (RecordSet
 }
 
 func queryFields(base []string, extra []string) ([]string, error) {
+	if len(extra) > wire.MaxRecordFields {
+		return nil, invalid("field count")
+	}
+
 	out := make([]string, len(base), len(base)+len(extra))
 	copy(out, base)
 
@@ -79,6 +83,10 @@ func queryFields(base []string, extra []string) ([]string, error) {
 
 		seen[f] = true
 		out = append(out, f)
+	}
+
+	if len(out) > wire.MaxRecordFields {
+		return nil, invalid("field count")
 	}
 
 	return out, nil

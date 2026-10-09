@@ -47,7 +47,8 @@ func ExpressionsFormat(exprs []string) string {
 	fmt.Fprintf(&b, "%s%d:", RecordPrefix, len(exprs))
 
 	for _, expr := range exprs {
-		fmt.Fprintf(&b, "#{n:#{l:}%s}:%s,", expr, expr)
+		nested := nestedExpression(expr)
+		fmt.Fprintf(&b, "#{n:#{l:}%s}:%s,", nested, nested)
 	}
 
 	return b.String()
@@ -142,6 +143,46 @@ func DecodeOctal(data []byte, maxBytes int64) ([]byte, error) {
 	}
 
 	return out, nil
+}
+
+func nestedExpression(expr string) string {
+	var result strings.Builder
+
+	depth := 0
+
+	for index := 0; index < len(expr); index++ {
+		character := expr[index]
+		if character == '#' {
+			if index+1 == len(expr) {
+				break
+			}
+
+			next := expr[index+1]
+			if next == '{' {
+				depth++
+			}
+
+			if strings.ContainsRune(",#{}:", rune(next)) {
+				result.WriteString(expr[index : index+2])
+				index++
+
+				continue
+			}
+		}
+
+		if character == '}' {
+			if depth == 0 {
+				result.WriteString("#}")
+				continue
+			}
+
+			depth--
+		}
+
+		result.WriteByte(character)
+	}
+
+	return result.String()
 }
 
 func decodeOctalEscape(data []byte, i int) (byte, error) {

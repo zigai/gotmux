@@ -240,7 +240,7 @@ func (s *Server) decodePane(m map[string]string, expected *ServerIdentity) (Pane
 		deadStatus = PresentValue(d.integer("pane_dead_status"))
 	}
 
-	inMode := d.boolean("pane_in_mode")
+	inMode := d.nonnegative("pane_in_mode") > 0
 
 	mode := PresentValue("")
 	if inMode {

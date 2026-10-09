@@ -123,6 +123,113 @@ func TestIntegrationAPIQueries(t *testing.T) {
 	}
 }
 
+func stackedPaneFixture(t *testing.T) (*tmux.Server, tmux.Session, tmux.Pane, context.Context) {
+	t.Helper()
+	server, session, ctx := apiFixture(t)
+
+	pane := firstPane(t, ctx, server)
+	if err := pane.CopyMode(ctx, tmux.CopyModeOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pane.ChooseTree(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	command, err := tmux.NewCommand("display-message", "-p", "-t", string(pane.ID()), "#{pane_in_mode}")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := server.Run(ctx, command)
+	if err != nil || string(result.Stdout) != "2\n" {
+		t.Fatalf("native mode count = %q, %v", result.Stdout, err)
+	}
+
+	return server, session, pane, ctx
+}
+
+func TestIntegrationQueriesWithStackedPaneModes(t *testing.T) {
+	server, _, pane, ctx := stackedPaneFixture(t)
+
+	info, err := pane.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if mode, ok := info.Mode.Get(); !ok || mode != "tree-mode" {
+		t.Fatalf("pane mode = %q, present = %v", mode, ok)
+	}
+
+	panes, err := server.Panes(ctx)
+	if err != nil || len(panes) != 1 || panes[0].ID != pane.ID() {
+		t.Fatalf("panes = %+v, %v", panes, err)
+	}
+
+	snapshot, err := server.Snapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, found := snapshot.Pane(pane.ID()); !found {
+		t.Fatal("snapshot lost pane in stacked modes")
+	}
+}
+
+func TestIntegrationReadWithStackedPaneModes(t *testing.T) {
+	server, session, pane, ctx := stackedPaneFixture(t)
+
+	read, err := server.Read(ctx, tmux.ReadRequest{Panes: tmux.PresentValue(tmux.QueryOptions{})})
+	if err != nil || len(read.Panes) != 1 || read.Panes[0].ID != pane.ID() {
+		t.Fatalf("read panes = %+v, %v", read.Panes, err)
+	}
+
+	current, err := server.CurrentFrom(ctx, currentVars(session.ServerIdentity(), session.ID(), pane.ID()))
+	if err != nil || current.Pane.ID != pane.ID() {
+		t.Fatalf("current pane = %s, %v", current.Pane.ID, err)
+	}
+}
+
+func TestIntegrationFormatLiteralBraces(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+
+	cases := []struct {
+		expression tmux.Format
+		want       string
+	}{
+		{"a}b", "a}b"},
+		{"a}}b", "a}}b"},
+		{"#{pane_id}}", string(pane.ID()) + "}"},
+		{"#{?#{==:a,a},yes,no}}tail", "yes}tail"},
+		{"trailing#", "trailing"},
+		{"##", "#"},
+		{"##}#{pane_id}", "#}" + string(pane.ID())},
+		{"##{text}", "#{text}"},
+		{"a#}b", "a}b"},
+		{"{text},é}", "{text},é}"},
+	}
+	for _, test := range cases {
+		t.Run(string(test.expression), func(t *testing.T) {
+			got, err := pane.Format(ctx, test.expression)
+			assertFormatValues(t, "format", [][]byte{got}, err, test.want)
+		})
+	}
+
+	got, err := session.FormatMulti(ctx, "a}b", "#{session_name}}", "tail")
+	assertFormatValues(t, "format multi", got, err, "a}b", "fixture}", "tail")
+
+	connection := apiControl(t, ctx, server, session)
+
+	boundPane, err := connection.Server().PaneHandle(pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	formatted, err := boundPane.Format(ctx, "a}b")
+	assertFormatValues(t, "control format", [][]byte{formatted}, err, "a}b")
+}
+
 func TestIntegrationAPIWindowNavigation(t *testing.T) {
 	_, session, ctx := apiFixture(t)
 
