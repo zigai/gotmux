@@ -92,6 +92,50 @@ IFS= read -r hold`
 	})
 }
 
+func TestIntegrationSendKeysRejectsUnsupportedNames(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+
+	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Program: tmux.Exec("/bin/cat")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pane, err := link.Window().ActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, key := range []tmux.Key{"KPMul", "KPPlus", "KPMinus", "KPDiv", "KPDel", "F13", "F63"} {
+		if err := pane.SendKeys(ctx, key); !errors.Is(err, tmux.ErrInvalidArgument) {
+			t.Errorf("SendKeys(%q) = %v, want invalid argument", key, err)
+		}
+	}
+
+	if err := pane.Submit(ctx, "accepted-input"); err != nil {
+		t.Fatal(err)
+	}
+
+	awaitObservation(t, ctx, "accepted input", func() bool {
+		data, err := pane.Capture(ctx, tmux.CaptureOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		return bytes.Contains(data, []byte("accepted-input"))
+	})
+
+	data, err := pane.Capture(ctx, tmux.CaptureOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, spelling := range []string{"KPMul", "KPPlus", "KPMinus", "KPDiv", "KPDel", "F13", "F63"} {
+		if bytes.Contains(data, []byte(spelling)) {
+			t.Errorf("rejected key spelling reached pane: %q", data)
+		}
+	}
+}
+
 func sendLiteralRecords(t *testing.T, ctx context.Context, pane tmux.Pane, payload string) {
 	t.Helper()
 

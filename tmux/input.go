@@ -180,6 +180,10 @@ func (k Key) Valid() bool {
 		return false
 	}
 
+	if strings.EqualFold(s, "Any") || strings.EqualFold(s, "None") {
+		return true
+	}
+
 	s = trimModifiers(s)
 	if s == "" {
 		return false
@@ -581,8 +585,7 @@ func isNamedKey(s string) bool {
 	case "enter", "escape", "tab", "btab", "bspace", "space", "up", "down", "left", "right",
 		"home", "end", "pageup", "pagedown", "ppage", "npage", "pgup", "pgdn",
 		"insert", "ic", "delete", "dc",
-		"any", "none",
-		"kpenter", "kpmul", "kpplus", "kpminus", "kpdiv", "kpdel",
+		"kpenter", "kp*", "kp+", "kp-", "kp/", "kp.",
 		"kp0", "kp1", "kp2", "kp3", "kp4", "kp5", "kp6", "kp7", "kp8", "kp9":
 		return true
 	default:
@@ -591,13 +594,13 @@ func isNamedKey(s string) bool {
 }
 
 func isUserKey(s string) bool {
-	if len(s) < 5 || (!strings.HasPrefix(s, "User") && !strings.HasPrefix(s, "user")) {
+	if len(s) < 5 || !strings.HasPrefix(s, "User") {
 		return false
 	}
 
 	n, err := strconv.Atoi(s[4:])
 
-	return err == nil && n >= 0 && n <= 1024
+	return err == nil && n >= 0 && n <= 1000
 }
 
 func isMouseKey(s string) bool {
@@ -607,17 +610,21 @@ func isMouseKey(s string) bool {
 	)
 
 	for _, event := range []string{
-		"MouseDragEnd1", "MouseDragEnd2", "MouseDragEnd3",
-		"MouseDrag1", "MouseDrag2", "MouseDrag3",
-		"MouseDown1", "MouseDown2", "MouseDown3",
-		"MouseUp1", "MouseUp2", "MouseUp3",
-		"SecondClick1", "SecondClick2", "SecondClick3",
-		"DoubleClick1", "DoubleClick2", "DoubleClick3",
-		"TripleClick1", "TripleClick2", "TripleClick3",
-		"WheelDown", "WheelUp",
+		"MouseMove", "WheelDown", "WheelUp",
+		"MouseDragEnd1", "MouseDragEnd2", "MouseDragEnd3", "MouseDragEnd6", "MouseDragEnd7", "MouseDragEnd8", "MouseDragEnd9", "MouseDragEnd10", "MouseDragEnd11",
+		"MouseDrag1", "MouseDrag2", "MouseDrag3", "MouseDrag6", "MouseDrag7", "MouseDrag8", "MouseDrag9", "MouseDrag10", "MouseDrag11",
+		"MouseDown1", "MouseDown2", "MouseDown3", "MouseDown6", "MouseDown7", "MouseDown8", "MouseDown9", "MouseDown10", "MouseDown11",
+		"MouseUp1", "MouseUp2", "MouseUp3", "MouseUp6", "MouseUp7", "MouseUp8", "MouseUp9", "MouseUp10", "MouseUp11",
+		"SecondClick1", "SecondClick2", "SecondClick3", "SecondClick6", "SecondClick7", "SecondClick8", "SecondClick9", "SecondClick10", "SecondClick11",
+		"DoubleClick1", "DoubleClick2", "DoubleClick3", "DoubleClick6", "DoubleClick7", "DoubleClick8", "DoubleClick9", "DoubleClick10", "DoubleClick11",
+		"TripleClick1", "TripleClick2", "TripleClick3", "TripleClick6", "TripleClick7", "TripleClick8", "TripleClick9", "TripleClick10", "TripleClick11",
 	} {
 		if len(s) > len(event) && strings.EqualFold(s[:len(event)], event) {
 			rest = s[len(event):]
+			if rest[0] >= '0' && rest[0] <= '9' {
+				continue
+			}
+
 			ok = true
 
 			break
@@ -634,10 +641,8 @@ func isMouseKey(s string) bool {
 		return true
 	}
 
-	if strings.HasPrefix(strings.ToLower(rest), "control") {
-		n, err := strconv.Atoi(rest[7:])
-
-		return err == nil && n >= 0 && n <= 1024
+	if len(rest) == 8 && strings.EqualFold(rest[:7], "Control") {
+		return rest[7] >= '0' && rest[7] <= '9'
 	}
 
 	return false
@@ -650,7 +655,7 @@ func isFunctionKey(s string) bool {
 
 	n, e := strconv.Atoi(s[1:])
 
-	return e == nil && n >= 1 && n <= 63
+	return e == nil && n >= 1 && n <= 12 && s[1:] == strconv.Itoa(n)
 }
 
 func captureArgs(id string, opts CaptureOptions) ([]string, error) {
