@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -51,7 +52,8 @@ const (
 	PopupBorderPadded       PopupBorder = "padded"
 	PopupBorderNone         PopupBorder = "none"
 
-	actionArgMultiplier = 2
+	subscriptionValuePrefix   = "TGO-SUB-1:"
+	subscriptionSessionPrefix = "TGO-SUB-SESSION-1:"
 )
 
 const (
@@ -484,16 +486,41 @@ func (c Client) refreshWindowSizeArgs(sizes []WindowSizeOverride) ([]string, err
 	return args, nil
 }
 
+func (c Client) checkRefreshHandle(target handle) error {
+	if err := c.h.check(); err != nil {
+		return err
+	}
+
+	if err := target.check(); err != nil {
+		return err
+	}
+
+	if c.h.server.endpoint != target.server.endpoint {
+		return ErrInvalidHandle
+	}
+
+	if c.h.server.lifetime != nil && target.server.lifetime != nil && c.h.server.lifetime != target.server.lifetime {
+		return ErrInvalidHandle
+	}
+
+	clientOrigin, targetOrigin := c.h.expectedOrigin(), target.expectedOrigin()
+	if clientOrigin != nil && targetOrigin != nil && !clientOrigin.sameDaemon(*targetOrigin) {
+		return ErrInvalidHandle
+	}
+
+	return nil
+}
+
 func (c Client) refreshActionsAndReportsArgs(actions []PaneOutputSetting, reports []PaneReport) ([]string, error) {
 	var args []string
 
 	for _, pa := range actions {
-		if err := pa.Pane.h.check(); err != nil {
-			return nil, err
-		}
-
 		if !pa.Action.Valid() {
 			return nil, invalid("pane action")
+		}
+
+		if err := c.checkRefreshHandle(pa.Pane.h); err != nil {
+			return nil, err
 		}
 
 		args = append(args, "-A", pa.Pane.h.id+":"+string(pa.Action))
@@ -543,8 +570,30 @@ func (c Client) refreshSizeArgs(size Size) ([]string, error) {
 }
 
 func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
+	args, err := c.refreshArgs(opts)
+	if err != nil {
+		return opError("Client.Refresh", err)
+	}
+
+	if c.h.server != nil && c.h.server.lifetime != nil {
+		connection := c.h.server.lifetime
+
+		owned, err := connection.Client(ctx)
+		if err != nil {
+			return opError("Client.Refresh", err)
+		}
+
+		if owned.h.id == c.h.id {
+			return opError("Client.Refresh", connection.refreshClient(ctx, c, opts, args))
+		}
+	}
+
+	return c.h.act(ctx, "Client.Refresh", "refresh-client", args...)
+}
+
+func (c Client) refreshArgs(opts RefreshOptions) ([]string, error) {
 	if !opts.Size.valid() {
-		return opError("Client.Refresh", invalid("size"))
+		return nil, invalid("size")
 	}
 
 	args := []string{"-t", c.h.id}
@@ -558,35 +607,35 @@ func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
 
 	scrollArgs, err := c.refreshScrollArgs(opts.Scroll)
 	if err != nil {
-		return opError("Client.Refresh", err)
+		return nil, err
 	}
 
 	args = append(args, scrollArgs...)
 
 	clipArgs, err := c.refreshClipboardArgs(opts.Clipboard, opts.ClipboardPane)
 	if err != nil {
-		return opError("Client.Refresh", err)
+		return nil, err
 	}
 
 	args = append(args, clipArgs...)
 
 	szArgs, err := c.refreshSizeArgs(opts.Size)
 	if err != nil {
-		return opError("Client.Refresh", err)
+		return nil, err
 	}
 
 	args = append(args, szArgs...)
 
 	winArgs, err := c.refreshWindowSizeArgs(opts.WindowSizes)
 	if err != nil {
-		return opError("Client.Refresh", err)
+		return nil, err
 	}
 
 	args = append(args, winArgs...)
 
 	for _, f := range opts.Flags {
 		if !f.Valid() {
-			return opError("Client.Refresh", invalid("client flag"))
+			return nil, invalid("client flag")
 		}
 	}
 
@@ -596,16 +645,161 @@ func (c Client) Refresh(ctx context.Context, opts RefreshOptions) error {
 
 	actArgs, err := c.refreshActionsAndReportsArgs(opts.PaneActions, opts.PaneReports)
 	if err != nil {
-		return opError("Client.Refresh", err)
+		return nil, err
 	}
 
 	args = append(args, actArgs...)
 
-	return c.h.act(ctx, "Client.Refresh", "refresh-client", args...)
+	return args, nil
+}
+
+func (c *Connection) refreshClient(ctx context.Context, client Client, opts RefreshOptions, args []string) error {
+	if err := client.h.check(); err != nil {
+		return err
+	}
+
+	opCtx, op, err := client.h.server.begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer op.close()
+
+	if err := c.outputCapacity.Acquire(opCtx, 1); err != nil {
+		return &CommandError{Command: "refresh-client", Result: failedResult(), Outcome: notSentOutcome(), Timeout: contextSource(op.callerDone, err), Err: err}
+	}
+
+	defer c.outputCapacity.Release(1)
+
+	outputOptions := opts
+	if opts.ResetCursorTracking || opts.Scroll.Direction != ScrollDirectionNone || opts.Clipboard {
+		outputOptions.Flags = nil
+		outputOptions.PaneActions = nil
+	}
+
+	initializeOutput := c.needsOutputInitialization(outputOptions)
+
+	request, err := c.refreshOutputPlan(opCtx, op, client, args, initializeOutput)
+	if err != nil {
+		return err
+	}
+
+	previousSelective, previousPanes := c.stageOutputPolicy(outputOptions)
+
+	_, err = client.h.server.execute(opCtx, op, request, client.h.guard(), nil)
+	if err != nil && outcomeOf(err).Effect == EffectNotSent {
+		c.restoreOutputPolicy(previousSelective, previousPanes)
+
+		return err
+	}
+
+	if err != nil && outcomeOf(err).Effect != EffectConfirmed {
+		return err
+	}
+
+	c.updateNativeOutputState(outputOptions, initializeOutput)
+
+	return err
+}
+
+func (opts RefreshOptions) hasOutputFlag() bool {
+	return slices.Contains(opts.Flags, ClientFlagNoOutput) || slices.Contains(opts.Flags, ClientFlagNoOutput.Negate())
+}
+
+func (c *Connection) needsOutputInitialization(opts RefreshOptions) bool {
+	if !c.noOutput || opts.hasOutputFlag() {
+		return false
+	}
+
+	for _, action := range opts.PaneActions {
+		if action.Action == PaneOutputOn {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (c *Connection) refreshOutputPlan(ctx context.Context, op *operation, client Client, args []string, initializeOutput bool) (plan, error) {
+	request := emptyPlan(command("refresh-client", args...))
+	if !initializeOutput {
+		return request, nil
+	}
+
+	panes, err := client.h.server.panes(ctx, "Client.Refresh", op, c.identity, QueryOptions{Filter: "", ExtraFields: nil}, "")
+	if err != nil {
+		return request, err
+	}
+
+	disable := []string{"-t", client.h.id}
+	for _, pane := range panes {
+		disable = append(disable, "-A", string(pane.ID)+":"+string(PaneOutputOff))
+	}
+
+	request.nodes = append([]wireNode{
+		leaf(command("refresh-client", disable...)),
+		leaf(command("refresh-client", "-t", client.h.id, "-f", string(ClientFlagNoOutput.Negate()))),
+	}, request.nodes...)
+
+	return request, nil
+}
+
+func (c *Connection) stageOutputPolicy(opts RefreshOptions) (bool, map[PaneID]bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	previousSelective, previousPanes := c.selectiveOutput, c.outputPanes
+	if !opts.hasOutputFlag() && len(opts.PaneActions) == 0 {
+		return previousSelective, previousPanes
+	}
+
+	c.outputPanes = make(map[PaneID]bool, len(previousPanes)+len(opts.PaneActions))
+	maps.Copy(c.outputPanes, previousPanes)
+
+	for _, flag := range opts.Flags {
+		if flag == ClientFlagNoOutput {
+			c.selectiveOutput = true
+			clear(c.outputPanes)
+		} else if flag == ClientFlagNoOutput.Negate() {
+			c.selectiveOutput = false
+			clear(c.outputPanes)
+		}
+	}
+
+	for _, action := range opts.PaneActions {
+		if action.Action == PaneOutputOn || action.Action == PaneOutputOff {
+			c.outputPanes[action.Pane.ID()] = action.Action == PaneOutputOn
+		}
+	}
+
+	return previousSelective, previousPanes
+}
+
+func (c *Connection) restoreOutputPolicy(selective bool, panes map[PaneID]bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.selectiveOutput, c.outputPanes = selective, panes
+}
+
+func (c *Connection) updateNativeOutputState(opts RefreshOptions, initializeOutput bool) {
+	if initializeOutput {
+		c.noOutput = false
+	}
+
+	for _, flag := range opts.Flags {
+		if flag == ClientFlagNoOutput {
+			c.noOutput = true
+		} else if flag == ClientFlagNoOutput.Negate() {
+			c.noOutput = false
+		}
+	}
 }
 
 // SetWindowSize overrides the dimensions of a specific window on this control client (-C @win:size).
 func (c Client) SetWindowSize(ctx context.Context, window Window, size Size) error {
+	if err := c.checkRefreshHandle(window.h); err != nil {
+		return opError("Client.SetWindowSize", err)
+	}
 	//nolint:exhaustruct_v5 // convenience wrapper populates target fields
 	return c.Refresh(ctx, RefreshOptions{
 		WindowSizes: []WindowSizeOverride{{Window: WindowID(window.h.id), Size: size}},
@@ -614,6 +808,9 @@ func (c Client) SetWindowSize(ctx context.Context, window Window, size Size) err
 
 // ClearWindowSize clears the per-window size override for a specific window on this control client (-C @win:).
 func (c Client) ClearWindowSize(ctx context.Context, window Window) error {
+	if err := c.checkRefreshHandle(window.h); err != nil {
+		return opError("Client.ClearWindowSize", err)
+	}
 	//nolint:exhaustruct_v5 // convenience wrapper populates target fields
 	return c.Refresh(ctx, RefreshOptions{
 		WindowSizes: []WindowSizeOverride{{Window: WindowID(window.h.id), Size: Size{Width: 0, Height: 0}}},
@@ -1091,7 +1288,6 @@ func (w Window) subscriptionTarget(c *Connection) (string, *guard, error) {
 	return w.h.id, w.h.guard(), nil
 }
 
-//nolint:unparam // session subscription uses empty spec string
 func (s Session) subscriptionTarget(c *Connection) (string, *guard, error) {
 	if err := s.h.check(); err != nil {
 		return "", nil, err
@@ -1101,7 +1297,7 @@ func (s Session) subscriptionTarget(c *Connection) (string, *guard, error) {
 		return "", nil, ErrInvalidHandle
 	}
 
-	return "", s.h.guard(), nil
+	return s.h.id, s.h.guard(), nil
 }
 
 func (w wildcardTarget) subscriptionTarget(c *Connection) (string, *guard, error) {
@@ -1121,7 +1317,8 @@ func TargetSession() SubscriptionTarget { return wildcardTarget("") }
 // a [Pane], [Window], [Session], [TargetAllPanes], [TargetAllWindows], or [TargetSession].
 //
 // Changes to the evaluated format expression are emitted asynchronously as
-// [SubscriptionEvent] notifications over the event stream.
+// [SubscriptionEvent] notifications over the event stream. Explicit session targets
+// stay pinned to that session, while [TargetSession] follows client session switches.
 func (c *Connection) WatchFormat(ctx context.Context, name string, target SubscriptionTarget, expr Format) error {
 	if c == nil || !validFormatName(name) || !wire.ValidString(string(expr)) {
 		return opError("Connection.WatchFormat", invalid("subscription"))
@@ -1142,8 +1339,24 @@ func (c *Connection) WatchFormat(ctx context.Context, name string, target Subscr
 	}
 	defer op.close()
 
-	arg := name + ":" + spec + ":" + string(expr)
-	_, err = c.server.execute(opCtx, op, emptyPlan(command("refresh-client", "-B", arg)), g, nil)
+	session := SessionID(spec)
+	prefix := subscriptionValuePrefix
+
+	if session.Valid() {
+		spec = ""
+		prefix = subscriptionSessionPrefix + string(session) + ":"
+		expr = Format("#{S:#{?" + eqFormat("session_id", string(session)) + ",#{E:#{l:}" + formatBytes(string(expr)) + "},}}")
+	}
+
+	encoded := prefix + "#{s/%/%25/;s/\n/%0A/;s/\r/%0D/:#{E:#{l:}" + formatBytes(string(expr)) + "}}"
+	arg := name + ":" + spec + ":" + encoded
+
+	request := emptyPlan(command("refresh-client", "-B", arg))
+	if session.Valid() {
+		request.nodes = append([]wireNode{leaf(command("has-session", "-t", string(session)))}, request.nodes...)
+	}
+
+	_, err = c.server.execute(opCtx, op, request, g, nil)
 
 	return opError("Connection.WatchFormat", err)
 }
@@ -1182,7 +1395,11 @@ func (c *Connection) SetPaneOutputAction(ctx context.Context, pane Pane, action 
 		return opError("Connection.SetPaneOutputAction", invalid("pane output action"))
 	}
 
-	return c.server.endpointAction(ctx, "Connection.SetPaneOutputAction", "refresh-client", "-A", pane.h.id+":"+string(action))
+	var options RefreshOptions
+
+	options.PaneActions = []PaneOutputSetting{{Pane: pane, Action: action}}
+
+	return opError("Connection.SetPaneOutputAction", c.Refresh(ctx, options))
 }
 
 // SetPaneOutput controls whether terminal output events ([PaneOutputEvent]) for the specified pane
@@ -1205,7 +1422,6 @@ func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOu
 		return nil
 	}
 
-	args := make([]string, 0, len(targets)*actionArgMultiplier)
 	for _, t := range targets {
 		if !t.Pane.h.origin.Equal(c.identity) {
 			return opError("Connection.SetPaneOutputActions", ErrInvalidHandle)
@@ -1214,11 +1430,13 @@ func (c *Connection) SetPaneOutputActions(ctx context.Context, targets ...PaneOu
 		if !t.Action.Valid() {
 			return opError("Connection.SetPaneOutputActions", invalid("pane output action"))
 		}
-
-		args = append(args, "-A", t.Pane.h.id+":"+string(t.Action))
 	}
 
-	return c.server.endpointAction(ctx, "Connection.SetPaneOutputActions", "refresh-client", args...)
+	var options RefreshOptions
+
+	options.PaneActions = targets
+
+	return opError("Connection.SetPaneOutputActions", c.Refresh(ctx, options))
 }
 
 // Refresh applies client refresh operations to this connection's owned client (refresh-client).

@@ -374,6 +374,70 @@ func TestIntegrationClientMessageStaysLiteral(t *testing.T) {
 	}
 }
 
+func TestIntegrationControlCreationHandshakeFailureHasUnknownEffect(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+
+	connection, _, err := server.OpenControlNewSession(ctx, tmux.ControlNewSessionOptions{
+		Name: "handshake-failed", Control: tmux.ControlOptions{FrameBytes: 32},
+	})
+	if connection != nil {
+		t.Fatal("failed handshake returned a connection")
+	}
+
+	operationErr, ok := errors.AsType[*tmux.OperationError](err)
+	if !ok || operationErr.Outcome.Effect != tmux.EffectUnknown || !errors.Is(err, tmux.ErrProtocol) {
+		t.Fatalf("startup failure: %v, outcome %#v", err, operationErr)
+	}
+
+	created, findErr := server.FindSession(ctx, "handshake-failed")
+	if findErr != nil || !created.Valid() {
+		t.Fatalf("session was not created before the handshake failed: %v", findErr)
+	}
+}
+
+func TestIntegrationRefreshRejectsForeignHandles(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	foreign, foreignSession, _ := apiFixture(t)
+	foreignWindow, foreignPane := firstWindowPane(t, ctx, foreignSession)
+	connection := apiControl(t, ctx, server, session)
+
+	client, err := connection.Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	foreignControl := apiControl(t, ctx, foreign, foreignSession)
+
+	foreignBound, err := foreignControl.Server().Pane(ctx, foreignPane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	calls := []struct {
+		name string
+		run  func() error
+	}{
+		{"client window size", func() error { return client.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) }},
+		{"connection window size", func() error { return connection.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) }},
+		{"client window clear", func() error { return client.ClearWindowSize(ctx, foreignWindow) }},
+		{"connection window clear", func() error { return connection.ClearWindowSize(ctx, foreignWindow) }},
+		{"client pane refresh", func() error {
+			return client.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: foreignBound, Action: tmux.PaneOutputOff}}})
+		}},
+		{"connection pane refresh", func() error {
+			return connection.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: foreignBound, Action: tmux.PaneOutputOff}}})
+		}},
+	}
+	for _, call := range calls {
+		err := call.run()
+
+		operationErr, ok := errors.AsType[*tmux.OperationError](err)
+		if !errors.Is(err, tmux.ErrInvalidHandle) || !ok || operationErr.Outcome.Effect != tmux.EffectNotSent {
+			t.Errorf("%s: %v, want invalid handle/not sent", call.name, err)
+		}
+	}
+}
+
 func TestIntegrationConnectionClientIsItsOwn(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	first := apiControl(t, ctx, server, session)

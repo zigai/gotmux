@@ -67,14 +67,6 @@ func isDSCTrailer(b []byte) bool {
 	return bytes.Equal(bytes.TrimSpace(b), []byte("\x1b\\"))
 }
 
-func sanitizeLineEnding(b []byte) []byte {
-	if len(b) >= 2 && b[len(b)-2] == '\r' {
-		return append(b[:len(b)-2], '\n')
-	}
-
-	return b
-}
-
 func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 	if limit <= 0 {
 		return nil, ErrOutputLimit
@@ -90,7 +82,6 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 
 		out = append(out, part...)
 		if err == nil {
-			out = sanitizeLineEnding(out)
 			if isDSCTrailer(out) {
 				return nil, io.EOF
 			}

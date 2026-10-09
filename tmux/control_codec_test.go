@@ -313,8 +313,8 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 		t.Fatalf("boundedLine failed on CRLF: %v", err)
 	}
 
-	if string(line) != "%session-changed $0 s1\n" {
-		t.Fatalf("expected \\r to be stripped, got: %q", string(line))
+	if string(line) != "%session-changed $0 s1\r\n" {
+		t.Fatalf("payload CR must be preserved on the pipe transport, got: %q", string(line))
 	}
 
 	r = bufio.NewReader(strings.NewReader("\x1b\\"))
@@ -322,6 +322,20 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 	_, err = boundedLine(r, 4096)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected io.EOF on trailing \\x1b\\, got %v", err)
+	}
+}
+
+func TestControlSubscriptionPreservesTrailingCarriageReturns(t *testing.T) {
+	for _, value := range []string{"hello\r", "hello\r\r", "\\012\\015%0A"} {
+		unit, err := readControlUnit(bufio.NewReader(strings.NewReader("%subscription-changed watched $0 - - - : "+value+"\n")), 4096, func(Event) {})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		event, ok := unit.event.(SubscriptionEvent)
+		if !ok || string(event.Data()) != value {
+			t.Fatalf("subscription data = %q, want %q", event.Data(), value)
+		}
 	}
 }
 

@@ -4,11 +4,58 @@ import (
 	"context"
 	"errors"
 	"io"
+	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+func TestOutputEventQuotaBoundsRetainedMemory(t *testing.T) {
+	connection := eventConnection(t)
+
+	const budget = 2100000
+
+	stream, err := connection.Events(context.Background(), testEventOptions(budget, 25))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer func() {
+		if err := stream.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	runtime.GC()
+
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	for range 20 {
+		event, err := decodeEvent([]byte("%output %0 "+strings.Repeat("\\000", 100000)+"\n"), 500000)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		stream.push(event)
+	}
+
+	runtime.GC()
+	runtime.ReadMemStats(&after)
+
+	runtime.KeepAlive(stream)
+
+	if after.HeapAlloc <= before.HeapAlloc {
+		return
+	}
+
+	retained := after.HeapAlloc - before.HeapAlloc
+	if retained > 4*budget {
+		t.Fatalf("queue reserves %d bytes, accounts %d, but retains %d heap bytes", stream.maxBytes, stream.bytes, retained)
+	}
+}
 
 func eventConnection(t *testing.T) *Connection {
 	t.Helper()
@@ -378,7 +425,7 @@ func TestDecodeEventsSubscriptionChanged(t *testing.T) {
 	}
 }
 
-func TestDecodeEventCRLF(t *testing.T) {
+func TestDecodeEventPreservesCarriageReturn(t *testing.T) {
 	ev, err := decodeEvent([]byte("%session-changed $0 s1\r\n"), 4096)
 	if err != nil {
 		t.Fatalf("decodeEvent with CRLF failed: %v", err)
@@ -389,8 +436,8 @@ func TestDecodeEventCRLF(t *testing.T) {
 		t.Fatalf("expected SessionEvent, got %#v", ev)
 	}
 
-	if name, ok := sessEv.Name.Get(); !ok || name != "s1" {
-		t.Errorf("expected session name 's1', got %q", name)
+	if name, ok := sessEv.Name.Get(); !ok || name != "s1\r" {
+		t.Errorf("expected session name %q, got %q", "s1\r", name)
 	}
 }
 

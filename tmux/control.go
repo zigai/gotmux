@@ -37,7 +37,8 @@ var (
 
 // ControlOptions configures limits and startup settings for an interactive control mode connection.
 type ControlOptions struct {
-	// PaneOutput enables terminal output events (%output). Defaults to false.
+	// PaneOutput enables terminal output events for all panes (%output). Defaults to false.
+	// Individual panes may be enabled with [Connection.SetPaneOutput].
 	PaneOutput bool
 
 	// NoEcho requests -CC (control mode with echo disabled) instead of -C.
@@ -109,36 +110,40 @@ type ControlNewSessionOptions struct {
 // Requests are dispatched sequentially over the wire. Handles created from this
 // connection carry a unique [ServerIdentity.Generation] token to prevent reuse across restarts.
 type Connection struct {
-	server        *Server
-	original      *Server
-	identity      ServerIdentity
-	info          ServerInfo
-	generation    uint64
-	opts          ControlOptions
-	cancel        context.CancelCauseFunc
-	stopCh        chan struct{}
-	mu            sync.Mutex
-	closed        bool
-	terminal      error
-	normal        bool
-	streams       map[*EventStream]struct{}
-	eventReserved int64
-	count         *semaphore.Weighted
-	bytes         *semaphore.Weighted
-	requests      chan *controlRequest
-	frames        chan controlFrame
-	ready         chan error
-	done          chan struct{}
-	work          sync.WaitGroup
-	cmd           *exec.Cmd
-	stdin         *os.File
-	stdout        *os.File
-	stderr        *os.File
-	diagnostics   *buffer
-	stopOnce      sync.Once
-	clientMu      sync.Mutex
-	cachedClient  Client
-	hasClient     bool
+	server          *Server
+	original        *Server
+	identity        ServerIdentity
+	info            ServerInfo
+	generation      uint64
+	opts            ControlOptions
+	cancel          context.CancelCauseFunc
+	stopCh          chan struct{}
+	mu              sync.Mutex
+	closed          bool
+	terminal        error
+	normal          bool
+	streams         map[*EventStream]struct{}
+	eventReserved   int64
+	count           *semaphore.Weighted
+	bytes           *semaphore.Weighted
+	requests        chan *controlRequest
+	frames          chan controlFrame
+	ready           chan error
+	done            chan struct{}
+	work            sync.WaitGroup
+	cmd             *exec.Cmd
+	stdin           *os.File
+	stdout          *os.File
+	stderr          *os.File
+	diagnostics     *buffer
+	stopOnce        sync.Once
+	clientMu        sync.Mutex
+	cachedClient    Client
+	hasClient       bool
+	outputCapacity  *semaphore.Weighted
+	noOutput        bool
+	selectiveOutput bool
+	outputPanes     map[PaneID]bool
 }
 
 // OpenControl starts one owned control client attached to the session with the given ID.
@@ -265,12 +270,12 @@ func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessi
 	c.startWorkers(connCtx, nonce)
 
 	if err = c.awaitReady(ctx); err != nil {
-		return nil, Session{}, opError("Server.OpenControlNewSession", err)
+		return nil, Session{}, &OperationError{Operation: "Server.OpenControlNewSession", Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Err: err}
 	}
 
 	session, err := c.resolveCreatedSession(ctx)
 	if err != nil {
-		return nil, Session{}, opError("Server.OpenControlNewSession", err)
+		return nil, Session{}, afterError("Server.OpenControlNewSession", err)
 	}
 
 	return c, session, nil
@@ -558,37 +563,50 @@ func token(prefix string) (string, error) {
 func newConnection(s *Server, opts ControlOptions, cancel context.CancelCauseFunc) *Connection {
 	gen := connectionGeneration.Add(1)
 
+	noOutput := !opts.PaneOutput
+	for _, flag := range opts.Flags {
+		if flag == ClientFlagNoOutput {
+			noOutput = true
+		} else if flag == ClientFlagNoOutput.Negate() {
+			noOutput = false
+		}
+	}
+
 	c := &Connection{
-		server:        nil,
-		original:      s,
-		identity:      ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen},
-		info:          ServerInfo{rawRecord: rawRecord{raw: nil}, Identity: ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen}, Version: Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false}},
-		generation:    gen,
-		opts:          opts,
-		cancel:        cancel,
-		stopCh:        make(chan struct{}),
-		mu:            sync.Mutex{},
-		closed:        false,
-		terminal:      nil,
-		normal:        false,
-		streams:       map[*EventStream]struct{}{},
-		eventReserved: 0,
-		count:         semaphore.NewWeighted(int64(opts.QueueDepth)),
-		bytes:         semaphore.NewWeighted(opts.QueuedBytes),
-		requests:      make(chan *controlRequest, opts.QueueDepth),
-		frames:        make(chan controlFrame, 1),
-		ready:         make(chan error, 1),
-		done:          make(chan struct{}),
-		work:          sync.WaitGroup{},
-		cmd:           nil,
-		stdin:         nil,
-		stdout:        nil,
-		stderr:        nil,
-		diagnostics:   nil,
-		stopOnce:      sync.Once{},
-		clientMu:      sync.Mutex{},
-		cachedClient:  Client{}, //nolint:exhaustruct_v5 // initial connection state sets uninitialized client
-		hasClient:     false,
+		server:          nil,
+		original:        s,
+		identity:        ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen},
+		info:            ServerInfo{rawRecord: rawRecord{raw: nil}, Identity: ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen}, Version: Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false}},
+		generation:      gen,
+		opts:            opts,
+		cancel:          cancel,
+		stopCh:          make(chan struct{}),
+		mu:              sync.Mutex{},
+		closed:          false,
+		terminal:        nil,
+		normal:          false,
+		streams:         map[*EventStream]struct{}{},
+		eventReserved:   0,
+		count:           semaphore.NewWeighted(int64(opts.QueueDepth)),
+		bytes:           semaphore.NewWeighted(opts.QueuedBytes),
+		requests:        make(chan *controlRequest, opts.QueueDepth),
+		frames:          make(chan controlFrame, 1),
+		ready:           make(chan error, 1),
+		done:            make(chan struct{}),
+		work:            sync.WaitGroup{},
+		cmd:             nil,
+		stdin:           nil,
+		stdout:          nil,
+		stderr:          nil,
+		diagnostics:     nil,
+		stopOnce:        sync.Once{},
+		clientMu:        sync.Mutex{},
+		cachedClient:    Client{}, //nolint:exhaustruct_v5 // initial connection state sets uninitialized client
+		hasClient:       false,
+		outputCapacity:  semaphore.NewWeighted(1),
+		noOutput:        noOutput,
+		selectiveOutput: noOutput,
+		outputPanes:     map[PaneID]bool{},
 	}
 	server := *s
 	server.conn = c

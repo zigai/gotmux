@@ -335,14 +335,14 @@ func decodeEvent(line []byte, maxBytes int64) (Event, error) {
 		return nil, ErrProtocol
 	}
 
-	s := strings.TrimRight(string(line), "\r\n")
+	s := strings.TrimSuffix(string(line), "\n")
 
 	name, rest, _ := strings.Cut(s[1:], " ")
 	if name == "" {
 		return nil, ErrProtocol
 	}
 
-	base := eventBase{name: name, received: time.Now()}
+	base := eventBase{name: strings.Clone(name), received: time.Now()}
 	if ev, ok, err := decodeKnownEvent(base, name, rest, maxBytes); ok {
 		return ev, err
 	}
@@ -541,7 +541,7 @@ func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event
 		return nil, ErrProtocol
 	}
 
-	return PaneOutputEvent{eventBase: base, PaneID: PaneID(id), Age: age, data: data}, nil
+	return PaneOutputEvent{eventBase: base, PaneID: PaneID(strings.Clone(id)), Age: age, data: data}, nil
 }
 
 func decodeLayoutEvent(base eventBase, rest string) (Event, error) {
@@ -637,6 +637,8 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		return nil, ErrProtocol
 	}
 
+	header = strings.Clone(header)
+
 	parts := strings.Fields(header)
 	if len(parts) < 1 {
 		return nil, ErrProtocol
@@ -660,12 +662,15 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		}
 	}
 
-	widx := UnavailableValue[int]()
+	widx := subscriptionWindowIndex(parts)
 
-	if len(parts) >= 4 && parts[3] != "-" {
-		if n, err := strconv.Atoi(parts[3]); err == nil && n >= 0 {
-			widx = PresentValue(n)
-		}
+	targetSession, data, err := subscriptionData(data)
+	if err != nil {
+		return nil, err
+	}
+
+	if targetSession.Valid() {
+		sid = PresentValue(targetSession)
 	}
 
 	return SubscriptionEvent{
@@ -678,4 +683,39 @@ func decodeSubscriptionEvent(base eventBase, rest string) (Event, error) {
 		WindowIndex: widx,
 		data:        []byte(data),
 	}, nil
+}
+
+func subscriptionWindowIndex(parts []string) Value[int] {
+	if len(parts) < 4 || parts[3] == "-" {
+		return UnavailableValue[int]()
+	}
+
+	index, err := strconv.Atoi(parts[3])
+	if err != nil || index < 0 {
+		return UnavailableValue[int]()
+	}
+
+	return PresentValue(index)
+}
+
+func subscriptionData(data string) (SessionID, string, error) {
+	var session SessionID
+
+	encoded, isEncoded := strings.CutPrefix(data, subscriptionValuePrefix)
+	if sessionData, ok := strings.CutPrefix(data, subscriptionSessionPrefix); ok {
+		target, value, found := strings.Cut(sessionData, ":")
+
+		session = SessionID(target)
+		if !found || !session.Valid() {
+			return "", "", ErrProtocol
+		}
+
+		encoded, isEncoded = value, true
+	}
+
+	if isEncoded {
+		data = strings.NewReplacer("%0A", "\n", "%0D", "\r", "%25", "%").Replace(encoded)
+	}
+
+	return session, data, nil
 }

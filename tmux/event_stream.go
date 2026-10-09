@@ -273,6 +273,13 @@ func (s *EventStream) push(e Event) {
 
 func (c *Connection) publish(e Event) {
 	c.mu.Lock()
+	if output, ok := e.(PaneOutputEvent); ok {
+		enabled, configured := c.outputPanes[output.PaneID]
+		if (configured && !enabled) || (!configured && c.selectiveOutput) {
+			c.mu.Unlock()
+			return
+		}
+	}
 
 	streams := make([]*EventStream, 0, len(c.streams))
 	for s := range c.streams {

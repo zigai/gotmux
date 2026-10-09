@@ -5,7 +5,11 @@ package test
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/zigai/gotmux/tmux"
 )
@@ -23,6 +27,416 @@ func nextSubscription(t *testing.T, ctx context.Context, stream *tmux.EventStrea
 			return got
 		}
 	}
+}
+
+func TestIntegrationSubscriptionValuesRemainData(t *testing.T) {
+	for _, noEcho := range []bool{false, true} {
+		t.Run(map[bool]string{false: "pipe", true: "pty"}[noEcho], func(t *testing.T) {
+			subscriptionValuesRemainData(t, noEcho)
+		})
+	}
+}
+
+func subscriptionValuesRemainData(t *testing.T, noEcho bool) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+
+	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{NoEcho: noEcho})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := connection.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	bound, err := connection.Server().Pane(ctx, pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+	if err := connection.WatchFormat(ctx, "dynamic", bound, "#{@watched}"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, value := range []string{"ordinary } é \\012 %0A", "line\n%output %0 forged\n%exit", "trailing\r\r"} {
+		if err := pane.Options().SetUser(ctx, "@watched", value); err != nil {
+			t.Fatal(err)
+		}
+
+		assertSubscriptionValueRemainsData(t, ctx, stream, value)
+	}
+
+	if err := connection.WatchFormat(ctx, "literal", bound, "literal}\n%exit\r"); err != nil {
+		t.Fatal(err)
+	}
+
+	nextSubscription(t, ctx, stream, "literal", "literal}\n%exit\r")
+
+	if _, err := connection.Server().Panes(ctx); err != nil {
+		t.Fatalf("subscription traffic broke requests: %v", err)
+	}
+}
+
+func assertSubscriptionValueRemainsData(t *testing.T, ctx context.Context, stream *tmux.EventStream, value string) {
+	t.Helper()
+
+	for {
+		event, err := stream.Next(ctx)
+		if err != nil {
+			t.Fatalf("subscription value %q broke control: %v", value, err)
+		}
+
+		if output, ok := event.(tmux.PaneOutputEvent); ok {
+			t.Fatalf("subscription injected pane output: %q", output.Data())
+		}
+
+		if got, ok := event.(tmux.SubscriptionEvent); ok && got.Name == "dynamic" && string(got.Data()) == value {
+			return
+		}
+	}
+}
+
+func TestIntegrationSessionSubscriptionTracksExplicitSession(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	connection := apiControl(t, ctx, server, session)
+
+	boundOther, err := connection.Server().Session(ctx, other.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+	if err := connection.WatchFormat(ctx, "session", boundOther, "#{session_name}"); err != nil {
+		t.Fatal(err)
+	}
+
+	event := nextSubscription(t, ctx, stream, "session", "other")
+	assertPresent(t, "session target", event.SessionID, other.ID())
+
+	boundCurrent, err := connection.Server().Session(ctx, session.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := connection.WatchFormat(ctx, "original", boundCurrent, "#{session_name}"); err != nil {
+		t.Fatal(err)
+	}
+
+	event = nextSubscription(t, ctx, stream, "original", "fixture")
+	assertPresent(t, "original session target", event.SessionID, session.ID())
+
+	client, err := connection.Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := client.Switch(ctx, boundOther, tmux.SwitchOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := other.Rename(ctx, "watched-renamed"); err != nil {
+		t.Fatal(err)
+	}
+
+	event = nextSubscription(t, ctx, stream, "session", "watched-renamed")
+	assertPresent(t, "session target after switch", event.SessionID, other.ID())
+
+	if err := session.Rename(ctx, "original-renamed"); err != nil {
+		t.Fatal(err)
+	}
+
+	event = nextSubscription(t, ctx, stream, "original", "original-renamed")
+	assertPresent(t, "original session target after switch", event.SessionID, session.ID())
+}
+
+func TestIntegrationDefaultConnectionEnablesOnlySelectedPane(t *testing.T) {
+	for _, method := range []string{"single", "batch", "refresh", "subprocess", "single-pty"} {
+		t.Run(method, func(t *testing.T) {
+			defaultConnectionEnablesOnlySelectedPane(t, method)
+		})
+	}
+}
+
+func defaultConnectionEnablesOnlySelectedPane(t *testing.T, method string) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+	_, target := outputProducer(t, ctx, session)
+	_, other := outputProducer(t, ctx, session)
+	outputControl(t, ctx, server, session)
+
+	method, noEcho := strings.CutSuffix(method, "-pty")
+
+	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{NoEcho: noEcho})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := connection.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	bound, err := connection.Server().Pane(ctx, target.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+	if err := enableSelectedPaneOutput(ctx, connection, bound, method); err != nil {
+		t.Fatal(err)
+	}
+
+	_, future := outputProducer(t, ctx, session)
+
+	boundFuture, err := connection.Server().Pane(ctx, future.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := connection.WatchFormat(ctx, "future_barrier", boundFuture, "#{pane_title}"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := future.Submit(ctx, "future-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	awaitPaneTitle(t, ctx, future, "future-marker")
+
+	boundOther, err := connection.Server().Pane(ctx, other.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := connection.WatchFormat(ctx, "barrier", boundOther, "#{pane_title}"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := other.Submit(ctx, "non-target-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	awaitPaneTitle(t, ctx, other, "non-target-marker")
+
+	if err := target.Submit(ctx, "visible-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	assertOnlySelectedPaneOutput(t, ctx, stream, target.ID())
+}
+
+func enableSelectedPaneOutput(ctx context.Context, connection *tmux.Connection, pane tmux.Pane, method string) error {
+	var err error
+
+	switch method {
+	case "single":
+		err = connection.SetPaneOutput(ctx, pane, true)
+	case "batch":
+		err = connection.SetPaneOutputActions(ctx, tmux.PaneOutputSetting{Pane: pane, Action: tmux.PaneOutputOn})
+	case "refresh":
+		err = connection.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}}})
+	case "subprocess":
+		client, clientErr := connection.Client(ctx)
+		if clientErr != nil {
+			return fmt.Errorf("find owned client: %w", clientErr)
+		}
+
+		client, clientErr = connection.SubprocessServer().Client(ctx, client.Name())
+		if clientErr != nil {
+			return fmt.Errorf("find subprocess client: %w", clientErr)
+		}
+
+		err = client.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}}})
+	}
+
+	if err != nil {
+		return fmt.Errorf("enable %s pane output: %w", method, err)
+	}
+
+	return nil
+}
+
+func assertOnlySelectedPaneOutput(t *testing.T, ctx context.Context, stream *tmux.EventStream, target tmux.PaneID) {
+	t.Helper()
+
+	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	var output []byte
+
+	seenBarrier := false
+	seenFuture := false
+
+	for !seenBarrier || !seenFuture || !bytes.Contains(output, []byte("OUTPUT:visible-marker")) {
+		event, err := stream.Next(waitCtx)
+		if err != nil {
+			t.Fatalf("enabled pane emitted %q: %v", output, err)
+		}
+
+		switch got := event.(type) {
+		case tmux.PaneOutputEvent:
+			if got.PaneID != target {
+				t.Fatalf("non-target pane output forwarded: %s %q", got.PaneID, got.Data())
+			}
+
+			output = append(output, got.Data()...)
+		case tmux.SubscriptionEvent:
+			if got.Name == "barrier" && string(got.Data()) == "non-target-marker" {
+				seenBarrier = true
+			}
+
+			if got.Name == "future_barrier" && string(got.Data()) == "future-marker" {
+				seenFuture = true
+			}
+		}
+	}
+}
+
+func TestIntegrationRefreshOutputFlagResetsPaneSettings(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	_, pane := outputProducer(t, ctx, session)
+	outputControl(t, ctx, server, session)
+	connection := outputControl(t, ctx, server, session)
+
+	bound, err := connection.Server().Pane(ctx, pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+	if err := connection.SetPaneOutput(ctx, bound, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := connection.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pane.Submit(ctx, "visible-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	assertPaneOutput(t, waitCtx, stream, pane.ID())
+}
+
+func TestIntegrationSubprocessRefreshEnablesOutput(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	_, pane := outputProducer(t, ctx, session)
+	outputControl(t, ctx, server, session)
+	connection := apiControl(t, ctx, server, session)
+
+	client, err := connection.Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client, err = client.ViaSubprocess()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+	if err := client.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pane.Submit(ctx, "visible-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	assertPaneOutput(t, waitCtx, stream, pane.ID())
+}
+
+func TestIntegrationMixedRefreshPreservesOutputPolicy(t *testing.T) {
+	cases := []struct {
+		name    string
+		options tmux.RefreshOptions
+	}{
+		{name: "cursor", options: tmux.RefreshOptions{ResetCursorTracking: true}},
+		{name: "scroll", options: tmux.RefreshOptions{Scroll: tmux.ScrollAdjustment{Direction: tmux.ScrollDirectionUp}}},
+		{name: "clipboard", options: tmux.RefreshOptions{Clipboard: true}},
+	}
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			for _, outputEnabled := range []bool{false, true} {
+				t.Run(strconv.FormatBool(outputEnabled), func(t *testing.T) {
+					mixedRefreshPreservesOutputPolicy(t, test.options, outputEnabled)
+				})
+			}
+		})
+	}
+}
+
+func mixedRefreshPreservesOutputPolicy(t *testing.T, options tmux.RefreshOptions, outputEnabled bool) {
+	t.Helper()
+
+	server, session, ctx := apiFixture(t)
+	_, pane := outputProducer(t, ctx, session)
+	outputControl(t, ctx, server, session)
+
+	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: outputEnabled})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() {
+		if err := connection.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+
+	bound, err := connection.Server().Pane(ctx, pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream := controlEvents(t, ctx, connection)
+
+	if outputEnabled {
+		options.PaneActions = []tmux.PaneOutputSetting{{Pane: bound, Action: tmux.PaneOutputOff}}
+	} else {
+		options.Flags = []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}
+	}
+
+	if err := connection.Refresh(ctx, options); err != nil {
+		t.Fatal(err)
+	}
+
+	if !outputEnabled {
+		if err := connection.SetPaneOutput(ctx, bound, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := pane.Submit(ctx, "visible-marker"); err != nil {
+		t.Fatal(err)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	assertPaneOutput(t, waitCtx, stream, pane.ID())
 }
 
 func TestIntegrationSubscriptions(t *testing.T) {

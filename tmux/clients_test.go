@@ -8,6 +8,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"golang.org/x/sync/semaphore"
 )
 
 func TestMenuItemEmptyLabel(t *testing.T) {
@@ -483,6 +485,165 @@ func TestClientRefreshValidation(t *testing.T) {
 	err = c.Refresh(ctx, RefreshOptions{PaneReports: []PaneReport{{PaneID: "invalid", Report: "ok"}}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid PaneReport, got %v", err)
+	}
+}
+
+func TestRefreshEnableForwardsOutputBeforeCommandReply(t *testing.T) {
+	peer := dispatcherFixture(t, 1)
+	peer.c.outputCapacity = semaphore.NewWeighted(1)
+	peer.c.selectiveOutput = true
+	peer.c.outputPanes = map[PaneID]bool{}
+
+	client, err := peer.c.server.ClientHandle("/dev/pts/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pane, err := peer.c.server.PaneHandle("%1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream, err := peer.c.Events(t.Context(), testEventOptions(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	var options RefreshOptions
+
+	options.PaneActions = []PaneOutputSetting{{Pane: pane, Action: PaneOutputOn}}
+
+	result := make(chan error, 1)
+
+	go func() {
+		result <- peer.c.refreshClient(t.Context(), client, options, []string{"-t", "first"})
+	}()
+
+	waitWrite(t, peer)
+	peer.c.publish(oneEvent())
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+	defer cancel()
+
+	event, readErr := stream.Next(ctx)
+
+	peer.unblock()
+
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+
+	output, ok := event.(PaneOutputEvent)
+	if readErr != nil || !ok || string(output.Data()) != "abc" {
+		t.Fatalf("enabled output before command reply: %v, %#v", readErr, event)
+	}
+}
+
+func TestRefreshRejectedEnableLeavesPaneOutputOff(t *testing.T) {
+	peer := dispatcherFixture(t, 1)
+	peer.c.outputCapacity = semaphore.NewWeighted(1)
+	peer.c.selectiveOutput = true
+	peer.c.outputPanes = map[PaneID]bool{}
+	peer.c.server.config.Limits.InputBytes = 1
+
+	client, err := peer.c.server.ClientHandle("/dev/pts/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pane, err := peer.c.server.PaneHandle("%1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stream, err := peer.c.Events(t.Context(), testEventOptions(0, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := stream.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	var options RefreshOptions
+
+	options.PaneActions = []PaneOutputSetting{{Pane: pane, Action: PaneOutputOn}}
+
+	err = peer.c.refreshClient(t.Context(), client, options, []string{"-t", "first"})
+	if !errors.Is(err, ErrInputLimit) || outcomeOf(err).Effect != EffectNotSent {
+		t.Fatalf("rejected enable: %v", err)
+	}
+
+	peer.c.publish(oneEvent())
+
+	ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+	defer cancel()
+
+	if event, err := stream.Next(ctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("rejected enable forwarded output: %#v, %v", event, err)
+	}
+}
+
+func TestControlNewSessionRejectsLineBreaks(t *testing.T) {
+	server := localServer(t)
+
+	for _, name := range []string{"name\nbroken", "name\rbroken"} {
+		var named, windowed, grouped ControlNewSessionOptions
+
+		named.Name = name
+		windowed.Window = name
+		grouped.Group = name
+
+		for _, options := range []ControlNewSessionOptions{named, windowed, grouped} {
+			_, _, err := server.OpenControlNewSession(t.Context(), options)
+			if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent {
+				t.Errorf("control session with line-bearing name %q: %v", name, err)
+			}
+		}
+	}
+}
+
+func TestConnectionRefreshAdmissionHonorsDeadline(t *testing.T) {
+	server := localServer(t)
+
+	_, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+
+	var options ControlOptions
+
+	opts, err := normalizeControlOptions(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	connection := newConnection(server, opts, cancel)
+
+	client, err := connection.Server().ClientHandle("/dev/pts/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := connection.outputCapacity.Acquire(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	defer connection.outputCapacity.Release(1)
+
+	ctx, done := context.WithTimeout(t.Context(), time.Millisecond)
+	defer done()
+
+	var refresh RefreshOptions
+
+	err = connection.refreshClient(ctx, client, refresh, []string{"-t", string(client.Name())})
+
+	commandErr, ok := errors.AsType[*CommandError](err)
+	if !ok || !errors.Is(err, context.DeadlineExceeded) || commandErr.Timeout != TimeoutSourceCaller || commandErr.Outcome.Effect != EffectNotSent {
+		t.Fatalf("serialized refresh deadline: %v, command error %#v", err, commandErr)
 	}
 }
 
