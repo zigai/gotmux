@@ -201,11 +201,12 @@ func parseTmux3Part(raw string, start, end int) (string, int, SessionID, bool, e
 		return "", 0, "", false, nil
 	}
 
-	p, _ := strconv.Atoi(raw[start+1 : end])
+	parsedPID, err := strconv.ParseInt(raw[start+1:end], 10, 32)
+	p := int(parsedPID)
 	s := SessionID("$" + raw[end+1:])
 
 	sock := raw[:start]
-	if p <= 0 || !filepath.IsAbs(sock) {
+	if err != nil || p <= 0 || !filepath.IsAbs(sock) {
 		return "", 0, "", true, invalid("TMUX socket or PID")
 	}
 
@@ -218,7 +219,8 @@ func parseTmux3Part(raw string, start, end int) (string, int, SessionID, bool, e
 
 func parseTmux2Part(raw string, start, end int) (string, int, error) {
 	pStr := raw[end+1:]
-	p, err := strconv.Atoi(pStr)
+	parsedPID, err := strconv.ParseInt(pStr, 10, 32)
+	p := int(parsedPID)
 
 	sock := raw[:end]
 	if err != nil || p <= 0 || !filepath.IsAbs(sock) || strconv.Itoa(p) != pStr {

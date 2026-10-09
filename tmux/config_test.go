@@ -166,6 +166,24 @@ func testParseEnvironmentInvalid(t *testing.T) {
 	}
 }
 
+func TestParseTmuxVarsPIDRange(t *testing.T) {
+	for _, value := range []string{
+		"/socket,2147483648,0", "/socket,9223372036854775807,0", "/socket,999999999999999999999999,0",
+		"/socket,2147483648", "/socket,9223372036854775807", "/socket,999999999999999999999999",
+	} {
+		if _, err := ParseTmuxVars(TmuxVars{TMUX: value, TMUXPane: ""}); !errors.Is(err, ErrInvalidArgument) {
+			t.Fatalf("PID out of range accepted: %q, %v", value, err)
+		}
+	}
+
+	for _, value := range []string{"/socket,2147483647,0", "/socket,2147483647"} {
+		info, err := ParseTmuxVars(TmuxVars{TMUX: value, TMUXPane: ""})
+		if err != nil || info.PID != 2147483647 {
+			t.Fatalf("maximum PID = %d, %v", info.PID, err)
+		}
+	}
+}
+
 func TestVersionGates(t *testing.T) {
 	for _, s := range []string{"3.6", "tmux 3.6a", "3.6b", "3.7c", "4.0"} {
 		if !ParseVersion(s).AtLeast(3, 6) {
