@@ -236,6 +236,7 @@ func TestMenuArgsRequireClick(t *testing.T) {
 		Y:             "M",
 		Style:         "",
 		SelectedStyle: "",
+		BorderStyle:   "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -259,6 +260,7 @@ func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
 		Y:             "",
 		Style:         "",
 		SelectedStyle: "",
+		BorderStyle:   "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -280,6 +282,7 @@ func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
 		Y:             "",
 		Style:         "",
 		SelectedStyle: "",
+		BorderStyle:   "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -291,6 +294,38 @@ func TestMenuArgsMouseAndRequireClickFlags(t *testing.T) {
 
 	if slices.Contains(argsMouse, "-O") {
 		t.Fatalf("expected no -O flag when RequireClick=false, got %v", argsMouse)
+	}
+}
+
+func TestMenuArgsSeparateSelectedAndBorderStyles(t *testing.T) {
+	args, err := menuArgsWithTarget("-c", "c0", MenuOptions{
+		Title:         "",
+		Mouse:         false,
+		RequireClick:  false,
+		X:             "",
+		Y:             "",
+		Style:         "",
+		SelectedStyle: "bg=red",
+		BorderStyle:   "fg=blue",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	flagValue := func(flag string) string {
+		if i := slices.Index(args, flag); i >= 0 && i+1 < len(args) {
+			return args[i+1]
+		}
+
+		return ""
+	}
+
+	if got := flagValue("-H"); got != "bg=red" {
+		t.Fatalf("selected style passed as -H %q, want bg=red; args %v", got, args)
+	}
+
+	if got := flagValue("-S"); got != "fg=blue" {
+		t.Fatalf("border style passed as -S %q, want fg=blue; args %v", got, args)
 	}
 }
 

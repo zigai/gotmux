@@ -271,8 +271,11 @@ type (
 		// Style specifies menu text/background style (-s flag).
 		Style string
 
-		// SelectedStyle specifies selected menu item style (-S flag).
+		// SelectedStyle specifies selected menu item style (-H flag).
 		SelectedStyle string
+
+		// BorderStyle specifies menu border style (-S flag).
+		BorderStyle string
 	}
 
 	// MessageOptions configures displaying a status line message on a client.
@@ -1626,8 +1629,10 @@ func menuArgs(clientID string, opts MenuOptions) ([]string, error) {
 }
 
 func menuArgsWithTarget(targetFlag, targetID string, opts MenuOptions) ([]string, error) {
-	if !wire.ValidString(opts.X) || !wire.ValidString(opts.Y) || !wire.ValidString(opts.Style) || !wire.ValidString(opts.SelectedStyle) {
-		return nil, invalid("menu options")
+	for _, s := range []string{opts.X, opts.Y, opts.Style, opts.SelectedStyle, opts.BorderStyle} {
+		if !wire.ValidString(s) {
+			return nil, invalid("menu options")
+		}
 	}
 
 	args := []string{targetFlag, targetID}
@@ -1677,7 +1682,11 @@ func menuStyleArgs(opts MenuOptions) []string {
 	}
 
 	if opts.SelectedStyle != "" {
-		args = append(args, "-S", opts.SelectedStyle)
+		args = append(args, "-H", opts.SelectedStyle)
+	}
+
+	if opts.BorderStyle != "" {
+		args = append(args, "-S", opts.BorderStyle)
 	}
 
 	return args
