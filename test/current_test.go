@@ -3,9 +3,14 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -29,6 +34,132 @@ func assertNoCurrentContext(t *testing.T, info tmux.CurrentInfo) {
 	if info.Identity.PID != 0 || info.Pane.ID.Valid() || info.Window.ID.Valid() || hasSession || hasLink || hasClient {
 		t.Fatalf("failed discovery returned a current context: %+v", info)
 	}
+}
+
+func TestIntegrationSocketDiscoveryVerifiesDaemons(t *testing.T) {
+	ctx := integrationContext(t)
+	directory := shortTempDir(t)
+	t.Chdir(directory)
+	t.Setenv("TMUX_TMPDIR", "relative")
+
+	socketDirectory := filepath.Join(directory, "relative", "tmux-"+strconv.Itoa(os.Getuid()))
+	if err := os.MkdirAll(socketDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	server := discoveryFixture(t, ctx, directory, filepath.Join(socketDirectory, "live"))
+	stalePath := filepath.Join(socketDirectory, "stale")
+	staleDiscoverySocket(t, stalePath)
+
+	otherPath := filepath.Join(socketDirectory, "other")
+	nonDaemonDiscoverySocket(t, otherPath)
+
+	sockets, err := tmux.DiscoverSockets()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(sockets, server.Endpoint().SocketPath) {
+		t.Errorf("live socket not discovered: %v", sockets)
+	}
+
+	for _, socket := range sockets {
+		if !filepath.IsAbs(socket) || slices.Contains([]string{stalePath, otherPath}, socket) {
+			t.Errorf("unverified or relative socket discovered: %q", socket)
+		}
+	}
+
+	servers, err := tmux.DiscoverServers(tmux.Config{Binary: os.Getenv("TMUX_TEST_BINARY")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.ContainsFunc(servers, func(found *tmux.Server) bool { return found.Endpoint() == server.Endpoint() }) {
+		t.Error("live daemon not returned by DiscoverServers")
+	}
+
+	for _, found := range servers {
+		if socket := found.Endpoint().SocketPath; slices.Contains([]string{stalePath, otherPath}, socket) {
+			t.Errorf("non-daemon server returned: %q", socket)
+		}
+	}
+}
+
+func discoveryFixture(t *testing.T, ctx context.Context, directory, socket string) *tmux.Server {
+	t.Helper()
+
+	server, err := tmux.New(tmux.Config{
+		Binary: os.Getenv("TMUX_TEST_BINARY"), SocketPath: socket,
+		ConfigFile: "/dev/null", Env: testEnvironment(directory),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "discovered", Start: tmux.StartPolicyAllowStart})
+	if session.Valid() {
+		identity := session.ServerIdentity()
+
+		t.Cleanup(func() {
+			if err := server.KillMatching(ctx, identity); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return server
+}
+
+func staleDiscoverySocket(t *testing.T, path string) {
+	t.Helper()
+
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listener.SetUnlinkOnClose(false)
+
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func nonDaemonDiscoverySocket(t *testing.T, path string) {
+	t.Helper()
+
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+
+		for {
+			connection, err := listener.AcceptUnix()
+			if err != nil {
+				return
+			}
+
+			if err := connection.Close(); err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+
+	t.Cleanup(func() {
+		if err := listener.Close(); err != nil {
+			t.Error(err)
+		}
+
+		<-done
+	})
 }
 
 func TestIntegrationCurrentFromDiscovery(t *testing.T) {

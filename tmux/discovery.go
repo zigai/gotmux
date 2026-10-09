@@ -1,6 +1,8 @@
 package tmux
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +11,49 @@ import (
 // DiscoverSockets searches standard tmux socket directories and returns absolute paths
 // to all active tmux UNIX domain sockets owned by the current user.
 func DiscoverSockets() ([]string, error) {
+	var config Config
+
+	servers, err := DiscoverServers(config)
+	if err != nil {
+		return nil, err
+	}
+
+	sockets := make([]string, 0, len(servers))
+	for _, server := range servers {
+		sockets = append(sockets, server.Endpoint().SocketPath)
+	}
+
+	return sockets, nil
+}
+
+// DiscoverServers searches for active tmux sockets on the host and returns configured [Server] instances.
+func DiscoverServers(baseCfg Config) ([]*Server, error) {
+	sockets, err := socketCandidates()
+	if err != nil {
+		return nil, err
+	}
+
+	servers := []*Server{}
+
+	for _, sock := range sockets {
+		cfg := baseCfg
+		cfg.SocketPath = sock
+		cfg.SocketName = ""
+
+		server, err := New(cfg)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, err := server.Probe(context.Background()); err == nil {
+			servers = append(servers, server)
+		}
+	}
+
+	return servers, nil
+}
+
+func socketCandidates() ([]string, error) {
 	sockets := []string{}
 	seen := map[string]bool{}
 
@@ -23,6 +68,11 @@ func DiscoverSockets() ([]string, error) {
 	}
 
 	for _, dir := range dirs {
+		dir, err := filepath.Abs(dir)
+		if err != nil {
+			return nil, fmt.Errorf("socket directory: %w", err)
+		}
+
 		if seen[dir] {
 			continue
 		}
@@ -48,27 +98,4 @@ func DiscoverSockets() ([]string, error) {
 	}
 
 	return sockets, nil
-}
-
-// DiscoverServers searches for active tmux sockets on the host and returns configured [Server] instances.
-func DiscoverServers(baseCfg Config) ([]*Server, error) {
-	sockets, err := DiscoverSockets()
-	if err != nil {
-		return nil, err
-	}
-
-	servers := []*Server{}
-
-	for _, sock := range sockets {
-		cfg := baseCfg
-		cfg.SocketPath = sock
-		cfg.SocketName = ""
-
-		s, err := New(cfg)
-		if err == nil {
-			servers = append(servers, s)
-		}
-	}
-
-	return servers, nil
 }
