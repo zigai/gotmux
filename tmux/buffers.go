@@ -44,7 +44,7 @@ type (
 	// PasteOptions configures how a buffer's content is pasted into a target pane.
 	PasteOptions struct {
 		// Buffer specifies the buffer name to paste from (-b flag).
-		// If empty, the most recently added buffer is used.
+		// If empty, the top automatic buffer is used; explicitly named buffers are excluded.
 		Buffer string
 
 		// Delete deletes the buffer immediately after pasting (-d flag).
@@ -66,15 +66,15 @@ type (
 
 // NamedBuffer creates a [BufferRef] targeting an explicitly named paste buffer.
 func NamedBuffer(name string) (BufferRef, error) {
-	if name == "" || !wire.ValidString(name) {
+	if !validNotificationName(name) {
 		return BufferRef{name: "", automatic: false, valid: false}, invalid("buffer name")
 	}
 
 	return BufferRef{name: name, automatic: false, valid: true}, nil
 }
 
-// AutomaticBuffer creates a [BufferRef] targeting the most recently created or modified
-// paste buffer on the server.
+// AutomaticBuffer creates a [BufferRef] targeting the top of the server's automatic
+// paste-buffer stack. Explicitly named buffers are not part of this stack.
 func AutomaticBuffer() BufferRef { return BufferRef{name: "", automatic: true, valid: true} }
 
 // Name returns the explicit buffer name and true, or an empty string and false if this is
@@ -223,11 +223,11 @@ func (s *Server) DeleteBuffer(ctx context.Context, b BufferRef) error {
 
 // RenameBuffer renames a paste buffer from oldName to newName.
 func (s *Server) RenameBuffer(ctx context.Context, oldName, newName string) error {
-	if oldName == "" || !wire.ValidString(oldName) {
+	if !validNotificationName(oldName) {
 		return opError("Server.RenameBuffer", invalid("old buffer name"))
 	}
 
-	if newName == "" || !wire.ValidString(newName) {
+	if !validNotificationName(newName) {
 		return opError("Server.RenameBuffer", invalid("new buffer name"))
 	}
 
@@ -241,7 +241,7 @@ func (s *Server) SetBuffer(ctx context.Context, name string, data []byte) error 
 
 // SetBufferWith sets the contents of the named paste buffer to data according to opts.
 func (s *Server) SetBufferWith(ctx context.Context, name string, data []byte, opts SetBufferOptions) error {
-	if name == "" || !wire.ValidString(name) {
+	if !validNotificationName(name) {
 		return opError("Server.SetBuffer", invalid("buffer name"))
 	}
 
@@ -366,14 +366,14 @@ func (p Pane) PasteBuffer(ctx context.Context, b BufferRef, opts PasteOptions) e
 	return p.h.act(ctx, "Pane.PasteBuffer", "paste-buffer", args...)
 }
 
-// Paste pastes the contents of the most recently created or modified buffer into this pane using default options.
+// Paste pastes the top automatic buffer into this pane using default options.
 func (p Pane) Paste(ctx context.Context) error {
 	return p.PasteWith(ctx, PasteOptions{}) //nolint:exhaustruct_v5 // convenience wrapper uses defaults
 }
 
 // PasteWith pastes buffer contents into this pane according to opts.
 func (p Pane) PasteWith(ctx context.Context, opts PasteOptions) error {
-	if opts.Buffer != "" && !wire.ValidString(opts.Buffer) {
+	if opts.Buffer != "" && !validNotificationName(opts.Buffer) {
 		return opError("Pane.Paste", invalid("buffer name"))
 	}
 

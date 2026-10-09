@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -181,15 +182,16 @@ func (s *Server) OpenControl(ctx context.Context, id SessionID, opts ControlOpti
 	return c, nil
 }
 
-// OpenControlNewSession starts one owned control client by creating and attaching to a new session.
-// It does not create a scratch session, and ctx owns the entire lifetime.
-// The newly created [Session] is returned alongside the active [*Connection].
+func validNotificationName(name string) bool {
+	return name != "" && wire.ValidString(name) && !strings.ContainsAny(name, "\r\n")
+}
+
 func validateControlNewSessionStrings(opts ControlNewSessionOptions) error {
-	if opts.Name != "" && !wire.ValidString(opts.Name) {
+	if opts.Name != "" && !validNotificationName(opts.Name) {
 		return invalid("session name")
 	}
 
-	if opts.Window != "" && !wire.ValidString(opts.Window) {
+	if opts.Window != "" && !validNotificationName(opts.Window) {
 		return invalid("window name")
 	}
 
@@ -197,7 +199,7 @@ func validateControlNewSessionStrings(opts ControlNewSessionOptions) error {
 		return invalid("dir")
 	}
 
-	if opts.Group != "" && !wire.ValidString(opts.Group) {
+	if opts.Group != "" && !validNotificationName(opts.Group) {
 		return invalid("group")
 	}
 

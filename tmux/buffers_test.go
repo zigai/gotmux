@@ -2,6 +2,7 @@ package tmux
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,31 @@ import (
 
 	"github.com/zigai/gotmux/internal/wire"
 )
+
+func TestBufferNamesRejectLineBreaks(t *testing.T) {
+	server := localServer(t)
+
+	for _, name := range []string{"buffer\nbroken", "buffer\rbroken", "buffer\n%exit", "buffer\x00broken"} {
+		if _, err := NamedBuffer(name); !errors.Is(err, ErrInvalidArgument) {
+			t.Errorf("NamedBuffer(%q): %v", name, err)
+		}
+
+		for _, err := range []error{
+			server.SetBuffer(context.Background(), name, []byte("data")),
+			server.RenameBuffer(context.Background(), "source", name),
+		} {
+			if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent {
+				t.Errorf("buffer mutation using %q: %v", name, err)
+			}
+		}
+	}
+
+	for _, name := range []string{"buffer space", "buffer\\slash", "buffer-é"} {
+		if _, err := NamedBuffer(name); err != nil {
+			t.Errorf("valid name %q rejected: %v", name, err)
+		}
+	}
+}
 
 func TestPasteOptions(t *testing.T) {
 	flags, err := pasteFlags(PasteOptions{

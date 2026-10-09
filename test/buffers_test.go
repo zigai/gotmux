@@ -14,6 +14,80 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
+func TestIntegrationAutomaticBufferExcludesNamedBuffers(t *testing.T) {
+	server, _, ctx := apiFixture(t)
+	if err := server.WriteBuffer(ctx, tmux.AutomaticBuffer(), []byte("automatic")); err != nil {
+		t.Fatal(err)
+	}
+
+	named, err := tmux.NamedBuffer("explicit")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, value := range []string{"named first", "named modified"} {
+		if err := server.WriteBuffer(ctx, named, []byte(value)); err != nil {
+			t.Fatal(err)
+		}
+
+		got, err := server.ReadBuffer(ctx, tmux.AutomaticBuffer())
+		if err != nil || string(got) != "automatic" {
+			t.Fatalf("automatic stack after named write = %q, %v", got, err)
+		}
+	}
+}
+
+func TestIntegrationBufferNamesCannotInjectNotifications(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	connection := apiControl(t, ctx, server, session)
+	stream := controlEvents(t, ctx, connection)
+
+	const name = "buffer é"
+	if err := server.SetBuffer(ctx, name, []byte("original")); err != nil {
+		t.Fatal(err)
+	}
+
+	awaitBufferNotification(t, ctx, stream, name)
+
+	for _, invalidName := range []string{"buffer\nbroken", "buffer\rbroken", "buffer\n%exit"} {
+		for _, err := range []error{server.SetBuffer(ctx, invalidName, []byte("changed")), server.RenameBuffer(ctx, name, invalidName)} {
+			operationErr, ok := errors.AsType[*tmux.OperationError](err)
+			if !errors.Is(err, tmux.ErrInvalidArgument) || !ok || operationErr.Outcome.Effect != tmux.EffectNotSent {
+				t.Fatalf("invalid buffer name %q: %v", invalidName, err)
+			}
+		}
+	}
+
+	buffer, err := tmux.NamedBuffer(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := server.ReadBuffer(ctx, buffer)
+	if err != nil || string(got) != "original" {
+		t.Fatalf("rejected buffer mutation changed state: %q, %v", got, err)
+	}
+
+	if _, err := connection.Server().Panes(ctx); err != nil {
+		t.Fatalf("buffer notifications broke control: %v", err)
+	}
+}
+
+func awaitBufferNotification(t *testing.T, ctx context.Context, stream *tmux.EventStream, name string) {
+	t.Helper()
+
+	for {
+		event, err := stream.Next(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if got, ok := event.(tmux.PasteBufferChangedEvent); ok && got.Name == name {
+			break
+		}
+	}
+}
+
 func TestIntegrationBufferFiles(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 	dir := t.TempDir()
