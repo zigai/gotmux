@@ -111,18 +111,12 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 			return
 		}
 
-		value := "second"
-		if strings.Contains(wireStr, "first") {
-			value = "first"
-
-			select {
-			case <-p.release:
-			case <-c.stopCh:
-				return
-			}
+		data, ok := p.mockResponse(wireStr, c)
+		if !ok {
+			return
 		}
 
-		if !sendMockFrame(c, wire.EncodeRecord([]string{value}), &num) {
+		if !sendMockFrame(c, data, &num) {
 			return
 		}
 
@@ -130,6 +124,26 @@ func (p *dispatcherPeer) mockTmuxLoop(rd *os.File, c *Connection) {
 			return
 		}
 	}
+}
+
+func (p *dispatcherPeer) mockResponse(wireStr string, c *Connection) ([]byte, bool) {
+	value := "second"
+	if strings.Contains(wireStr, "first") {
+		value = "first"
+
+		select {
+		case <-p.release:
+		case <-c.stopCh:
+			return nil, false
+		}
+	}
+
+	data := wire.EncodeRecord([]string{value})
+	if strings.Contains(wireStr, strings.TrimSuffix(guardOK, "\n")) {
+		data = append([]byte(guardOK), data...)
+	}
+
+	return data, true
 }
 
 func parseEndWords(end string) ([]string, bool) {
@@ -268,6 +282,136 @@ func TestDispatcherQueuedCancellationNotSent(t *testing.T) {
 
 	if len(p.writes) != 1 {
 		t.Fatal("canceled queued request was written")
+	}
+}
+
+func TestDispatcherAdmissionDeadlineIsCallerTimeout(t *testing.T) {
+	peer := dispatcherFixture(t, 1)
+	first := make(chan error, 1)
+
+	go func() { _, err := peerCall(context.Background(), peer.c, "first"); first <- err }()
+
+	waitWrite(t, peer)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+
+	_, err := peerCall(ctx, peer.c, "second")
+
+	commandErr, ok := errors.AsType[*CommandError](err)
+	if !ok || !errors.Is(err, context.DeadlineExceeded) || commandErr.Timeout != TimeoutSourceCaller || commandErr.Outcome.Effect != EffectNotSent {
+		t.Errorf("capacity admission deadline: %v, command error %#v", err, commandErr)
+	}
+
+	peer.unblock()
+
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDispatcherCanceledLifetimeRejectsAdmissionAfterDrain(t *testing.T) {
+	server := localServer(t)
+
+	var options ControlOptions
+
+	options.QueueDepth = 1
+	options.QueuedBytes = 4096
+
+	opts, err := normalizeControlOptions(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+
+	connection := newConnection(server, opts, cancel)
+	finished := make(chan struct{})
+
+	go func() { connection.dispatch(ctx, "TGO-READY:fixture\n"); close(finished) }()
+
+	connection.frames <- controlFrame{id: frameID{time: 1, number: 42, flags: 0}, data: []byte(fixtureIdentityRecord(server)), failed: false}
+
+	connection.frames <- controlFrame{id: frameID{time: 1, number: 51, flags: 0}, data: []byte("TGO-READY:fixture\n"), failed: false}
+
+	if err := <-connection.ready; err != nil {
+		t.Fatal(err)
+	}
+
+	cancel(context.Canceled)
+
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("dispatcher did not exit")
+	}
+
+	if err := connection.acquireCapacity(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	var request controlRequest
+
+	request.bytes = 1
+	request.result = make(chan controlReply, 1)
+
+	err = connection.enqueueRequest(&request)
+	if !errors.Is(err, ErrClosed) {
+		connection.drainRequests()
+		t.Fatalf("admission after dispatcher exit = %v, want closed", err)
+	}
+
+	if !connection.count.TryAcquire(1) || !connection.bytes.TryAcquire(opts.QueuedBytes) {
+		t.Fatal("admission after dispatcher exit retained permits")
+	}
+}
+
+func TestDispatcherEnqueueShutdownReleasesCapacity(t *testing.T) {
+	server := localServer(t)
+
+	var options ControlOptions
+
+	options.QueueDepth = 1
+	options.QueuedBytes = 4096
+
+	opts, err := normalizeControlOptions(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for iteration := range 20000 {
+		_, cancel := context.WithCancelCause(context.Background())
+
+		connection := newConnection(server, opts, cancel)
+		if err := connection.acquireCapacity(context.Background(), 1); err != nil {
+			t.Fatal(err)
+		}
+
+		var request controlRequest
+
+		request.bytes = 1
+		request.result = make(chan controlReply, 1)
+		start := make(chan struct{})
+		enqueued := make(chan error, 1)
+		stopped := make(chan struct{})
+
+		go func() { <-start; enqueued <- connection.enqueueRequest(&request) }()
+		go func() { <-start; connection.stop(nil, true); connection.drainRequests(); close(stopped) }()
+
+		close(start)
+		<-enqueued
+		<-stopped
+		cancel(nil)
+
+		if len(connection.requests) != 0 {
+			connection.drainRequests()
+			t.Fatalf("iteration %d: request retained after shutdown drain", iteration)
+		}
+
+		if !connection.count.TryAcquire(1) || !connection.bytes.TryAcquire(opts.QueuedBytes) {
+			t.Fatalf("iteration %d: admission permits retained after shutdown", iteration)
+		}
 	}
 }
 

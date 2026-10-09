@@ -172,10 +172,10 @@ func (c *Connection) deliver(r *controlRequest, result Result, err error, effect
 		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: err}
 	}
 
-	r.result <- controlReply{result: result, err: err}
-
-	r.state.Store(requestDelivered)
 	c.releaseRequest(r)
+	r.state.Store(requestDelivered)
+
+	r.result <- controlReply{result: result, err: err}
 }
 
 func (c *Connection) performStartupHandshake(ctx context.Context, nonce string) error {
@@ -302,11 +302,14 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 }
 
 func (c *Connection) dispatch(ctx context.Context, nonce string) {
+	defer func() {
+		c.stop(context.Cause(ctx), false)
+		c.drainRequests()
+	}()
+
 	if err := c.performStartupHandshake(ctx, nonce); err != nil {
 		return
 	}
-
-	defer c.drainRequests()
 
 	for {
 		select {
@@ -323,7 +326,7 @@ func (c *Connection) dispatch(ctx context.Context, nonce string) {
 func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (Result, error) {
 	failed := func(err error) (Result, error) {
 		r := failedResult()
-		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: err}
+		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
 	}
 	if p.mode == replyRaw {
 		return failed(unsupportedControl("ambiguous raw/control output; explicitly use subprocess transport", ErrTransportUnsupported))
@@ -433,21 +436,18 @@ func requestDeadline(ctx context.Context) time.Time {
 
 func (c *Connection) enqueueRequest(r *controlRequest) error {
 	c.mu.Lock()
-	if c.closed {
-		terminal := c.terminal
-		c.mu.Unlock()
-		c.releaseRequest(r)
+	defer c.mu.Unlock()
 
-		return errors.Join(ErrClosed, terminal)
+	if c.closed {
+		c.releaseRequest(r)
+		return errors.Join(ErrClosed, c.terminal)
 	}
-	c.mu.Unlock()
 
 	select {
 	case c.requests <- r:
 		return nil
-	case <-c.stopCh:
+	default:
 		c.releaseRequest(r)
-
-		return errors.Join(ErrClosed, c.terminal)
+		return ErrResourceLimit
 	}
 }
