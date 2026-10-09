@@ -66,3 +66,12 @@ func(o {{$scope}}) Set{{.Method}}(ctx context.Context,value {{.Type}}) error {
 // Unset{{.Method}} unsets the {{.Name}} option in this scope, restoring inherited defaults.
 func(o {{$scope}}) Unset{{.Method}}(ctx context.Context) error { return o.target.set(ctx,"{{$scope}}.Unset{{.Method}}",{{printf "%q" .Name}},"",true) }
 {{end}}{{end}}
+
+func nativeOptionScope(name string) (Scope, bool) {
+ switch name {
+ {{range $scope, $names := .Scopes}}case {{range $index, $name := $names}}{{if $index}},
+ {{end}}{{printf "%q" $name}}{{end}}:
+ return {{$scope}}, true
+ {{end}}}
+ return ScopeServer, false
+}

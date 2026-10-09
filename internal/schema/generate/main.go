@@ -28,6 +28,7 @@ type option struct {
 }
 
 type schema struct {
+	Scopes map[string][]string          `json:"scopes"`
 	Fields map[string][]option          `json:"fields"`
 	Enums  map[string]map[string]string `json:"enums"`
 }

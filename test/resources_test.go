@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -174,6 +175,171 @@ func TestIntegrationResourcesArray(t *testing.T) {
 	}
 
 	assertArray(t, ctx, options, name, want)
+}
+
+func TestIntegrationOptionReadsIgnoreUnrelatedValues(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	link, pane := graphWindow(t, ctx, session)
+
+	largeValue := strings.Repeat("x", 8192)
+
+	settings := []struct {
+		set   func(context.Context, string, string) error
+		name  string
+		value string
+	}{
+		{set: server.Options().Set, name: "escape-time", value: "25"},
+		{set: server.Options().SetUser, name: "@unrelated", value: largeValue},
+		{set: pane.Options().SetUser, name: "@unrelated", value: largeValue},
+		{set: session.Options().Set, name: "status-left", value: "local"},
+		{set: link.Window().Options().Set, name: "monitor-activity", value: "on"},
+		{set: pane.Options().Set, name: "remain-on-exit", value: "on"},
+	}
+	for _, setting := range settings {
+		if err := setting.set(ctx, setting.name, setting.value); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	limited, err := tmux.New(tmux.Config{
+		Binary: os.Getenv("TMUX_TEST_BINARY"), SocketPath: server.Endpoint().SocketPath,
+		ConfigFile: "/dev/null", Limits: tmux.Limits{OutputBytes: 1024},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	limitedPane, err := limited.PaneHandle(pane.ID())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name  string
+		value string
+		want  tmux.Scope
+	}{
+		{name: "escape-time", value: "25", want: tmux.ScopeServer},
+		{name: "status-left", value: "local", want: tmux.ScopeSession},
+		{name: "monitor-activity", value: "on", want: tmux.ScopeWindow},
+		{name: "remain-on-exit", value: "on", want: tmux.ScopePane},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := limitedPane.Options().Get(ctx, test.name)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if origin, ok := got.Origin.Get(); !ok || origin != test.want {
+				t.Fatalf("origin = %v, present=%v, want %v", origin, ok, test.want)
+			}
+
+			if value, ok := got.Effective.Get(); !ok || value != test.value {
+				t.Fatalf("effective value = %q, present=%v, want %q", value, ok, test.value)
+			}
+		})
+	}
+}
+
+func TestIntegrationOptionOriginUsesNativeScope(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	cases := []struct {
+		name    string
+		options tmux.SessionOptions
+		option  string
+		value   string
+		want    tmux.Scope
+	}{
+		{name: "window through session", options: session.Options(), option: "monitor-activity", value: "on", want: tmux.ScopeWindow},
+		{name: "global window through global session", options: server.GlobalSessionOptions(), option: "monitor-activity", value: "on", want: tmux.ScopeGlobalWindow},
+		{name: "server through session", options: session.Options(), option: "escape-time", value: "25", want: tmux.ScopeServer},
+		{name: "session", options: session.Options(), option: "status-left", value: "local", want: tmux.ScopeSession},
+		{name: "user", options: session.Options(), option: "@origin", value: "local", want: tmux.ScopeSession},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			if err := test.options.Set(ctx, test.option, test.value); err != nil {
+				t.Fatal(err)
+			}
+
+			got, err := test.options.Get(ctx, test.option)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if origin, ok := got.Origin.Get(); !ok || origin != test.want {
+				t.Fatalf("%s origin = %v, present=%v, want %v", test.option, origin, ok, test.want)
+			}
+		})
+	}
+}
+
+func TestIntegrationOptionOriginRequiresLocalValue(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+	_, pane := graphWindow(t, ctx, session)
+
+	if err := pane.Options().Set(ctx, "status-left", "from pane"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := pane.Options().Get(ctx, "status-left")
+	if origin, ok := got.Origin.Get(); err != nil || !ok || origin != tmux.ScopeSession {
+		t.Fatalf("session option through pane: %+v, %v", got, err)
+	}
+
+	if err := session.Options().Unset(ctx, "status-left"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err = session.Options().Get(ctx, "status-left")
+	if err != nil || got.Local.State() != tmux.ValueStateUnavailable || got.Origin.State() != tmux.ValueStateUnavailable {
+		t.Fatalf("inherited option origin must stay unproven: %+v, %v", got, err)
+	}
+}
+
+func TestIntegrationPaneOptionOriginOverridesWindow(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+
+	link, pane := graphWindow(t, ctx, session)
+	if err := link.Window().Options().Set(ctx, "remain-on-exit", "off"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := pane.Options().Set(ctx, "remain-on-exit", "on"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := pane.Options().Get(ctx, "remain-on-exit")
+	origin, present := got.Origin.Get()
+
+	value, effective := got.Effective.Get()
+	if err != nil || !present || origin != tmux.ScopePane || !effective || value != "on" {
+		t.Fatalf("pane override origin: %+v, %v", got, err)
+	}
+}
+
+func TestIntegrationArrayIncludesInheritedDefaults(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	for _, name := range []string{"status-format", "update-environment"} {
+		t.Run(name, func(t *testing.T) {
+			defaults, err := server.GlobalSessionOptions().Array(ctx, name)
+			if err != nil || len(defaults) == 0 {
+				t.Fatalf("global defaults: %+v, %v", defaults, err)
+			}
+
+			assertArray(t, ctx, session.Options(), name, defaults)
+
+			updates := []tmux.ArrayUpdate{{Index: defaults[0].Index, Value: "custom", Unset: false}}
+			if _, err := server.GlobalSessionOptions().UpdateArray(ctx, name, updates); err != nil {
+				t.Fatal(err)
+			}
+
+			defaults[0].Value = "custom"
+			assertArray(t, ctx, session.Options(), name, defaults)
+		})
+	}
 }
 
 func assertArray(t *testing.T, ctx context.Context, options tmux.SessionOptions, name string, want []tmux.ArrayEntry) {

@@ -278,12 +278,41 @@ func (t optionTarget) read(ctx context.Context, label string, name string) (Opti
 			return OptionValue[string]{}, afterError(label, ErrInconsistent)
 		}
 
-		result.Origin = PresentValue(t.scope)
+		result.Origin = t.localOrigin(name)
 	}
 	// Parent values are observable, but a separate local/effective query cannot
 	// prove exactly which parent currently owns the value. Origin stays unavailable
 	// rather than guessing from an option-name prefix or comparing equal strings.
 	return result, nil
+}
+
+func (t optionTarget) localOrigin(name string) Value[Scope] {
+	if userOptionName(name) {
+		return PresentValue(t.scope)
+	}
+
+	base, _, _ := strings.Cut(name, "[")
+
+	scope, known := nativeOptionScope(base)
+	if !known {
+		return UnavailableValue[Scope]()
+	}
+
+	if scope == ScopePane && t.scope != ScopePane {
+		scope = ScopeWindow
+	}
+
+	if t.scope == ScopeGlobalSession || t.scope == ScopeGlobalWindow {
+		switch scope {
+		case ScopeSession:
+			scope = ScopeGlobalSession
+		case ScopeWindow:
+			scope = ScopeGlobalWindow
+		case ScopeServer, ScopePane, ScopeGlobalSession, ScopeGlobalWindow:
+		}
+	}
+
+	return PresentValue(scope)
 }
 
 func (t optionTarget) setWith(ctx context.Context, label string, name string, opts SetOptionOptions) error {
@@ -525,7 +554,7 @@ func (t optionTarget) array(ctx context.Context, label string, name string) ([]A
 	}
 	defer op.close()
 
-	args := append(t.args(), "--", base)
+	args := append(t.args(), "-A", "--", base)
 
 	r, err := t.server.execute(opCtx, op, plainPlan(command("show-options", args...)), g, nil)
 	if err != nil {
@@ -555,6 +584,8 @@ func parseArrayLine(label string, line []byte, base string) (ArrayEntry, error) 
 	if !ok {
 		return ArrayEntry{}, afterError(label, ErrProtocol)
 	}
+
+	key = strings.TrimSuffix(key, "*")
 
 	if key == base || !strings.HasPrefix(key, base+"[") {
 		return ArrayEntry{}, opError(label, invalid("not an array option"))
