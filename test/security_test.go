@@ -9,10 +9,71 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zigai/gotmux/tmux"
 )
+
+func TestSecurityIdentityGuardSocketBytes(t *testing.T) {
+	ctx := integrationContext(t)
+
+	data, err := os.ReadFile("testdata/socket-names.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for suffix := range strings.SplitSeq(strings.TrimSuffix(string(data), "\n"), "\n") {
+		t.Run(suffix, func(t *testing.T) {
+			session := guardedSocketFixture(t, ctx, suffix)
+			if _, err := session.Info(ctx); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := session.Rename(ctx, "renamed"); err != nil {
+				t.Fatal(err)
+			}
+
+			if got := sessionName(t, ctx, session); got != "renamed" {
+				t.Fatalf("session name = %q", got)
+			}
+		})
+	}
+}
+
+func guardedSocketFixture(t *testing.T, ctx context.Context, suffix string) tmux.Session {
+	t.Helper()
+	directory := shortTempDir(t)
+
+	server, err := tmux.New(tmux.Config{
+		Binary: os.Getenv("TMUX_TEST_BINARY"), SocketPath: filepath.Join(directory, "sock-"+suffix),
+		ConfigFile: "/dev/null", Env: testEnvironment(directory),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "guarded", Start: tmux.StartPolicyAllowStart})
+	if session.Valid() {
+		t.Cleanup(func() {
+			command, err := tmux.NewCommand("kill-server")
+			if err != nil {
+				t.Error(err)
+				return
+			}
+
+			if _, err := server.Run(ctx, command); err != nil {
+				t.Error(err)
+			}
+		})
+	}
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return session
+}
 
 func TestSecurityFormatInjection(t *testing.T) {
 	server, baseSession, ctx := apiFixture(t)

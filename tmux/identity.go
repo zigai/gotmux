@@ -84,11 +84,17 @@ func (i ServerIdentity) isZero() bool {
 	return i.PID == 0 && i.Started.IsZero() && i.ReportedSocket == "" && i.Endpoint.isZero() && i.Generation == 0
 }
 
-// formatBytes encodes literal operands as expansions, not as format syntax.
+// formatBytes encodes syntax-bearing bytes as expansions and preserves other bytes.
 // Braces, commas, #, and arbitrary non-NUL bytes cannot alter a comparison.
 func formatBytes(s string) string {
 	var b strings.Builder
+
 	for i := range len(s) {
+		if s[i] < ' ' || s[i] > '~' {
+			b.WriteByte(s[i])
+			continue
+		}
+
 		b.WriteString("#{a:")
 		b.WriteString(strconv.Itoa(int(s[i])))
 		b.WriteByte('}')
