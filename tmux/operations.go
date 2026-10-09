@@ -45,7 +45,9 @@ type (
 		// KillRunning kills the process if still running (-k flag).
 		KillRunning bool
 
-		// PreserveEnvironment prevents tmux from updating environment variables from the session (-E flag).
+		// PreserveEnvironment requests reusing the original process environment instead of the session environment.
+		// tmux does not retain that environment; setting this returns ErrUnsupported without respawning.
+		// Use Env or TmuxEnv to supply explicit overrides instead.
 		PreserveEnvironment bool
 	}
 
@@ -374,6 +376,10 @@ func tmuxEnvFlags(env map[string]string) ([]string, error) {
 }
 
 func respawn(ctx context.Context, label string, h handle, name string, opts RespawnOptions) error {
+	if opts.PreserveEnvironment {
+		return opError(label, unsupported("preserving the original process environment; use explicit environment overrides"))
+	}
+
 	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
 	if err != nil {
 		return opError(label, err)
@@ -382,10 +388,6 @@ func respawn(ctx context.Context, label string, h handle, name string, opts Resp
 	args := []string{"-t", h.id}
 	if opts.KillRunning {
 		args = append(args, "-k")
-	}
-
-	if opts.PreserveEnvironment {
-		args = append(args, "-E")
 	}
 
 	tmuxEnvArgs, err := tmuxEnvFlags(opts.TmuxEnv)

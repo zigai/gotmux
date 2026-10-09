@@ -298,11 +298,19 @@ func TestIntegrationNewPaneFloating(t *testing.T) {
 	}
 }
 
-func TestIntegrationRespawnPreserveEnvironment(t *testing.T) {
-	server, session, ctx := apiFixture(t)
-	requireTmux38(t, ctx, server)
+func TestIntegrationRespawnPreserveEnvironmentRejectsWithoutMutation(t *testing.T) {
+	for _, target := range []string{"pane", "window"} {
+		t.Run(target, func(t *testing.T) {
+			assertPreservedRespawnRejected(t, target)
+		})
+	}
+}
 
-	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "respawn-win"})
+func assertPreservedRespawnRejected(t *testing.T, target string) {
+	t.Helper()
+	_, session, ctx := apiFixture(t)
+
+	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "respawn-win", Program: tmux.Exec("/bin/sleep", "60")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,31 +320,30 @@ func TestIntegrationRespawnPreserveEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := pane.Respawn(ctx, tmux.RespawnOptions{
-		KillRunning:         true,
-		PreserveEnvironment: true,
-	}); err != nil {
-		if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
-			t.Fatalf("Respawn stderr: %q", string(cmdErr.Result.Stderr))
-		}
-
-		t.Fatalf("pane.Respawn with PreserveEnvironment failed: %v", err)
-	}
-
-	link2, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "respawn-win2"})
+	before, err := pane.Info(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if err := link2.Window().Respawn(ctx, tmux.RespawnOptions{
-		KillRunning:         true,
-		PreserveEnvironment: true,
-	}); err != nil {
-		if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
-			t.Fatalf("Respawn window stderr: %q", string(cmdErr.Result.Stderr))
-		}
+	options := tmux.RespawnOptions{KillRunning: true, PreserveEnvironment: true, Program: tmux.Exec("/bin/sleep", "120")}
+	if target == "pane" {
+		err = pane.Respawn(ctx, options)
+	} else {
+		err = link.Window().Respawn(ctx, options)
+	}
 
-		t.Fatalf("window.Respawn with PreserveEnvironment failed: %v", err)
+	var operation *tmux.OperationError
+	if !errors.Is(err, tmux.ErrUnsupported) || !errors.As(err, &operation) || operation.Outcome.Effect != tmux.EffectNotSent {
+		t.Fatalf("Respawn error = %v, want ErrUnsupported with EffectNotSent", err)
+	}
+
+	after, err := pane.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if after.PID != before.PID || after.Dead {
+		t.Fatalf("rejected respawn changed the running process: before PID %d, after PID %d, dead %v", before.PID, after.PID, after.Dead)
 	}
 }
 
