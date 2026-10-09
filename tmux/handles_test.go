@@ -143,6 +143,54 @@ func TestUnprobedHandleInfo(t *testing.T) {
 	}
 }
 
+func TestUnprobedPaneWindowKeepsVerifiedOrigin(t *testing.T) {
+	server, response, _ := mockScriptServer(t)
+
+	pane, err := server.PaneHandle("%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	writeMockResponse(t, response, encodeTestPaneRecord(server, "%7"))
+
+	window, err := pane.Window(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if window.ID() != "@2" || !window.ServerIdentity().Equal(mockServerIdentity(server)) {
+		t.Fatalf("parent window lost verified identity: %+v", window.ServerIdentity())
+	}
+}
+
+func TestUnprobedHandleEqualityUsesEndpoint(t *testing.T) {
+	server := localServer(t)
+
+	other, err := New(testConfig("/bin/echo", server.Endpoint().SocketPath+"-other"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pane, err := server.PaneHandle("%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	same, err := server.PaneHandle("%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	different, err := other.PaneHandle("%7")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !pane.Equal(same) || pane.Equal(different) {
+		t.Fatal("unprobed handle equality ignored endpoint")
+	}
+}
+
 func TestUnprobedHandleSplit(t *testing.T) {
 	s, response, log := mockScriptServer(t)
 

@@ -214,7 +214,7 @@ func (h handle) guard() *guard {
 }
 
 func (h handle) equal(other handle) bool {
-	return h.valid() && other.valid() && h.kind == other.kind && h.id == other.id && h.origin.Equal(other.origin) && h.client == other.client
+	return h.valid() && other.valid() && h.kind == other.kind && h.id == other.id && h.server.endpoint == other.server.endpoint && h.origin.Equal(other.origin) && h.client == other.client
 }
 
 func (h handle) act(ctx context.Context, label string, name string, args ...string) error {

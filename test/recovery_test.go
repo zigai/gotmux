@@ -41,6 +41,9 @@ func TestDaemonReplacement(t *testing.T) {
 	}
 
 	paneA := firstPane(t, ctx, serverA)
+
+	parentWindow := unprobedParentWindow(t, ctx, serverA, paneA.ID())
+
 	staleEnv := currentVars(infoA.Identity, sessionA.ID(), paneA.ID())
 
 	killDaemon(t, infoA.Identity.PID)
@@ -70,6 +73,7 @@ func TestDaemonReplacement(t *testing.T) {
 
 	assertStaleMutationRefused(t, ctx, sessionA, serverB)
 
+	assertStaleParentWindowRefused(t, ctx, parentWindow, paneB)
 	_, freshPane := graphWindow(t, ctx, sessionB)
 
 	unprobed, err := serverB.PaneHandle(freshPane.ID())
@@ -94,6 +98,40 @@ func TestDaemonReplacement(t *testing.T) {
 
 			assertGraph(t, ctx, serverB, before)
 		})
+	}
+}
+
+func unprobedParentWindow(t *testing.T, ctx context.Context, server *tmux.Server, paneID tmux.PaneID) tmux.Window {
+	t.Helper()
+
+	pane, err := server.PaneHandle(paneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	window, err := pane.Window(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return window
+}
+
+func assertStaleParentWindowRefused(t *testing.T, ctx context.Context, parentWindow tmux.Window, paneB tmux.Pane) {
+	t.Helper()
+
+	replacementWindow, err := paneB.Window(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	beforeWindowName := windowName(t, ctx, replacementWindow)
+	if err := parentWindow.Rename(ctx, "stale-parent"); !errors.Is(err, tmux.ErrServerChanged) || outcomeOf(err).Effect != tmux.EffectNotSent {
+		t.Errorf("stale parent window mutation = %v", err)
+	}
+
+	if got := windowName(t, ctx, replacementWindow); got != beforeWindowName {
+		t.Fatalf("replacement window renamed: got %q, want %q", got, beforeWindowName)
 	}
 }
 

@@ -861,7 +861,7 @@ func (p Pane) Window(ctx context.Context) (Window, error) {
 		return Window{}, opError("Pane.Window", err)
 	}
 
-	return Window{h: p.h.withOrigin(string(v.WindowID), ObjectKindWindow)}, nil
+	return Window{h: v.h.withOrigin(string(v.WindowID), ObjectKindWindow)}, nil
 }
 
 // Windows returns all [WindowLink] handles linked into this session, ordered by slot index.
