@@ -322,19 +322,18 @@ func isValuedFlag(ch rune) bool {
 }
 
 func parseFlagBundle(arg string, args []string, i int, s *rawParseState) (int, bool, error) {
-	runes := []rune(arg[1:])
-	if len(runes) == 0 {
+	bundle := arg[1:]
+	if len(bundle) == 0 {
 		return i, true, nil
 	}
 
-	for j := range runes {
-		ch := runes[j]
+	for index, ch := range bundle {
 		if applySimpleFlag(ch, s) {
 			continue
 		}
 
 		if isValuedFlag(ch) {
-			nextI, err := applyValuedFlag(ch, runes[j+1:], args, i, s)
+			nextI, err := applyValuedFlag(ch, bundle[index+1:], args, i, s)
 			if err != nil {
 				return i, false, err
 			}
@@ -348,7 +347,7 @@ func parseFlagBundle(arg string, args []string, i int, s *rawParseState) (int, b
 	return i, false, nil
 }
 
-func extractFlagVal(ch rune, remaining []rune, args []string, i int) (string, int, error) {
+func extractFlagVal(ch rune, remaining string, args []string, i int) (string, int, error) {
 	var (
 		val   string
 		nextI = i
@@ -356,7 +355,7 @@ func extractFlagVal(ch rune, remaining []rune, args []string, i int) (string, in
 
 	switch {
 	case len(remaining) > 0:
-		val = string(remaining)
+		val = remaining
 	case i+1 < len(args):
 		nextI++
 		val = args[nextI]
@@ -371,7 +370,7 @@ func extractFlagVal(ch rune, remaining []rune, args []string, i int) (string, in
 	return val, nextI, nil
 }
 
-func applyValuedFlag(ch rune, remaining []rune, args []string, i int, s *rawParseState) (int, error) {
+func applyValuedFlag(ch rune, remaining string, args []string, i int, s *rawParseState) (int, error) {
 	val, nextI, err := extractFlagVal(ch, remaining, args, i)
 	if err != nil {
 		return i, err

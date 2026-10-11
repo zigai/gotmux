@@ -56,6 +56,17 @@ func TestParseCommandLine_Attached(t *testing.T) {
 	}
 }
 
+func TestParseCommandLineAttachedSocketPathBytes(test *testing.T) {
+	parsed, err := ParseCommandLine([]string{"-S/\x80"})
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	if parsed.Config.SocketPath != "/\x80" {
+		test.Fatalf("socket path = %q, want %q", parsed.Config.SocketPath, "/\x80")
+	}
+}
+
 func TestParseCommandLine_FlagsOnly(t *testing.T) {
 	parsedFlagsOnly, err := ParseCommandLine([]string{"-u", "-v"})
 	if err != nil {
