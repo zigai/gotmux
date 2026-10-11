@@ -192,8 +192,8 @@ func validNotificationName(name string) bool {
 }
 
 func validateControlNewSessionStrings(opts ControlNewSessionOptions) error {
-	if opts.Name != "" && !validNotificationName(opts.Name) {
-		return invalid("session name")
+	if err := sessionName(opts.Name, true); err != nil {
+		return err
 	}
 
 	if opts.Window != "" && !validNotificationName(opts.Window) {
@@ -684,7 +684,7 @@ func newSessionFlags(opts ControlNewSessionOptions) []string {
 	}
 
 	if opts.Name != "" {
-		args = append(args, "-s", opts.Name)
+		args = append(args, "-s", wire.LiteralFormat(opts.Name))
 	}
 
 	if opts.Window != "" {

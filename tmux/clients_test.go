@@ -625,6 +625,42 @@ func TestRefreshRejectedEnableLeavesPaneOutputOff(t *testing.T) {
 	}
 }
 
+func TestControlNewSessionRejectsNormalizedNames(test *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"dot", "a.b"},
+		{"colon", "a:b"},
+		{"backslash", `a\b`},
+		{"control", "a\tb"},
+		{"delete", "a\x7fb"},
+		{"invalid UTF-8", "a\x80b"},
+	}
+	for _, testCase := range cases {
+		test.Run(testCase.name, func(test *testing.T) {
+			server := localServer(test)
+
+			var options ControlNewSessionOptions
+
+			options.Name = testCase.value
+
+			connection, session, err := server.OpenControlNewSession(test.Context(), options)
+			if connection != nil {
+				test.Cleanup(func() {
+					if err := connection.Close(); err != nil {
+						test.Error(err)
+					}
+				})
+			}
+
+			if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent || connection != nil || session.Valid() {
+				test.Fatalf("name %q: connection=%v session=%v error=%v outcome=%+v", testCase.value, connection, session, err, outcomeOf(err))
+			}
+		})
+	}
+}
+
 func TestControlNewSessionRejectsLineBreaks(t *testing.T) {
 	server := localServer(t)
 

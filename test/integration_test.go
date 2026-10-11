@@ -1740,7 +1740,7 @@ func TestIntegrationRunWithEmptyInputSlice(t *testing.T) {
 func TestIntegrationOpenControlNewSession(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	sessName := "new_ctl_sess_r5"
+	sessName := "literal-#{pid}"
 
 	conn, session, err := server.OpenControlNewSession(ctx, tmux.ControlNewSessionOptions{
 		Control: tmux.ControlOptions{PaneOutput: false},
