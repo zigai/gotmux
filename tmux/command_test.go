@@ -282,6 +282,23 @@ func TestParseSequence(t *testing.T) {
 	}
 }
 
+func TestParseSequencePreservesTrailingNonASCIIWhitespace(test *testing.T) {
+	sequence, err := ParseSequence("set-option -g @value a\u00a0")
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	commands := sequence.Commands()
+	if len(commands) != 1 {
+		test.Fatalf("commands = %v, want one set-option", commands)
+	}
+
+	want := []string{"-g", "@value", "a\u00a0"}
+	if commands[0].Name() != "set-option" || !slices.Equal(commands[0].Args(), want) {
+		test.Fatalf("command = %s %q, want set-option %q", commands[0].Name(), commands[0].Args(), want)
+	}
+}
+
 func TestSequenceCopies(t *testing.T) {
 	c, _ := NewCommand("display-message", "one")
 

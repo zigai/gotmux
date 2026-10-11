@@ -152,7 +152,7 @@ func splitSequence(text string, escapedSeparator bool) ([]string, error) {
 		return nil, ErrCommandText
 	}
 
-	part := strings.TrimSpace(text[start:])
+	part := strings.Trim(text[start:], " \t")
 	if part != "" {
 		out = append(out, part)
 	}
@@ -227,7 +227,7 @@ func handleEscape(b *strings.Builder, text string, i int, started *bool) (int, e
 }
 
 func extractPart(text string, start, end int) (string, error) {
-	part := strings.TrimSpace(text[start:end])
+	part := strings.Trim(text[start:end], " \t")
 	if part == "" {
 		return "", ErrCommandText
 	}
