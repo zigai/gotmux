@@ -728,7 +728,10 @@ func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce stri
 		return nil, err
 	}
 
-	cmdArgs = append(cmdArgs, progArgs...)
+	if len(progArgs) > 0 {
+		cmdArgs = append(cmdArgs, "--")
+		cmdArgs = append(cmdArgs, progArgs...)
+	}
 
 	p := emptyPlan(command(cmdArgs[0], cmdArgs[1:]...))
 	p.nodes = append(p.nodes, identityNode(), markerNode(nonce))

@@ -1106,6 +1106,45 @@ func TestIntegrationControlNewSessionRejectsInvalidEnvironmentName(test *testing
 	}
 }
 
+func TestIntegrationControlNewSessionProgramIsNotOptions(test *testing.T) {
+	script, err := filepath.Abs("testdata/sleep.sh")
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	binaryDirectory := test.TempDir()
+	if err := os.Symlink(script, filepath.Join(binaryDirectory, "-n")); err != nil {
+		test.Fatal(err)
+	}
+
+	test.Setenv("PATH", binaryDirectory+":"+os.Getenv("PATH"))
+
+	server, _, ctx := apiFixture(test)
+
+	connection, session, err := server.OpenControlNewSession(ctx, tmux.ControlNewSessionOptions{
+		Name: "program", Window: "kept", Program: tmux.Exec("-n", "60"),
+	})
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	closeOnCleanup(test, connection)
+
+	session, err = session.ViaSubprocess()
+	if err != nil {
+		test.Fatal(err)
+	}
+
+	windows, _, err := session.WindowInfos(ctx)
+	if err != nil || len(windows) != 1 || windows[0].Name != "kept" {
+		test.Fatalf("windows = %+v, error = %v; want one kept window", windows, err)
+	}
+
+	_, pane := firstWindowPane(test, ctx, session)
+	command, err := pane.Format(ctx, "#{pane_start_command}")
+	assertFormatValues(test, "pane program", [][]byte{command}, err, "-n 60")
+}
+
 // TestIntegrationControlNoEchoPTY verifies that a control connection started with NoEcho: true
 // operates natively over a PTY, negotiating the -CC DSC preamble, executing commands, and exiting cleanly.
 func TestIntegrationControlNoEchoPTY(t *testing.T) {
