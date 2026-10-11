@@ -711,7 +711,7 @@ func (s *Server) notedBindings(ctx context.Context, op *operation, info ServerIn
 			keys = make(map[Key]bool)
 
 			for line := range bytes.SplitSeq(result.Stdout, []byte{'\n'}) {
-				key, _, ok := strings.Cut(strings.TrimSpace(string(line)), " ")
+				key, _, ok := strings.Cut(strings.TrimLeft(string(line), " "), " ")
 				if ok {
 					keys[Key(key)] = true
 				}

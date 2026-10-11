@@ -203,6 +203,27 @@ func TestIntegrationBindingQueriesEmptyAndErrors(t *testing.T) {
 	}
 }
 
+func TestIntegrationBindingsNotesOnlyPreservesUnicodeKey(test *testing.T) {
+	server, _, ctx := apiFixture(test)
+
+	const table tmux.KeyTable = "unicode-notes"
+
+	const key tmux.Key = "\u00a0"
+
+	command := testCommand(test, "display-message", "noted")
+
+	if err := server.Bind(ctx, table, key, testSequence(test, command), tmux.BindOptions{Note: "note"}); err != nil {
+		test.Fatal(err)
+	}
+
+	bindings, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, NotesOnly: true})
+	if err != nil || len(bindings) != 1 || bindings[0].Table != table || bindings[0].Key != key {
+		test.Fatalf("noted bindings = %+v, error = %v; want one %q binding", bindings, err, key)
+	}
+
+	assertPayload(test, bindings[0].Payload, command)
+}
+
 func TestIntegrationBindingsNotesOnlyAndFirstMatch(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
