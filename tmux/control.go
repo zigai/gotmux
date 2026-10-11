@@ -688,11 +688,11 @@ func newSessionFlags(opts ControlNewSessionOptions) []string {
 	}
 
 	if opts.Window != "" {
-		args = append(args, "-n", opts.Window)
+		args = append(args, "-n", wire.LiteralFormat(opts.Window))
 	}
 
 	if opts.Dir != "" {
-		args = append(args, "-c", opts.Dir)
+		args = append(args, "-c", wire.LiteralFormat(opts.Dir))
 	}
 
 	if opts.Group != "" {

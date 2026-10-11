@@ -55,6 +55,23 @@ func apiFixture(t *testing.T) (*tmux.Server, tmux.Session, context.Context) {
 	return server, session, ctx
 }
 
+func literalDirectory(t *testing.T) string {
+	t.Helper()
+
+	directory, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, name := range []string{"#data", "##data"} {
+		if err := os.Mkdir(filepath.Join(directory, name), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	return filepath.Join(directory, "##data")
+}
+
 func apiControl(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session) *tmux.Connection {
 	t.Helper()
 

@@ -1036,18 +1036,17 @@ func TestIntegrationRunWithEmptyInputSlice(t *testing.T) {
 	}
 }
 
-// TestIntegrationOpenControlNewSession verifies OpenControlNewSession creates a new session,
-// attaches directly in control mode, and discovers the exact owned Client via Connection.Client().
 func TestIntegrationOpenControlNewSession(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	sessName := "literal-#{pid}"
+	directory := literalDirectory(t)
 
 	conn, session, err := server.OpenControlNewSession(ctx, tmux.ControlNewSessionOptions{
 		Control: tmux.ControlOptions{PaneOutput: false},
 		Name:    sessName,
-		Window:  "win_r5",
-		Dir:     t.TempDir(),
+		Window:  "literal-#{pid}",
+		Dir:     directory,
 	})
 	if err != nil {
 		t.Fatalf("OpenControlNewSession failed: %v", err)
@@ -1063,6 +1062,9 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 	if info.Name != sessName {
 		t.Errorf("expected session name %q, got %q", sessName, info.Name)
 	}
+
+	path, err := session.Format(ctx, "#{session_path}")
+	assertFormatValues(t, "session directory", [][]byte{path}, err, directory)
 
 	client, err := conn.Client(ctx)
 	if err != nil {
@@ -1082,9 +1084,9 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 		t.Errorf("expected client to be in control mode")
 	}
 
-	windows, err := conn.Server().Windows(ctx)
-	if err != nil || len(windows) == 0 {
-		t.Fatalf("conn.Server().Windows failed: %v", err)
+	windows, _, err := session.WindowInfos(ctx)
+	if err != nil || len(windows) != 1 || windows[0].Name != "literal-#{pid}" {
+		t.Fatalf("control windows = %+v, error = %v; want one literal-#{pid} window", windows, err)
 	}
 }
 
