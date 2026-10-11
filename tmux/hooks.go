@@ -3,6 +3,7 @@ package tmux
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"errors"
 	"strconv"
 	"strings"
@@ -19,6 +20,16 @@ const (
 
 	// KeyTableCopyModeVi is the key table active when vi-style copy mode is entered.
 	KeyTableCopyModeVi KeyTable = "copy-mode-vi"
+
+	listKeysTemplate = "#{?notes_only," +
+		"#{key_prefix} " +
+		"#{p|#{key_string_width}:key_string} " +
+		"#{?key_note,#{key_note},#{key_command}}" +
+		"," +
+		"bind-key #{?key_has_repeat,#{?key_repeat,-r,  },} " +
+		"-T #{p|#{key_table_width}:key_table} " +
+		"#{p|#{key_string_width}:#{q|a:key_string}} " +
+		"#{key_command}}"
 )
 
 type (
@@ -483,6 +494,42 @@ func listKeysArgs(opts BindingsOptions) []string {
 	return args
 }
 
+func (s *Server) listKeys(ctx context.Context, op *operation, info ServerInfo, args []string) (Result, error) {
+	if info.Version.Major != 3 || info.Version.Minor != 7 {
+		return s.execute(ctx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
+	}
+
+	marker := rand.Text() + "\t"
+
+	r, err := s.execute(ctx, op, plainPlan(command("list-keys", append([]string{"-F", marker + listKeysTemplate}, args...)...)), newGuard(info.Identity), nil)
+	if err != nil {
+		return r, err
+	}
+
+	if len(r.Stdout) == 0 {
+		r, err = s.execute(ctx, op, plainPlan(command("show-messages")), newGuard(info.Identity), nil)
+		if err != nil {
+			return r, err
+		}
+	}
+
+	r.Stdout = markedLines(r.Stdout, marker)
+
+	return r, nil
+}
+
+func markedLines(stdout []byte, marker string) []byte {
+	var out []byte
+
+	for line := range bytes.SplitSeq(stdout, []byte{'\n'}) {
+		if _, rest, ok := bytes.Cut(line, []byte(marker)); ok {
+			out = append(append(out, rest...), '\n')
+		}
+	}
+
+	return out
+}
+
 func validateBindingsOptions(opts BindingsOptions) error {
 	if opts.Table != "" && !opts.Table.Valid() {
 		return invalid("key table")
@@ -513,7 +560,7 @@ func (s *Server) FindBindings(ctx context.Context, opts BindingsOptions) ([]Bind
 		return nil, opError("Server.FindBindings", err)
 	}
 
-	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", listKeysArgs(opts)...)), newGuard(info.Identity), nil)
+	r, err := s.listKeys(opCtx, op, info, listKeysArgs(opts))
 	if err != nil {
 		if bindingQueryNoMatch(err, opts) {
 			return []BindingInfo{}, nil
@@ -558,7 +605,7 @@ func (s *Server) BindingNotes(ctx context.Context, opts BindingsOptions) ([]Bind
 		return nil, opError("Server.BindingNotes", err)
 	}
 
-	r, err := s.execute(opCtx, op, plainPlan(command("list-keys", bindingNotesArgs(opts)...)), newGuard(info.Identity), nil)
+	r, err := s.listKeys(opCtx, op, info, bindingNotesArgs(opts))
 	if err != nil {
 		if bindingQueryNoMatch(err, opts) {
 			return []BindingNote{}, nil
@@ -697,7 +744,7 @@ func (s *Server) notedBindings(ctx context.Context, op *operation, info ServerIn
 		if !queried {
 			args := []string{"-N", "-P", "", "-T", string(binding.Table)}
 
-			result, err := s.execute(ctx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
+			result, err := s.listKeys(ctx, op, info, args)
 			if err != nil && !bindingQueryNoMatch(err, BindingsOptions{
 				Table:      binding.Table,
 				Key:        "",
