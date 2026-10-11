@@ -9,7 +9,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -27,7 +26,6 @@ const (
 	defaultFrameBytes  = 4 << 20
 	defaultEventBytes  = 32 << 20
 	defaultMaxStreams  = 8
-	envArgMultiplier   = 2
 )
 
 var (
@@ -710,26 +708,6 @@ func newSessionFlags(opts ControlNewSessionOptions) []string {
 	return args
 }
 
-func newSessionEnv(env map[string]string) []string {
-	if len(env) == 0 {
-		return nil
-	}
-
-	keys := make([]string, 0, len(env))
-	for k := range env {
-		keys = append(keys, k)
-	}
-
-	slices.Sort(keys)
-
-	args := make([]string, 0, len(keys)*envArgMultiplier)
-	for _, k := range keys {
-		args = append(args, "-e", k+"="+env[k])
-	}
-
-	return args
-}
-
 func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce string) ([]string, error) {
 	flags, err := s.controlFlags(opts.Control)
 	if err != nil {
@@ -738,7 +716,12 @@ func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce stri
 
 	cmdArgs := append([]string{"new-session", "-f", flags}, newSessionFlags(opts)...)
 
-	cmdArgs = append(cmdArgs, newSessionEnv(opts.TmuxEnv)...)
+	envArgs, err := tmuxEnvArgs(opts.TmuxEnv)
+	if err != nil {
+		return nil, err
+	}
+
+	cmdArgs = append(cmdArgs, envArgs...)
 
 	progArgs, err := opts.Program.argv()
 	if err != nil {

@@ -1090,6 +1090,22 @@ func TestIntegrationOpenControlNewSession(t *testing.T) {
 	}
 }
 
+func TestIntegrationControlNewSessionRejectsInvalidEnvironmentName(test *testing.T) {
+	server, _, ctx := apiFixture(test)
+
+	connection, _, err := server.OpenControlNewSession(ctx, tmux.ControlNewSessionOptions{
+		Name: "invalid-environment", TmuxEnv: map[string]string{"A=B": "C"},
+	})
+	if connection != nil {
+		closeOnCleanup(test, connection)
+	}
+
+	operationError, ok := errors.AsType[*tmux.OperationError](err)
+	if !errors.Is(err, tmux.ErrInvalidArgument) || !ok || operationError.Outcome.Effect != tmux.EffectNotSent {
+		test.Fatalf("invalid environment = %v, outcome = %#v; want invalid argument, not sent", err, operationError)
+	}
+}
+
 // TestIntegrationControlNoEchoPTY verifies that a control connection started with NoEcho: true
 // operates natively over a PTY, negotiating the -CC DSC preamble, executing commands, and exiting cleanly.
 func TestIntegrationControlNoEchoPTY(t *testing.T) {
