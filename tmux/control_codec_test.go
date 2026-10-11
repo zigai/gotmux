@@ -219,24 +219,32 @@ func TestControlInterleavedEventsDoNotExhaustFrameBytes(t *testing.T) {
 }
 
 func TestControlTornRecordFramePreserved(t *testing.T) {
-	// A torn record (e.g. from concurrent process fork/exec during format expansion)
-	// has a length prefix mismatch, e.g. "TGO1:2:10:mismatched,5:extra,\n".
-	// readControlUnit should align on the line boundary and preserve the frame output
-	// so higher-level query retry (parseOrRetry) can inspect the torn record and retry,
-	// rather than killing the entire control connection with a fatal protocol error.
-	stream := "%begin 1 10 1\nTGO1:2:10:mismatched,5:extra,\n%end 1 10 1\n"
+	// Query retry needs the original torn record without closing the control connection.
+	const record = "TGO1:1:1:aa0:,\n"
 
-	u, err := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 4096, func(Event) {})
+	stream := "%begin 1 10 1\n" + record + "%end 1 10 1\n%begin 1 11 1\nTGO1:0:\n%end 1 11 1\n"
+	reader := bufio.NewReader(strings.NewReader(stream))
+
+	unit, err := readControlUnit(reader, 4096, func(Event) {})
 	if err != nil {
 		t.Fatalf("expected torn record line to be preserved within frame, got err: %v", err)
 	}
 
-	if u.frame == nil || u.frame.failed {
-		t.Fatalf("expected successful frame holding raw output, got: %+v", u.frame)
+	if unit.frame == nil || unit.frame.failed {
+		t.Fatalf("expected successful frame holding raw output, got: %+v", unit.frame)
 	}
 
-	if !strings.Contains(string(u.frame.data), "TGO1:2:10:mismatched") {
-		t.Fatalf("expected frame data to contain torn record, got: %q", string(u.frame.data))
+	if string(unit.frame.data) != record {
+		t.Fatalf("recovered record = %q, want %q", unit.frame.data, record)
+	}
+
+	if _, err := wire.ParseRecords(unit.frame.data, 1); !errors.Is(err, wire.ErrRecord) {
+		t.Fatalf("torn record accepted by decoder: %v", err)
+	}
+
+	next, err := readControlUnit(reader, 4096, func(Event) {})
+	if err != nil || next.frame == nil || next.frame.failed || string(next.frame.data) != "TGO1:0:\n" {
+		t.Fatalf("following frame = %+v, error = %v", next.frame, err)
 	}
 }
 

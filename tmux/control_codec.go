@@ -156,7 +156,7 @@ func readRecordWireChunk(r *bufio.Reader, left int64) ([]byte, error) {
 	wireChunk, err := wire.ReadRecordWire(r, left)
 	if err != nil {
 		if errors.Is(err, wire.ErrRecord) {
-			rest, readErr := boundedLine(r, left)
+			rest, readErr := boundedLine(r, left-int64(len(wireChunk)))
 			if readErr != nil {
 				return nil, errors.Join(ErrProtocol, err, readErr)
 			}

@@ -30,6 +30,11 @@ type Reader interface {
 	io.ByteReader
 }
 
+type recordReader struct {
+	source Reader
+	data   bytes.Buffer
+}
+
 func RecordFormat(fields []string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s%d:", RecordPrefix, len(fields))
@@ -84,8 +89,10 @@ func ReadRecord(r Reader, maxBytes int64) ([]byte, []string, error) {
 
 // ReadRecordWire scans and verifies one complete record, returning only its wire bytes.
 func ReadRecordWire(r Reader, maxBytes int64) ([]byte, error) {
-	wireBytes, _, err := scanRecord(r, maxBytes, wantWire)
-	return wireBytes, err
+	reader := recordReader{source: r, data: bytes.Buffer{}}
+	_, _, err := scanRecord(&reader, maxBytes, 0)
+
+	return reader.data.Bytes(), err
 }
 
 // ReadRecordFields scans and verifies one complete record, returning only its decoded fields.
@@ -183,6 +190,35 @@ func nestedExpression(expr string) string {
 	}
 
 	return result.String()
+}
+
+func (reader *recordReader) Read(data []byte) (int, error) {
+	count, err := reader.source.Read(data)
+	reader.data.Write(data[:count])
+
+	switch {
+	case err == nil:
+		return count, nil
+	case errors.Is(err, io.EOF):
+		return count, io.EOF
+	default:
+		return count, fmt.Errorf("read record bytes: %w", err)
+	}
+}
+
+func (reader *recordReader) ReadByte() (byte, error) {
+	value, err := reader.source.ReadByte()
+
+	switch {
+	case err == nil:
+		reader.data.WriteByte(value)
+
+		return value, nil
+	case errors.Is(err, io.EOF):
+		return value, io.EOF
+	default:
+		return value, fmt.Errorf("read record byte: %w", err)
+	}
 }
 
 func decodeOctalEscape(data []byte, i int) (byte, error) {
