@@ -155,7 +155,7 @@ func DecodeOctal(data []byte, maxBytes int64) ([]byte, error) {
 func nestedExpression(expr string) string {
 	var result strings.Builder
 
-	depth := 0
+	var openings []int
 
 	for index := 0; index < len(expr); index++ {
 		character := expr[index]
@@ -166,7 +166,7 @@ func nestedExpression(expr string) string {
 
 			next := expr[index+1]
 			if next == '{' {
-				depth++
+				openings = append(openings, result.Len())
 			}
 
 			if strings.ContainsRune(",#{}:", rune(next)) {
@@ -178,15 +178,19 @@ func nestedExpression(expr string) string {
 		}
 
 		if character == '}' {
-			if depth == 0 {
+			if len(openings) == 0 {
 				result.WriteString("#}")
 				continue
 			}
 
-			depth--
+			openings = openings[:len(openings)-1]
 		}
 
 		result.WriteByte(character)
+	}
+
+	if len(openings) != 0 {
+		return result.String()[:openings[0]]
 	}
 
 	return result.String()

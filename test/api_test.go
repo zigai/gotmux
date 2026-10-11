@@ -190,6 +190,14 @@ func TestIntegrationReadWithStackedPaneModes(t *testing.T) {
 	}
 }
 
+func TestIntegrationFormatUnmatchedOpeningBrace(test *testing.T) {
+	server, _, ctx := apiFixture(test)
+	pane := firstPane(test, ctx, server)
+
+	formatted, err := pane.Format(ctx, "prefix#{")
+	assertFormatValues(test, "format unmatched opening brace", [][]byte{formatted}, err, "prefix")
+}
+
 func TestIntegrationFormatLiteralBraces(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	pane := firstPane(t, ctx, server)
