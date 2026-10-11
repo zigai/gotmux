@@ -2,6 +2,8 @@ package tmux
 
 import (
 	"errors"
+	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -72,6 +74,24 @@ func TestParseAccessLine(t *testing.T) {
 		if ok && got != tc.expected {
 			t.Errorf("parseAccessLine(%q) = %+v, want %+v", tc.input, got, tc.expected)
 		}
+	}
+}
+
+func TestAccessListPreservesUnicodeWhitespaceInName(test *testing.T) {
+	server, directory := standInServer(test, limitsWith(0, 0, 0, 0), func(directory string) string {
+		test.Setenv("ACCESS_IDENTITY", filepath.Join(directory, "identity"))
+		test.Setenv("ACCESS_BODY", filepath.Join(directory, "access"))
+
+		return `case "$*" in *server-access*) exec /bin/cat "$ACCESS_BODY" ;; *) exec /bin/cat "$ACCESS_IDENTITY" ;; esac`
+	})
+	writeMockResponse(test, filepath.Join(directory, "identity"), []byte(fixtureIdentityRecord(server)))
+	writeMockResponse(test, filepath.Join(directory, "access"), []byte(guardOK+"analyst\u00a0 (U,W)\n"))
+
+	entries, err := server.AccessList(test.Context())
+
+	want := []AccessEntry{{Name: "analyst\u00a0", IsGroup: false, ReadOnly: false}}
+	if err != nil || !slices.Equal(entries, want) {
+		test.Fatalf("access entries = %+v, error = %v; want %+v", entries, err, want)
 	}
 }
 

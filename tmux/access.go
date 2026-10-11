@@ -106,7 +106,7 @@ func parsePerms(perms string) (bool, bool, bool) {
 }
 
 func parseAccessLine(line string) (AccessEntry, bool) {
-	line = strings.TrimSpace(line)
+	line = strings.Trim(line, "\r\n")
 	if line == "" {
 		return AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, false
 	}
@@ -118,7 +118,7 @@ func parseAccessLine(line string) (AccessEntry, bool) {
 		return AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, false
 	}
 
-	name := strings.TrimSpace(line[:lastOpen])
+	name := strings.TrimSuffix(line[:lastOpen], " ")
 	perms := line[lastOpen+1 : lastClose]
 
 	isGroup, readOnly, ok := parsePerms(perms)
