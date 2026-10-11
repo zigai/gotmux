@@ -151,7 +151,7 @@ func TestPopupArgsOptions(t *testing.T) {
 
 func TestClosePopupTargetsAndGuardsClient(t *testing.T) {
 	s, response, log := mockScriptServer(t)
-	c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, mockServerIdentity(s))}
+	c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, fixtureIdentity(s))}
 	c.h.client = clientCheck{name: "/dev/pts/7", pid: 77, created: 100}
 
 	writeMockResponse(t, response, []byte(guardClientChanged))
@@ -907,7 +907,7 @@ func TestMessageWithRoundsDurationUpToMilliseconds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.duration.String(), func(t *testing.T) {
 			s, response, log := mockScriptServer(t)
-			c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, mockServerIdentity(s))}
+			c := Client{h: s.newHandle("/dev/pts/7", ObjectKindClient, fixtureIdentity(s))}
 			c.h.client = clientCheck{name: "/dev/pts/7", pid: 77, created: 100}
 
 			writeMockResponse(t, response, []byte(guardOK))

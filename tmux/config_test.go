@@ -10,29 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/zigai/gotmux/internal/wire"
 )
-
-func localServer(t *testing.T) *Server {
-	t.Helper()
-
-	s, e := New(Config{Binary: "/bin/sh", SocketPath: filepath.Join(t.TempDir(), "s"), SocketName: "", ConfigFile: "", Env: []string{}, Dir: t.TempDir(), Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
-	if e != nil {
-		t.Fatal(e)
-	}
-
-	return s
-}
-
-func fixtureIdentity(s *Server) ServerIdentity {
-	return ServerIdentity{Endpoint: s.endpoint, ReportedSocket: s.endpoint.String(), PID: 42, Started: time.Unix(100, 0), Generation: 0}
-}
-
-func fixtureIdentityRecord(s *Server) string {
-	return string(wire.EncodeRecord([]string{"42", "100", s.endpoint.String(), "3.8"}))
-}
 
 func TestNewIsPureAndCopiesConfig(t *testing.T) {
 	dir := t.TempDir()
@@ -240,7 +218,7 @@ func TestInvalidHandlesFailWithoutRunningTmux(t *testing.T) {
 	s, _, argv := mockScriptServer(t)
 	ctx := context.Background()
 	malformed := func(id string, kind ObjectKind) handle {
-		return handle{server: s, origin: mockServerIdentity(s), id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
+		return handle{server: s, origin: fixtureIdentity(s), id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
 	}
 
 	//nolint:exhaustruct_v5 // testing methods on uninitialized zero handles

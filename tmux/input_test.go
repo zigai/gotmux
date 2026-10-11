@@ -50,7 +50,7 @@ func TestCaptureFlagArgs(test *testing.T) {
 
 func TestCaptureTitleDelimiter(t *testing.T) {
 	s, response, _ := mockScriptServer(t)
-	p := Pane{h: s.newHandle("%7", ObjectKindPane, mockServerIdentity(s))}
+	p := Pane{h: s.newHandle("%7", ObjectKindPane, fixtureIdentity(s))}
 
 	const marker = "___GOTMUX_CAPTURE_TITLE___"
 

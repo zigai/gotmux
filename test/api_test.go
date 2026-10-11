@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"slices"
 	"testing"
 
 	"github.com/zigai/gotmux/tmux"
@@ -378,23 +377,6 @@ func TestIntegrationAPIControlSupport(t *testing.T) {
 
 	cMulti, err := client.FormatMulti(ctx, "#{client_name}", "#{client_control_mode}")
 	assertFormatValues(t, "client format multi", cMulti, err, string(client.Name()), "1")
-}
-
-func assertFormatValues(t *testing.T, call string, got [][]byte, err error, want ...string) {
-	t.Helper()
-
-	if err != nil {
-		t.Fatalf("%s: %v", call, err)
-	}
-
-	values := make([]string, len(got))
-	for i, value := range got {
-		values[i] = string(value)
-	}
-
-	if !slices.Equal(values, want) {
-		t.Fatalf("%s = %q, want %q", call, values, want)
-	}
 }
 
 func TestIntegrationAPISubprocessLifetime(t *testing.T) {

@@ -576,24 +576,6 @@ func TestIntegrationDisplayMessageStdin(t *testing.T) {
 	awaitCaptureContains(t, ctx, emptyPane, "hello to empty pane from display-message -I", "second line")
 }
 
-func firstWindowPane(t *testing.T, ctx context.Context, session tmux.Session) (tmux.Window, tmux.Pane) {
-	t.Helper()
-
-	links, err := session.Windows(ctx)
-	if err != nil || len(links) == 0 {
-		t.Fatalf("session.Windows = %d links, %v", len(links), err)
-	}
-
-	window := links[0].Window()
-
-	pane, err := window.ActivePane(ctx)
-	if err != nil {
-		t.Fatalf("ActivePane failed: %v", err)
-	}
-
-	return window, pane
-}
-
 func otherPane(t *testing.T, ctx context.Context, server *tmux.Server, window tmux.Window, known tmux.Pane) tmux.Pane {
 	t.Helper()
 

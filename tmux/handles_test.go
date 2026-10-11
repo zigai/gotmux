@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -15,49 +13,6 @@ import (
 
 	"github.com/zigai/gotmux/internal/wire"
 )
-
-func mockScriptServer(t *testing.T) (*Server, string, string) {
-	t.Helper()
-	dir := t.TempDir()
-	binary, response, log := filepath.Join(dir, "tmux"), filepath.Join(dir, "response"), filepath.Join(dir, "argv")
-
-	script := fmt.Sprintf("#!/bin/sh\nprintf '%%s\\n' \"$@\" > '%s'\nexec /bin/cat '%s'\n", log, response)
-	if err := os.WriteFile(binary, []byte(script), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.Chmod(binary, 0o700); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.WriteFile(response, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	s, err := New(testConfig(binary, filepath.Join(dir, "socket")))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return s, response, log
-}
-
-func testConfig(binary, socketPath string) Config {
-	return Config{
-		Binary:           binary,
-		SocketPath:       socketPath,
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              nil,
-		Dir:              "",
-		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
-		UTF8:             UTF8Default,
-		Colors256:        false,
-		TerminalFeatures: nil,
-		LogLevel:         0,
-		LoginShell:       false,
-	}
-}
 
 // dispatchedCommand returns the stand-in's argv after the socket flags.
 func dispatchedCommand(t *testing.T, s *Server, log string) []string {
@@ -76,14 +31,6 @@ func dispatchedCommand(t *testing.T, s *Server, log string) []string {
 	}
 
 	return args[i+1:]
-}
-
-func writeMockResponse(t *testing.T, name string, data []byte) {
-	t.Helper()
-
-	if err := os.WriteFile(name, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func encodeTestPaneRecord(s *Server, id string) []byte {
@@ -112,19 +59,9 @@ func encodeTestPaneRecord(s *Server, id string) []byte {
 	return wire.EncodeRecord(values)
 }
 
-func mockServerIdentity(s *Server) ServerIdentity {
-	return ServerIdentity{
-		Endpoint:       s.endpoint,
-		ReportedSocket: s.endpoint.String(),
-		PID:            42,
-		Started:        time.Unix(100, 0),
-		Generation:     0,
-	}
-}
-
 func TestUnprobedHandleInfo(t *testing.T) {
 	s, response, _ := mockScriptServer(t)
-	bound := Pane{h: s.newHandle("%7", ObjectKindPane, mockServerIdentity(s))}
+	bound := Pane{h: s.newHandle("%7", ObjectKindPane, fixtureIdentity(s))}
 	writeMockResponse(t, response, append([]byte(guardOK), encodeTestPaneRecord(s, "%7")...))
 
 	if _, err := bound.Info(context.Background()); err != nil {
@@ -158,7 +95,7 @@ func TestUnprobedPaneWindowKeepsVerifiedOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if window.ID() != "@2" || !window.ServerIdentity().Equal(mockServerIdentity(server)) {
+	if window.ID() != "@2" || !window.ServerIdentity().Equal(fixtureIdentity(server)) {
 		t.Fatalf("parent window lost verified identity: %+v", window.ServerIdentity())
 	}
 }
@@ -309,7 +246,7 @@ func TestBufferHelpers(t *testing.T) {
 
 func TestEqualRequiresEveryIdentityField(t *testing.T) {
 	s := localServer(t)
-	base := mockServerIdentity(s)
+	base := fixtureIdentity(s)
 	other := base
 	other.Endpoint.SocketPath += "-other"
 

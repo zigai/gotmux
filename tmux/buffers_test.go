@@ -79,7 +79,7 @@ func TestPasteOptions(t *testing.T) {
 
 func TestBoundBufferReadRequiresGuard(t *testing.T) {
 	s, _, _ := mockScriptServer(t)
-	id := mockServerIdentity(s)
+	id := fixtureIdentity(s)
 	s.bound = &id
 
 	g, _ := s.resolveGuard(plainPlan(command("show-buffer", "-b", "named")), nil)

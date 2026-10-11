@@ -3,6 +3,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -376,5 +377,31 @@ func TestIntegrationCaptureEscapeOptions(t *testing.T) {
 
 	if len(captured) == 0 {
 		t.Fatal("expected non-empty capture")
+	}
+}
+
+func requireTmux38(t *testing.T, ctx context.Context, server *tmux.Server) {
+	t.Helper()
+
+	probeInfo, err := server.Probe(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !probeInfo.Version.AtLeast(3, 8) {
+		t.Skip("skipping test requiring tmux 3.8+")
+	}
+}
+
+func assertPaneTitle(t *testing.T, ctx context.Context, pane tmux.Pane, want string) {
+	t.Helper()
+
+	info, err := pane.Info(ctx)
+	if err != nil {
+		t.Fatalf("pane %s Info failed: %v", pane.ID(), err)
+	}
+
+	if info.Title != want {
+		t.Errorf("expected pane title %q, got %q", want, info.Title)
 	}
 }
