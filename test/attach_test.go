@@ -219,7 +219,7 @@ func TestIntegrationAttachExtendedFlags(t *testing.T) {
 		signal.Reset(syscall.SIGHUP)
 	})
 
-	dir := t.TempDir()
+	dir := literalDirectory(t)
 	client1, done1 := attachWith(t, ctx, server, session, attachmentTerminal(t), tmux.AttachOptions{
 		PreserveEnvironment: true,
 		Detach:              tmux.DetachNone,

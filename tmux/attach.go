@@ -134,7 +134,7 @@ func attachFlags(opts AttachOptions) []string {
 	}
 
 	if opts.Dir != "" {
-		flags = append(flags, "-c", opts.Dir)
+		flags = append(flags, "-c", wire.LiteralFormat(opts.Dir))
 	}
 
 	if len(opts.Flags) > 0 {
