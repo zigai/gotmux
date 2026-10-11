@@ -8,24 +8,43 @@ import (
 	"github.com/zigai/gotmux/internal/wire"
 )
 
-func TestCaptureFlagsDistinguishEscapesFromEmptyCellTrimming(t *testing.T) {
-	var opts CaptureOptions
-
-	opts.IncludeEscapes = true
-
-	flags := captureFlagArgs(opts)
-
-	if !slices.Contains(flags, "-e") || slices.Contains(flags, "-T") {
-		t.Fatalf("IncludeEscapes flags = %v", flags)
+func TestCaptureFlagArgs(test *testing.T) {
+	cases := []struct {
+		name               string
+		includeEscapes     bool
+		trimEmptyCells     bool
+		escapeNonPrintable bool
+		alternateOnly      bool
+		present            []string
+		absent             []string
+	}{
+		{"escapes", true, false, false, false, []string{"-e"}, []string{"-T"}},
+		{"trim_empty_cells", false, true, false, false, []string{"-T"}, []string{"-e"}},
+		{"non_printable_and_alternate", false, false, true, true, []string{"-C", "-F"}, nil},
 	}
 
-	opts.IncludeEscapes = false
-	opts.TrimEmptyCells = true
+	for _, testCase := range cases {
+		test.Run(testCase.name, func(test *testing.T) {
+			var options CaptureOptions
 
-	flags = captureFlagArgs(opts)
+			options.IncludeEscapes = testCase.includeEscapes
+			options.TrimEmptyCells = testCase.trimEmptyCells
+			options.EscapeNonPrintable = testCase.escapeNonPrintable
+			options.AlternateScreenOnly = testCase.alternateOnly
 
-	if !slices.Contains(flags, "-T") || slices.Contains(flags, "-e") {
-		t.Fatalf("TrimEmptyCells flags = %v", flags)
+			flags := captureFlagArgs(options)
+			for _, flag := range testCase.present {
+				if !slices.Contains(flags, flag) {
+					test.Errorf("flags = %v; missing %s", flags, flag)
+				}
+			}
+
+			for _, flag := range testCase.absent {
+				if slices.Contains(flags, flag) {
+					test.Errorf("flags = %v; unexpected %s", flags, flag)
+				}
+			}
+		})
 	}
 }
 
@@ -65,34 +84,5 @@ func TestCaptureTitleDelimiter(t *testing.T) {
 
 	if got.Title != title || string(got.Output) != content {
 		t.Fatalf("title=%q output=%q; wanted title=%q output=%q", got.Title, got.Output, title, content)
-	}
-}
-
-func TestCaptureFlagArgsEscapeNonPrintableAndAlternateOnly(t *testing.T) {
-	opts := CaptureOptions{
-		Start:               nil,
-		End:                 nil,
-		EntireHistory:       false,
-		ScrollbackEnd:       false,
-		JoinWrapped:         false,
-		IncludeEscapes:      false,
-		PreserveSpaces:      false,
-		PaneState:           false,
-		Quiet:               false,
-		TrimEmptyCells:      false,
-		Screen:              0,
-		Buffer:              "",
-		MaxBytes:            0,
-		EscapeNonPrintable:  true,
-		AlternateScreenOnly: true,
-	}
-
-	flags := captureFlagArgs(opts)
-	if !slices.Contains(flags, "-C") {
-		t.Errorf("expected captureFlagArgs to contain -C, got: %v", flags)
-	}
-
-	if !slices.Contains(flags, "-F") {
-		t.Errorf("expected captureFlagArgs to contain -F, got: %v", flags)
 	}
 }
