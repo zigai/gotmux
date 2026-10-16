@@ -1,0 +1,4 @@
+- The new stale-socket test fails when the connection check is disabled and passes with it
+- With 840 stale socket files in a scratch tmux directory, an aht observer cycle built against this change takes 126 ms instead of 1,780 ms
+- aht's unit tests pass when built against this change
+- just check passes apart from TestIntegrationClosePopupClosesOneClientsPopup, which also fails on the unchanged commit with the local tmux 3.8 build
