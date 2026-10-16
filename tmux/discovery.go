@@ -3,6 +3,7 @@ package tmux
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -36,6 +37,10 @@ func DiscoverServers(baseCfg Config) ([]*Server, error) {
 	servers := []*Server{}
 
 	for _, sock := range sockets {
+		if !accepting(context.Background(), sock) {
+			continue
+		}
+
 		cfg := baseCfg
 		cfg.SocketPath = sock
 		cfg.SocketName = ""
@@ -51,6 +56,17 @@ func DiscoverServers(baseCfg Config) ([]*Server, error) {
 	}
 
 	return servers, nil
+}
+
+func accepting(ctx context.Context, path string) bool {
+	var dialer net.Dialer
+
+	conn, err := dialer.DialContext(ctx, "unix", path)
+	if err != nil {
+		return false
+	}
+
+	return conn.Close() == nil
 }
 
 func socketCandidates() ([]string, error) {

@@ -3,10 +3,12 @@ package tmux
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -352,6 +354,74 @@ func TestDiscoverSockets(t *testing.T) {
 
 	if len(servers) != len(sockets) {
 		t.Fatalf("expected len(servers) == len(sockets) (%d != %d)", len(servers), len(sockets))
+	}
+}
+
+func TestDiscoveryStartsNoClientForAStaleSocket(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("TMUX_TMPDIR", dir)
+
+	socketDir := filepath.Join(dir, "tmux-"+strconv.Itoa(os.Getuid()))
+	if err := os.Mkdir(socketDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	stale := filepath.Join(socketDir, "stale")
+
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: stale, Net: "unix"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listener.SetUnlinkOnClose(false)
+
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	invocations := filepath.Join(dir, "invocations")
+	binary := filepath.Join(dir, "fake-tmux")
+
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" >> '" + invocations + "'\nexit 1\n"
+	if err := os.WriteFile(binary, []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Chmod(binary, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	servers, err := DiscoverServers(Config{
+		Binary:           binary,
+		SocketPath:       "",
+		SocketName:       "",
+		ConfigFile:       "",
+		Env:              nil,
+		Dir:              "",
+		Limits:           Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		UTF8:             UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         LogLevelNone,
+		LoginShell:       false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, server := range servers {
+		if server.Endpoint().SocketPath == stale {
+			t.Fatal("stale socket discovered as a server")
+		}
+	}
+
+	logged, err := os.ReadFile(invocations)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(string(logged), stale) {
+		t.Fatalf("discovery started a tmux client for the stale socket:\n%s", logged)
 	}
 }
 
