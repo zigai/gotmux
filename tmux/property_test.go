@@ -10,7 +10,6 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-//nolint:cyclop,gocognit // property testing loop exercises multiple algebraic relations
 func TestRapidVersionProperties(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		major := rapid.IntRange(0, 50).Draw(rt, "major")
@@ -75,7 +74,6 @@ func TestRapidVersionProperties(t *testing.T) {
 	})
 }
 
-//nolint:cyclop,gocognit // property testing loop exercises multiple command and sequence properties
 func TestRapidCommandAndSequenceProperties(t *testing.T) {
 	rapid.Check(t, func(rt *rapid.T) {
 		cmdCount := rapid.IntRange(1, 5).Draw(rt, "cmdCount")

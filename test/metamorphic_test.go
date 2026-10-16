@@ -229,7 +229,6 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 	})
 }
 
-//nolint:cyclop,gocognit // metamorphic property verification loop exercises multiple execution branches
 func TestMetamorphicSequenceAssociativity(t *testing.T) {
 	_ = os.Remove(injectionMarker)
 
