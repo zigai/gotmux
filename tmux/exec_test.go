@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -31,17 +32,7 @@ func TestMain(m *testing.M) {
 			fmt.Print("started\n")
 			time.Sleep(30 * time.Second)
 		case "echo":
-			data := make([]byte, 1024)
-			for {
-				n, e := os.Stdin.Read(data)
-				if n > 0 {
-					_, _ = os.Stdout.Write(data[:n])
-				}
-
-				if e != nil {
-					break
-				}
-			}
+			echoInput()
 		case "env":
 			fmt.Printf("%s\n", os.Getenv("ONLY_THIS"))
 
@@ -49,12 +40,66 @@ func TestMain(m *testing.M) {
 			fmt.Print(d)
 		case "success":
 			fmt.Print("ok")
+		default:
+			runHandoffFixture(mode)
 		}
 
 		os.Exit(0)
 	}
 
 	os.Exit(m.Run())
+}
+
+func echoInput() {
+	data := make([]byte, 1024)
+	for {
+		n, e := os.Stdin.Read(data)
+		if n > 0 {
+			_, _ = os.Stdout.Write(data[:n])
+		}
+
+		if e != nil {
+			return
+		}
+	}
+}
+
+func runHandoffFixture(mode string) {
+	switch mode {
+	case "handoff":
+		startHolder()
+		fmt.Print("ok")
+	case "handoff-wait":
+		startHolder()
+		time.Sleep(30 * time.Second)
+	case "hold":
+		holdOutput()
+	}
+}
+
+func startHolder() {
+	exe, e := os.Executable()
+	if e != nil {
+		os.Exit(3)
+	}
+
+	holder := exec.CommandContext(context.Background(), exe, "hold")
+	holder.Env = os.Environ()
+	holder.Stdout = os.Stdout
+
+	if e := holder.Start(); e != nil {
+		os.Exit(3)
+	}
+}
+
+func holdOutput() {
+	for range 1500 {
+		if _, e := os.Stdout.Write([]byte{0}); e != nil {
+			return
+		}
+
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 func testRunner(t *testing.T, concurrent int) *runner {
@@ -110,6 +155,35 @@ func TestRunnerTimeoutAndReadmission(t *testing.T) {
 	out, _, err = r.run(context.Background(), []string{"success"}, nil, 100, 100)
 	if err != nil || string(out.Stdout) != "ok" {
 		t.Fatalf("next result %#v err=%v", out, err)
+	}
+}
+
+func TestRunnerReturnsWhenCanceledWhileAnotherProcessHoldsItsOutput(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	begin := time.Now()
+
+	_, started, err := testRunner(t, 1).run(ctx, []string{"handoff-wait"}, nil, 1<<20, 100)
+	if !started || !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrShutdownIncomplete) {
+		t.Fatalf("started=%v err=%v", started, err)
+	}
+
+	if elapsed := time.Since(begin); elapsed >= shutdownBudget/2 {
+		t.Fatalf("canceled command took %v; unwanted output must not be waited for", elapsed)
+	}
+}
+
+func TestRunnerBoundsTheWaitForOutputHeldAfterExit(t *testing.T) {
+	begin := time.Now()
+
+	out, _, err := testRunner(t, 1).run(context.Background(), []string{"handoff"}, nil, 1<<20, 100)
+	if !errors.Is(err, ErrShutdownIncomplete) || !bytes.HasPrefix(out.Stdout, []byte("ok")) || out.ExitCode != 0 {
+		t.Fatalf("%#v err=%v", out, err)
+	}
+
+	if elapsed := time.Since(begin); elapsed < shutdownBudget || elapsed > 2*shutdownBudget {
+		t.Fatalf("held output was waited for %v, want about %v", elapsed, shutdownBudget)
 	}
 }
 

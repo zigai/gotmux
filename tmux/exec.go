@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"os"
 	"os/exec"
 	"sync"
 	"time"
@@ -26,6 +28,12 @@ type buffer struct {
 	limit      int64
 	overflow   func()
 	overflowed bool
+}
+
+type commandOutput struct {
+	readers []*os.File
+	writers []*os.File
+	copying sync.WaitGroup
 }
 
 func newBuffer(limit int64, overflow func()) *buffer {
@@ -96,8 +104,6 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 	cmd := r.command(cmdCtx, args)
 	stdout := newBuffer(outMax, func() { cancel(ErrOutputLimit) })
 	stderr := newBuffer(errMax, func() { cancel(ErrOutputLimit) })
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
 
 	if input != nil {
 		cmd.Stdin = bytes.NewReader(input)
@@ -105,10 +111,18 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 
 	started := false
 
-	e := cmd.Start()
+	output, e := openOutput(cmd, stdout, stderr)
 	if e == nil {
-		started = true
-		e = cmd.Wait()
+		e = cmd.Start()
+
+		output.closeWriters()
+
+		started = e == nil
+		if started {
+			e = cmd.Wait()
+		}
+
+		e = errors.Join(e, output.drain(cmdCtx))
 	}
 
 	result.Stdout = stdout.Bytes()
@@ -127,6 +141,67 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 	}
 
 	return result, started, e
+}
+
+func openOutput(cmd *exec.Cmd, stdout, stderr io.Writer) (*commandOutput, error) {
+	output := &commandOutput{readers: nil, writers: nil, copying: sync.WaitGroup{}}
+
+	for _, sink := range []io.Writer{stdout, stderr} {
+		reader, writer, e := os.Pipe()
+		if e != nil {
+			output.closeWriters()
+			output.closeReaders()
+
+			return nil, e //nolint:wrapcheck // pipe creation error is propagated directly
+		}
+
+		output.readers = append(output.readers, reader)
+		output.writers = append(output.writers, writer)
+		output.copying.Go(func() { _, _ = io.Copy(sink, reader) })
+	}
+
+	cmd.Stdout, cmd.Stderr = output.writers[0], output.writers[1]
+
+	return output, nil
+}
+
+func (o *commandOutput) drain(ctx context.Context) error {
+	finished := make(chan struct{})
+
+	go func() {
+		o.copying.Wait()
+		close(finished)
+	}()
+
+	var e error
+
+	if ctx.Err() == nil {
+		timer := time.NewTimer(shutdownBudget)
+		defer timer.Stop()
+
+		select {
+		case <-finished:
+		case <-timer.C:
+			e = ErrShutdownIncomplete
+		}
+	}
+
+	o.closeReaders()
+	<-finished
+
+	return e
+}
+
+func (o *commandOutput) closeWriters() {
+	for _, writer := range o.writers {
+		_ = writer.Close()
+	}
+}
+
+func (o *commandOutput) closeReaders() {
+	for _, reader := range o.readers {
+		_ = reader.Close()
+	}
 }
 
 func (r *runner) command(ctx context.Context, args []string) *exec.Cmd {
