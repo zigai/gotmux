@@ -195,11 +195,17 @@ func TestIntegrationClosePopupClosesOneClientsPopup(t *testing.T) {
 		closed chan error
 	}
 
-	// Attach both clients before opening either popup.
+	other, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Attach both clients before opening either popup. Each client shows its
+	// own window: tmux after 3.8 allows one popup per window, not per client.
 	clients := make([]tmux.Client, 0, 2)
 
-	for range 2 {
-		client, _, _ := uiClient(t, ctx, server, session)
+	for _, target := range []tmux.Session{session, other} {
+		client, _, _ := uiClient(t, ctx, server, target)
 		clients = append(clients, client)
 	}
 
