@@ -73,7 +73,7 @@ func (scope EnvironmentScope) Get(ctx context.Context, name string) (Environment
 func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts GetEnvironmentOptions) (EnvironmentValue, error) {
 	hidden := opts.Hidden
 
-	if !envName(name) {
+	if !storedEnvName(name) {
 		return EnvironmentValue{}, opError("EnvironmentScope.Get", invalid("environment name"))
 	}
 
@@ -151,10 +151,10 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironment
 	return out, nil
 }
 
-// listedEnvName accepts names tmux stores that are not shell identifiers, such as
+// storedEnvName accepts every name tmux stores, including non-identifiers such as
 // exported bash functions (BASH_FUNC_name%%) inherited from a client environment.
 // Whitespace and control bytes never appear in a well-formed record header.
-func listedEnvName(name string) bool {
+func storedEnvName(name string) bool {
 	if name == "" {
 		return false
 	}
@@ -176,7 +176,7 @@ func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error)
 	for rest != "" {
 		if after, ok := strings.CutPrefix(rest, "unset "); ok {
 			name, tail, found := strings.Cut(after, ";\n")
-			if !found || !listedEnvName(name) {
+			if !found || !storedEnvName(name) {
 				return nil, ErrProtocol
 			}
 
@@ -190,7 +190,7 @@ func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error)
 		}
 
 		name, after, found := strings.Cut(rest, "=\"")
-		if !found || !listedEnvName(name) {
+		if !found || !storedEnvName(name) {
 			return nil, ErrProtocol
 		}
 
@@ -259,7 +259,7 @@ func (scope EnvironmentScope) Remove(ctx context.Context, name string) error {
 }
 
 func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opName string) error {
-	if !envName(name) || !wire.ValidString(value) {
+	if !storedEnvName(name) || !wire.ValidString(value) {
 		return opError(opName, invalid("environment entry"))
 	}
 

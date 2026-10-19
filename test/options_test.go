@@ -322,6 +322,38 @@ func TestIntegrationEnvironmentListInheritedNames(t *testing.T) {
 	t.Fatal("listing is missing BASH_FUNC_gotmux%%")
 }
 
+func TestIntegrationEnvironmentNonIdentifierNamesRoundTrip(t *testing.T) {
+	_, session, ctx := apiFixture(t)
+	scope := session.Environment()
+
+	for _, name := range []string{"BASH_FUNC_gotmux%%", "A-B", "1A", "a;b", `a"b`, "$HOME", "~x", "#{pid}"} {
+		if err := scope.Set(ctx, name, "() { :; }"); err != nil {
+			t.Fatalf("Set(%q): %v", name, err)
+		}
+
+		got, err := scope.Get(ctx, name)
+		if v, ok := got.Value.Get(); err != nil || !ok || v != "() { :; }" || got.Unset {
+			t.Fatalf("Get(%q) after Set = %+v, %v", name, got, err)
+		}
+
+		if err := scope.Remove(ctx, name); err != nil {
+			t.Fatalf("Remove(%q): %v", name, err)
+		}
+
+		if got, err := scope.Get(ctx, name); err != nil || !got.Unset {
+			t.Fatalf("Get(%q) after Remove = %+v, %v", name, got, err)
+		}
+
+		if err := scope.Unset(ctx, name); err != nil {
+			t.Fatalf("Unset(%q): %v", name, err)
+		}
+
+		if got, err := scope.Get(ctx, name); err != nil || got.Unset || got.Value.State() == tmux.ValueStatePresent {
+			t.Fatalf("Get(%q) after Unset = %+v, %v", name, got, err)
+		}
+	}
+}
+
 func TestIntegrationEnvironmentList(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
