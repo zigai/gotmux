@@ -9,6 +9,7 @@
 # Local build and scratch directories
 /dist/
 /tmp/
+.cache/
 
 # tmux debug logs
 tmux-client-*.log
