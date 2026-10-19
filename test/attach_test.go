@@ -118,6 +118,8 @@ func testAttachmentLifecycle(t *testing.T, finish string) {
 		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Error("attachment failed to stop")
+			// Attach still uses the terminal that the next cleanup closes.
+			<-done
 		}
 	})
 	attached := waitTerminalClient(t, ctx, server, terminal, done)

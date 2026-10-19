@@ -73,6 +73,8 @@ func uiClient(t *testing.T, ctx context.Context, server *tmux.Server, session tm
 		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Error("UI attachment failed to stop")
+			// Attach still uses the PTY that the next cleanup closes.
+			<-done
 		}
 	})
 

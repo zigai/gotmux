@@ -55,6 +55,7 @@ func attachCancelable(t *testing.T, ctx context.Context, server *tmux.Server, se
 		case <-finished:
 		case <-time.After(5 * time.Second):
 			t.Error("attachment failed to stop")
+			<-finished
 		}
 	})
 
