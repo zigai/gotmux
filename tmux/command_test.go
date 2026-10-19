@@ -358,7 +358,12 @@ func TestDiscoverSockets(t *testing.T) {
 }
 
 func TestDiscoveryStartsNoClientForAStaleSocket(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix domain socket path length limits on Darwin (104 bytes) require short paths in /tmp.
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	t.Setenv("TMUX_TMPDIR", dir)
 
 	socketDir := filepath.Join(dir, "tmux-"+strconv.Itoa(os.Getuid()))
