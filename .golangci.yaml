@@ -241,3 +241,7 @@ linters:
       # Integration tests set only the option fields a case is about.
       - path: "^test/"
         linters: [exhaustruct_v5]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
