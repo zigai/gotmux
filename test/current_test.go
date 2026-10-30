@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -101,7 +102,7 @@ func discoveryFixture(t *testing.T, ctx context.Context, directory, socket strin
 		identity := session.ServerIdentity()
 
 		t.Cleanup(func() {
-			if err := server.KillMatching(ctx, identity); err != nil {
+			if err := server.KillMatching(ctx, identity); err != nil && !errors.Is(err, tmux.ErrNoServer) {
 				t.Error(err)
 			}
 		})
@@ -112,6 +113,139 @@ func discoveryFixture(t *testing.T, ctx context.Context, directory, socket strin
 	}
 
 	return server
+}
+
+func discoverySocketDirectory(t *testing.T) (string, string) {
+	t.Helper()
+
+	directory := shortTempDir(t)
+	t.Setenv("TMUX_TMPDIR", directory)
+
+	socketDirectory := filepath.Join(directory, "tmux-"+strconv.Itoa(os.Getuid()))
+	if err := os.MkdirAll(socketDirectory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	return directory, socketDirectory
+}
+
+func TestIntegrationDiscoveryFindsDaemonReplacingStaleSocket(t *testing.T) {
+	ctx := integrationContext(t)
+	directory, socketDirectory := discoverySocketDirectory(t)
+	path := filepath.Join(socketDirectory, "reused")
+	staleDiscoverySocket(t, path)
+
+	sockets, err := tmux.DiscoverSockets()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if slices.Contains(sockets, path) {
+		t.Fatalf("stale socket discovered: %v", sockets)
+	}
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+
+	discoveryFixture(t, ctx, directory, path)
+
+	sockets, err = tmux.DiscoverSockets()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(sockets, path) {
+		t.Fatalf("daemon on a previously stale path not discovered: %v", sockets)
+	}
+}
+
+func TestIntegrationDiscoveryDropsExitedDaemon(t *testing.T) {
+	ctx := integrationContext(t)
+	directory, socketDirectory := discoverySocketDirectory(t)
+	path := filepath.Join(socketDirectory, "exiting")
+	server := discoveryFixture(t, ctx, directory, path)
+
+	sockets, err := tmux.DiscoverSockets()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !slices.Contains(sockets, path) {
+		t.Fatalf("live socket not discovered: %v", sockets)
+	}
+
+	if err := server.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	sockets, err = tmux.DiscoverSockets()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if slices.Contains(sockets, path) {
+		t.Fatalf("exited daemon still discovered: %v", sockets)
+	}
+}
+
+func TestIntegrationRepeatedDiscoveryStartsOneClientPerDaemon(t *testing.T) {
+	ctx := integrationContext(t)
+	directory, socketDirectory := discoverySocketDirectory(t)
+	path := filepath.Join(socketDirectory, "repeated")
+	discoveryFixture(t, ctx, directory, path)
+	staleDiscoverySocket(t, filepath.Join(socketDirectory, "stale"))
+
+	tmuxBinary := os.Getenv("TMUX_TEST_BINARY")
+	if tmuxBinary == "" {
+		tmuxBinary = "tmux"
+	}
+
+	tmuxBinary, err := exec.LookPath(tmuxBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	invocations := filepath.Join(directory, "invocations")
+	wrapper := filepath.Join(directory, "tmux-wrapper")
+
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '" + invocations + "'\nexec '" + tmuxBinary + "' \"$@\"\n"
+
+	root, err := os.OpenRoot(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = root.Close() })
+
+	if err := root.WriteFile(filepath.Base(wrapper), []byte(script), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := root.Chmod(filepath.Base(wrapper), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	for range 3 {
+		servers, err := tmux.DiscoverServers(tmux.Config{Binary: wrapper})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !slices.ContainsFunc(servers, func(found *tmux.Server) bool { return found.Endpoint().SocketPath == path }) {
+			t.Fatalf("live daemon not discovered: %v", servers)
+		}
+	}
+
+	data, err := os.ReadFile(invocations)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Discovery also scans the user's real socket directory; count only this daemon.
+	if clients := strings.Count(string(data), "-S "+path+" "); clients != 1 {
+		t.Fatalf("started %d tmux clients across repeated discovery, want 1:\n%s", clients, data)
+	}
 }
 
 func staleDiscoverySocket(t *testing.T, path string) {
