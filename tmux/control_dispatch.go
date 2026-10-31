@@ -32,7 +32,8 @@ type controlRequest struct {
 	stdout   int64
 	stderr   int64
 	result   chan controlReply
-	state    atomic.Uint32
+	//exhaustruct:optional
+	state atomic.Uint32
 }
 
 type controlReply struct {
@@ -76,14 +77,25 @@ func (c *Connection) reader() {
 	}
 }
 
-func (c *Connection) collect(ctx context.Context, nonce string, outLimit, errLimit int64) (Result, error) {
+func (c *Connection) collect(
+	ctx context.Context,
+	nonce string,
+	outLimit int64,
+	errLimit int64,
+) (Result, error) {
 	return c.collectRequest(ctx.Done(), nonce, outLimit, errLimit, true)
 }
 
 // collectRequest gathers frames until nonce. During startup, tmux reports the client's
 // own command line with unflagged frames, so a failed unflagged frame is that command's
 // failure rather than unrelated protocol output.
-func (c *Connection) collectRequest(done <-chan struct{}, nonce string, outLimit, errLimit int64, startup bool) (Result, error) {
+func (c *Connection) collectRequest(
+	done <-chan struct{},
+	nonce string,
+	outLimit int64,
+	errLimit int64,
+	startup bool,
+) (Result, error) {
 	result := Result{Stdout: []byte{}, Stderr: []byte{}, ExitCode: -1}
 
 	var (
@@ -132,7 +144,15 @@ func appendFrameData(dst *[]byte, data []byte, limit int64) bool {
 	return true
 }
 
-func (c *Connection) handleCollectFrame(f controlFrame, nonce string, startup bool, result *Result, outLimit, errLimit int64, failure *error) bool {
+func (c *Connection) handleCollectFrame(
+	f controlFrame,
+	nonce string,
+	startup bool,
+	result *Result,
+	outLimit int64,
+	errLimit int64,
+	failure *error,
+) bool {
 	if bytes.Equal(f.data, []byte(nonce)) && !f.failed {
 		return true
 	}
@@ -162,14 +182,26 @@ func (c *Connection) handleCollectFrame(f controlFrame, nonce string, startup bo
 
 // libraryOutput reports whether an unflagged frame carries a record or guard marker that this library emitted.
 func (f controlFrame) libraryOutput() bool {
-	return bytes.HasPrefix(f.data, []byte("TGO-GUARD-1:")) || bytes.HasPrefix(f.data, []byte("TGO1:"))
+	return bytes.HasPrefix(f.data, []byte("TGO-GUARD-1:")) ||
+		bytes.HasPrefix(f.data, []byte("TGO1:"))
 }
 
-func (c *Connection) releaseRequest(r *controlRequest) { c.bytes.Release(r.bytes); c.count.Release(1) }
+func (c *Connection) releaseRequest(
+	r *controlRequest,
+) {
+	c.bytes.Release(r.bytes)
+	c.count.Release(1)
+}
 
 func (c *Connection) deliver(r *controlRequest, result Result, err error, effect Effect) {
 	if err != nil {
-		err = &CommandError{Command: planName(r.plan), Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: err}
+		err = &CommandError{
+			Command: planName(r.plan),
+			Result:  cloneResult(result),
+			Outcome: Outcome{Effect: effect, Steps: nil, Created: nil},
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 
 	c.releaseRequest(r)
@@ -182,7 +214,12 @@ func (c *Connection) performStartupHandshake(ctx context.Context, nonce string) 
 	startupCtx, cancel := context.WithTimeout(ctx, c.original.config.Limits.CommandTimeout)
 	defer cancel()
 
-	result, err := c.collect(startupCtx, nonce, c.original.config.Limits.OutputBytes, c.original.config.Limits.OutputBytes)
+	result, err := c.collect(
+		startupCtx,
+		nonce,
+		c.original.config.Limits.OutputBytes,
+		c.original.config.Limits.OutputBytes,
+	)
 	if err == nil {
 		err = c.verifyStartup(result.Stdout)
 	}
@@ -243,7 +280,9 @@ func buildRequestWire(r *controlRequest) (string, string, error) {
 		return "", "", err
 	}
 
-	suffix, _ := emptyPlan(command("display-message", "-p", string(bytes.TrimSuffix([]byte(nonce), []byte{'\n'})))).text()
+	suffix, _ := emptyPlan(
+		command("display-message", "-p", string(bytes.TrimSuffix([]byte(nonce), []byte{'\n'}))),
+	).text()
 	if int64(len(text)+len(suffix)) > r.bytes {
 		return "", "", ErrInputLimit
 	}
@@ -326,10 +365,22 @@ func (c *Connection) dispatch(ctx context.Context, nonce string) {
 func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (Result, error) {
 	failed := func(err error) (Result, error) {
 		r := failedResult()
-		return r, &CommandError{Command: planName(p), Result: r, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
+
+		return r, &CommandError{
+			Command: planName(p),
+			Result:  r,
+			Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil},
+			Timeout: contextSource(op.callerDone, err),
+			Err:     err,
+		}
 	}
 	if p.mode == replyRaw {
-		return failed(unsupportedControl("ambiguous raw/control output; explicitly use subprocess transport", ErrTransportUnsupported))
+		return failed(
+			unsupportedControl(
+				"ambiguous raw/control output; explicitly use subprocess transport",
+				ErrTransportUnsupported,
+			),
+		)
 	}
 
 	if n > c.opts.QueuedBytes {
@@ -360,7 +411,6 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 		stdout:   max(op.output, 0),
 		stderr:   max(op.stderr, 0),
 		result:   make(chan controlReply, 1),
-		state:    atomic.Uint32{},
 	}
 
 	if err := c.enqueueRequest(r); err != nil {
@@ -377,14 +427,26 @@ func (c *Connection) run(ctx context.Context, op *operation, p plan, n int64) (R
 	}
 }
 
-func (c *Connection) abortRequest(r *controlRequest, p plan, timeout TimeoutSource, err error) (Result, error) {
+func (c *Connection) abortRequest(
+	r *controlRequest,
+	p plan,
+	timeout TimeoutSource,
+	err error,
+) (Result, error) {
 	if v, ok := checkDeliveredOrState(r); ok {
 		return v.result, v.err
 	}
 
 	if r.state.CompareAndSwap(requestQueued, requestCanceled) {
 		result := failedResult()
-		return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
+
+		return result, &CommandError{
+			Command: planName(p),
+			Result:  result,
+			Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil},
+			Timeout: timeout,
+			Err:     err,
+		}
 	}
 
 	if v, ok := checkDeliveredOrState(r); ok {
@@ -393,7 +455,13 @@ func (c *Connection) abortRequest(r *controlRequest, p plan, timeout TimeoutSour
 
 	result := failedResult()
 
-	return result, &CommandError{Command: planName(p), Result: result, Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: timeout, Err: err}
+	return result, &CommandError{
+		Command: planName(p),
+		Result:  result,
+		Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil},
+		Timeout: timeout,
+		Err:     err,
+	}
 }
 
 func checkDeliveredOrState(r *controlRequest) (controlReply, bool) {

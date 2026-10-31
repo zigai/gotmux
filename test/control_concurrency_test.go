@@ -26,7 +26,8 @@ func isContextError(err error) bool {
 	}
 
 	if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
-		return errors.Is(cmdErr.Err, context.Canceled) || errors.Is(cmdErr.Err, context.DeadlineExceeded)
+		return errors.Is(cmdErr.Err, context.Canceled) ||
+			errors.Is(cmdErr.Err, context.DeadlineExceeded)
 	}
 
 	return false
@@ -88,7 +89,14 @@ func TestControlConcurrentRequests(t *testing.T) {
 	}
 }
 
-func concurrentRequest(ctx, reqCtx context.Context, bound *tmux.Server, session tmux.Session, idx int, canceled bool) error {
+func concurrentRequest(
+	ctx context.Context,
+	reqCtx context.Context,
+	bound *tmux.Server,
+	session tmux.Session,
+	idx int,
+	canceled bool,
+) error {
 	switch idx % 4 {
 	case 0:
 		return concurrentPanes(reqCtx, bound, idx, canceled)
@@ -141,7 +149,13 @@ func concurrentTitles(reqCtx context.Context, session tmux.Session, idx int, can
 }
 
 // The kill uses ctx, so an early-canceled reqCtx cannot skip it.
-func concurrentScratchWindow(ctx, reqCtx context.Context, session tmux.Session, idx int, canceled bool) error {
+func concurrentScratchWindow(
+	ctx context.Context,
+	reqCtx context.Context,
+	session tmux.Session,
+	idx int,
+	canceled bool,
+) error {
 	var opts tmux.NewWindowOptions
 
 	opts.Name = fmt.Sprintf("scratch-%d", idx)

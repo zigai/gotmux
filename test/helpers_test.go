@@ -26,7 +26,8 @@ var injectionMarker = filepath.Join(os.TempDir(), fmt.Sprintf("gotmux-injection-
 func closeOnCleanup(tb testing.TB, c io.Closer) {
 	tb.Helper()
 	tb.Cleanup(func() {
-		if err := c.Close(); err != nil && !errors.Is(err, os.ErrClosed) && !errors.Is(err, tmux.ErrClosed) {
+		if err := c.Close(); err != nil && !errors.Is(err, os.ErrClosed) &&
+			!errors.Is(err, tmux.ErrClosed) {
 			tb.Errorf("close: %v", err)
 		}
 	})
@@ -72,7 +73,12 @@ func literalDirectory(t *testing.T) string {
 	return filepath.Join(directory, "##data")
 }
 
-func apiControl(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session) *tmux.Connection {
+func apiControl(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+) *tmux.Connection {
 	t.Helper()
 
 	var options tmux.ControlOptions
@@ -139,7 +145,8 @@ func runSteps(t *testing.T, steps []namedStep) {
 func shortTempDir(t *testing.T) string {
 	t.Helper()
 
-	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix domain socket path length limits on Darwin (104 bytes) require short paths in /tmp.
+	//nolint:usetesting // Unix domain socket path length limits on Darwin (104 bytes) require short paths in /tmp.
+	dir, err := os.MkdirTemp("/tmp", "tg-")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +177,13 @@ func fatalCommand(t *testing.T, call string, err error) {
 	t.Helper()
 
 	if cmdErr, ok := errors.AsType[*tmux.CommandError](err); ok {
-		t.Fatalf("%s failed: %v; stderr: %q, stdout: %q", call, err, cmdErr.Result.Stderr, cmdErr.Result.Stdout)
+		t.Fatalf(
+			"%s failed: %v; stderr: %q, stdout: %q",
+			call,
+			err,
+			cmdErr.Result.Stderr,
+			cmdErr.Result.Stdout,
+		)
 	}
 
 	t.Fatalf("%s failed: %v", call, err)

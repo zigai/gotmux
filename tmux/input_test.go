@@ -83,6 +83,12 @@ func TestCaptureTitleDelimiter(t *testing.T) {
 	}
 
 	if got.Title != title || string(got.Output) != content {
-		t.Fatalf("title=%q output=%q; wanted title=%q output=%q", got.Title, got.Output, title, content)
+		t.Fatalf(
+			"title=%q output=%q; wanted title=%q output=%q",
+			got.Title,
+			got.Output,
+			title,
+			content,
+		)
 	}
 }

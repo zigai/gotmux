@@ -18,14 +18,27 @@ func TestControlFramingAdversarialRecord(t *testing.T) {
 	stream := append([]byte("%begin 5 99 1\n"), payload...)
 	stream = append(stream, []byte("%end 5 99 1\n")...)
 
-	u, e := readControlUnit(bufio.NewReaderSize(bytes.NewReader(stream), 16), 4096, func(Event) { t.Fatal("field misread as event") })
+	u, e := readControlUnit(
+		bufio.NewReaderSize(bytes.NewReader(stream), 16),
+		4096,
+		func(Event) { t.Fatal("field misread as event") },
+	)
 	if e != nil || u.frame == nil || !bytes.Equal(u.frame.data, payload) {
 		t.Fatalf("%#v %v", u, e)
 	}
 }
 
 func TestControlFramingMalformed(t *testing.T) {
-	for _, stream := range []string{"%begin 1 3 1\n%end 1 4 1\n", "%begin 1 3 1\n%end 2 3 1\n", "%begin 1 3 1\n%end 1 3 0\n", "%begin 1 3 2\n%end 1 3 2\n", "%begin 1 3 1\n%begin 1 4 1\n", "%end 1 3 1\n", "%begin 1 3 1\nordinary unframed output\n%end 1 3 1\n", "%begin 1 3 1\nTGO1:1:99999999999999:x,\n"} {
+	for _, stream := range []string{
+		"%begin 1 3 1\n%end 1 4 1\n",
+		"%begin 1 3 1\n%end 2 3 1\n",
+		"%begin 1 3 1\n%end 1 3 0\n",
+		"%begin 1 3 2\n%end 1 3 2\n",
+		"%begin 1 3 1\n%begin 1 4 1\n",
+		"%end 1 3 1\n",
+		"%begin 1 3 1\nordinary unframed output\n%end 1 3 1\n",
+		"%begin 1 3 1\nTGO1:1:99999999999999:x,\n",
+	} {
 		_, e := readControlUnit(bufio.NewReader(strings.NewReader(stream)), 4096, func(Event) {})
 		if e == nil {
 			t.Fatalf("accepted %q", stream)
@@ -34,7 +47,9 @@ func TestControlFramingMalformed(t *testing.T) {
 }
 
 func TestControlCommandNumbersMayHaveGaps(t *testing.T) {
-	r := bufio.NewReader(strings.NewReader("%begin 100 42 1\n%end 100 42 1\n%begin 100 928 1\n%end 100 928 1\n"))
+	r := bufio.NewReader(
+		strings.NewReader("%begin 100 42 1\n%end 100 42 1\n%begin 100 928 1\n%end 100 928 1\n"),
+	)
 	for _, n := range []uint64{42, 928} {
 		u, e := readControlUnit(r, 4096, func(Event) {})
 		if e != nil || u.frame.id.number != n {
@@ -44,7 +59,11 @@ func TestControlCommandNumbersMayHaveGaps(t *testing.T) {
 }
 
 func TestControlErrorPreservesDiagnostic(t *testing.T) {
-	u, e := readControlUnit(bufio.NewReader(strings.NewReader("%begin 1 4 1\nfailed command\n%error 1 4 1\n")), 4096, func(Event) {})
+	u, e := readControlUnit(
+		bufio.NewReader(strings.NewReader("%begin 1 4 1\nfailed command\n%error 1 4 1\n")),
+		4096,
+		func(Event) {},
+	)
 	if e != nil || !u.frame.failed || string(u.frame.data) != "failed command\n" {
 		t.Fatal(u, e)
 	}
@@ -53,7 +72,11 @@ func TestControlErrorPreservesDiagnostic(t *testing.T) {
 func TestControlNotificationsAndLimits(t *testing.T) {
 	var got []Event
 
-	u, e := readControlUnit(bufio.NewReader(strings.NewReader("%begin 1 2 1\n%output %7 a\\012b\n%end 1 2 1\n")), 4096, func(e Event) { got = append(got, e) })
+	u, e := readControlUnit(
+		bufio.NewReader(strings.NewReader("%begin 1 2 1\n%output %7 a\\012b\n%end 1 2 1\n")),
+		4096,
+		func(e Event) { got = append(got, e) },
+	)
 	if e != nil || u.frame == nil || len(got) != 1 {
 		t.Fatal(u, e, got)
 	}
@@ -63,7 +86,11 @@ func TestControlNotificationsAndLimits(t *testing.T) {
 		t.Fatal(u, e, got)
 	}
 
-	_, e = readControlUnit(bufio.NewReader(strings.NewReader("%future-event "+strings.Repeat("x", 100)+"\n")), 20, func(Event) {})
+	_, e = readControlUnit(
+		bufio.NewReader(strings.NewReader("%future-event "+strings.Repeat("x", 100)+"\n")),
+		20,
+		func(Event) {},
+	)
 	if !errors.Is(e, ErrOutputLimit) {
 		t.Fatal(e)
 	}
@@ -147,7 +174,9 @@ func TestControlLayoutChangeNotifications(t *testing.T) {
 		}
 
 		changed, ok := e.(LayoutChangedEvent)
-		if !ok || changed.WindowID != "@1" || changed.Layout != layout || changed.VisibleLayout != layout || changed.Flags != flags {
+		if !ok || changed.WindowID != "@1" || changed.Layout != layout ||
+			changed.VisibleLayout != layout ||
+			changed.Flags != flags {
 			t.Fatalf("layout notification lost fields: %+v", e)
 		}
 	}
@@ -243,7 +272,8 @@ func TestControlTornRecordFramePreserved(t *testing.T) {
 	}
 
 	next, err := readControlUnit(reader, 4096, func(Event) {})
-	if err != nil || next.frame == nil || next.frame.failed || string(next.frame.data) != "TGO1:0:\n" {
+	if err != nil || next.frame == nil || next.frame.failed ||
+		string(next.frame.data) != "TGO1:0:\n" {
 		t.Fatalf("following frame = %+v, error = %v", next.frame, err)
 	}
 }
@@ -335,7 +365,13 @@ func TestControlCodecNoEchoPreambleAndTrailer(t *testing.T) {
 
 func TestControlSubscriptionPreservesTrailingCarriageReturns(t *testing.T) {
 	for _, value := range []string{"hello\r", "hello\r\r", "\\012\\015%0A"} {
-		unit, err := readControlUnit(bufio.NewReader(strings.NewReader("%subscription-changed watched $0 - - - : "+value+"\n")), 4096, func(Event) {})
+		unit, err := readControlUnit(
+			bufio.NewReader(
+				strings.NewReader("%subscription-changed watched $0 - - - : "+value+"\n"),
+			),
+			4096,
+			func(Event) {},
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -390,7 +426,11 @@ func TestWireCodec_BufferBoundarySplits(t *testing.T) {
 	}
 
 	if rows[0][0] != padding+checkMark+"suffix" {
-		t.Fatalf("boundary split corrupted data: got %q, want %q", rows[0][0], padding+checkMark+"suffix")
+		t.Fatalf(
+			"boundary split corrupted data: got %q, want %q",
+			rows[0][0],
+			padding+checkMark+"suffix",
+		)
 	}
 }
 
@@ -408,7 +448,11 @@ func TestControlStreamReader_CorruptedDSCAndTerminalNoise(t *testing.T) {
 
 	expected := "%begin 1 1 0\nTGO1:1:4:done,\n%end 1 1 0\n"
 	if !strings.Contains(string(data), expected) {
-		t.Fatalf("corrupted noise was not cleaned properly:\ngot:  %q\nwant contains: %q", string(data), expected)
+		t.Fatalf(
+			"corrupted noise was not cleaned properly:\ngot:  %q\nwant contains: %q",
+			string(data),
+			expected,
+		)
 	}
 }
 
@@ -432,7 +476,13 @@ func (r *chunkReader) Read(p []byte) (int, error) {
 func TestNoEchoFramingBoundarySplits(t *testing.T) {
 	record := wire.EncodeRecord([]string{"title with \x1b\\ inside"})
 	// Model ordinary PTY ONLCR conversion (LF -> CRLF) before decoding -CC.
-	raw := []byte("\x1bP1000p" + strings.ReplaceAll("%begin 1 1 1\n"+string(record)+"%end 1 1 1\n", "\n", "\r\n") + "\x1b\\")
+	raw := []byte(
+		"\x1bP1000p" + strings.ReplaceAll(
+			"%begin 1 1 1\n"+string(record)+"%end 1 1 1\n",
+			"\n",
+			"\r\n",
+		) + "\x1b\\",
+	)
 	bad := 0
 
 	for cut := 1; cut < len(raw); cut++ {
@@ -442,7 +492,12 @@ func TestNoEchoFramingBoundarySplits(t *testing.T) {
 		if err != nil || u.frame == nil || !bytes.Equal(u.frame.data, record) {
 			bad++
 
-			t.Errorf("transport split at byte %d corrupts record: err=%v frame=%+v", cut, err, u.frame)
+			t.Errorf(
+				"transport split at byte %d corrupts record: err=%v frame=%+v",
+				cut,
+				err,
+				u.frame,
+			)
 		}
 	}
 
@@ -453,14 +508,24 @@ func TestNoEchoFramingBoundarySplits(t *testing.T) {
 
 func TestNoEchoFragmentedPreamble(t *testing.T) {
 	record := wire.EncodeRecord([]string{"ordinary title"})
-	raw := []byte("\x1bP1000p" + strings.ReplaceAll("%begin 1 1 1\n"+string(record)+"%end 1 1 1\n", "\n", "\r\n") + "\x1b\\")
+	raw := []byte(
+		"\x1bP1000p" + strings.ReplaceAll(
+			"%begin 1 1 1\n"+string(record)+"%end 1 1 1\n",
+			"\n",
+			"\r\n",
+		) + "\x1b\\",
+	)
 
 	chunks := make([][]byte, len(raw))
 	for i := range raw {
 		chunks[i] = raw[i : i+1]
 	}
 
-	u, err := readControlUnit(bufio.NewReader(newControlStreamReader(&chunkReader{chunks: chunks})), 4096, func(Event) {})
+	u, err := readControlUnit(
+		bufio.NewReader(newControlStreamReader(&chunkReader{chunks: chunks})),
+		4096,
+		func(Event) {},
+	)
 	if err != nil || u.frame == nil || !bytes.Equal(u.frame.data, record) {
 		t.Fatalf("fragmented preamble: %v %+v", err, u.frame)
 	}

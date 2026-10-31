@@ -17,13 +17,34 @@ func TestNewIsPureAndCopiesConfig(t *testing.T) {
 	binary := filepath.Join(dir, "fake")
 
 	marker := filepath.Join(dir, "ran")
-	if e := os.WriteFile(binary, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o700); e != nil { //nolint:gosec // test script requires executable permissions
+	//nolint:gosec // test script requires executable permissions
+	if e := os.WriteFile(binary, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o700); e != nil {
 		t.Fatal(e)
 	}
 
 	env := []string{"PATH=" + dir, "DATA=before"}
 
-	s, e := New(Config{Binary: "fake", Dir: dir, Env: env, SocketName: "selected", SocketPath: "", ConfigFile: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	s, e := New(
+		Config{
+			Binary:     "fake",
+			Dir:        dir,
+			Env:        env,
+			SocketName: "selected",
+			SocketPath: "",
+			ConfigFile: "",
+			Limits: Limits{
+				CommandTimeout: 0,
+				OutputBytes:    0,
+				InputBytes:     0,
+				Concurrent:     0,
+			},
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogLevelNone,
+			LoginShell:       false,
+		},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -44,8 +65,21 @@ func TestNewIsPureAndCopiesConfig(t *testing.T) {
 }
 
 func TestNewValidation(t *testing.T) {
-	//nolint:exhaustruct_v5 // testing validation of individual partial config fields
-	for _, cfg := range []Config{{SocketPath: "relative"}, {SocketPath: "/tmp/a", SocketName: "a"}, {Env: []string{"A=1", "A=2"}}, {Env: []string{"bad"}}, {Env: []string{"A=\x00"}}, {Limits: Limits{OutputBytes: -1}}, {Limits: Limits{Concurrent: -1}}, {Limits: Limits{CommandTimeout: -1}}, {Limits: Limits{InputBytes: -1}}, {Limits: Limits{OutputBytes: 1<<40 + 1}}, {Limits: Limits{InputBytes: 1<<40 + 1}}, {Limits: Limits{Concurrent: 1<<20 + 1}}, {SocketName: "../escape"}} {
+	for _, cfg := range []Config{
+		{SocketPath: "relative"},
+		{SocketPath: "/tmp/a", SocketName: "a"},
+		{Env: []string{"A=1", "A=2"}},
+		{Env: []string{"bad"}},
+		{Env: []string{"A=\x00"}},
+		{Limits: Limits{OutputBytes: -1}},
+		{Limits: Limits{Concurrent: -1}},
+		{Limits: Limits{CommandTimeout: -1}},
+		{Limits: Limits{InputBytes: -1}},
+		{Limits: Limits{OutputBytes: 1<<40 + 1}},
+		{Limits: Limits{InputBytes: 1<<40 + 1}},
+		{Limits: Limits{Concurrent: 1<<20 + 1}},
+		{SocketName: "../escape"},
+	} {
 		cfg.Binary = "/bin/sh"
 		if _, e := New(cfg); !errors.Is(e, ErrInvalidArgument) {
 			t.Errorf("config accepted or wrong classification: %v", e)
@@ -54,7 +88,27 @@ func TestNewValidation(t *testing.T) {
 }
 
 func TestEnvironmentSelection(t *testing.T) {
-	s, e := New(Config{Binary: "/bin/sh", Env: []string{"TMUX=/tmp/a,b,c,123,5", "TMUX_PANE=%9"}, SocketPath: "", SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	s, e := New(
+		Config{
+			Binary:     "/bin/sh",
+			Env:        []string{"TMUX=/tmp/a,b,c,123,5", "TMUX_PANE=%9"},
+			SocketPath: "",
+			SocketName: "",
+			ConfigFile: "",
+			Dir:        "",
+			Limits: Limits{
+				CommandTimeout: 0,
+				OutputBytes:    0,
+				InputBytes:     0,
+				Concurrent:     0,
+			},
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogLevelNone,
+			LoginShell:       false,
+		},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -63,7 +117,27 @@ func TestEnvironmentSelection(t *testing.T) {
 		t.Fatal(s.Endpoint())
 	}
 
-	s, e = New(Config{Binary: "/bin/sh", SocketPath: "/tmp/explicit", Env: []string{"TMUX=malformed"}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	s, e = New(
+		Config{
+			Binary:     "/bin/sh",
+			SocketPath: "/tmp/explicit",
+			Env:        []string{"TMUX=malformed"},
+			SocketName: "",
+			ConfigFile: "",
+			Dir:        "",
+			Limits: Limits{
+				CommandTimeout: 0,
+				OutputBytes:    0,
+				InputBytes:     0,
+				Concurrent:     0,
+			},
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogLevelNone,
+			LoginShell:       false,
+		},
+	)
 	if e != nil || s.Endpoint().SocketPath != "/tmp/explicit" {
 		t.Fatalf("%v %v", s, e)
 	}
@@ -73,12 +147,52 @@ func TestEnvironmentNilVersusEmpty(t *testing.T) {
 	t.Setenv("TMUX_GO_CAPTURE_TEST", "present")
 	t.Setenv("TMUX", "")
 
-	a, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	a, e := New(
+		Config{
+			Binary:     "/bin/sh",
+			SocketPath: "/tmp/a",
+			SocketName: "",
+			ConfigFile: "",
+			Env:        nil,
+			Dir:        "",
+			Limits: Limits{
+				CommandTimeout: 0,
+				OutputBytes:    0,
+				InputBytes:     0,
+				Concurrent:     0,
+			},
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogLevelNone,
+			LoginShell:       false,
+		},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	b, e := New(Config{Binary: "/bin/sh", SocketPath: "/tmp/a", Env: []string{}, SocketName: "", ConfigFile: "", Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	b, e := New(
+		Config{
+			Binary:     "/bin/sh",
+			SocketPath: "/tmp/a",
+			Env:        []string{},
+			SocketName: "",
+			ConfigFile: "",
+			Dir:        "",
+			Limits: Limits{
+				CommandTimeout: 0,
+				OutputBytes:    0,
+				InputBytes:     0,
+				Concurrent:     0,
+			},
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			LogLevel:         LogLevelNone,
+			LoginShell:       false,
+		},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -149,7 +263,12 @@ func TestParseTmuxVarsPIDRange(t *testing.T) {
 		"/socket,2147483648,0", "/socket,9223372036854775807,0", "/socket,999999999999999999999999,0",
 		"/socket,2147483648", "/socket,9223372036854775807", "/socket,999999999999999999999999",
 	} {
-		if _, err := ParseTmuxVars(TmuxVars{TMUX: value, TMUXPane: ""}); !errors.Is(err, ErrInvalidArgument) {
+		if _, err := ParseTmuxVars(
+			TmuxVars{TMUX: value, TMUXPane: ""},
+		); !errors.Is(
+			err,
+			ErrInvalidArgument,
+		) {
 			t.Fatalf("PID out of range accepted: %q, %v", value, err)
 		}
 	}
@@ -218,10 +337,15 @@ func TestInvalidHandlesFailWithoutRunningTmux(t *testing.T) {
 	s, _, argv := mockScriptServer(t)
 	ctx := context.Background()
 	malformed := func(id string, kind ObjectKind) handle {
-		return handle{server: s, origin: fixtureIdentity(s), id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
+		return handle{
+			server: s,
+			origin: fixtureIdentity(s),
+			id:     id,
+			kind:   kind,
+			client: clientCheck{name: "", pid: 0, created: 0},
+		}
 	}
 
-	//nolint:exhaustruct_v5 // testing methods on uninitialized zero handles
 	cases := []struct {
 		name string
 		call func() error
@@ -234,19 +358,38 @@ func TestInvalidHandlesFailWithoutRunningTmux(t *testing.T) {
 		{"zero client detach", func() error { return (Client{}).Detach(ctx) }},
 		{"zero client message", func() error { return (Client{}).Message(ctx, "hello") }},
 		{"zero client info", func() error { _, e := (Client{}).Info(ctx); return e }},
-		{"malformed pane", func() error { return Pane{h: malformed("%x", ObjectKindPane)}.Kill(ctx) }},
-		{"malformed window", func() error { return Window{h: malformed("@", ObjectKindWindow)}.Kill(ctx) }},
-		{"malformed session", func() error { return Session{h: malformed("$01", ObjectKindSession)}.Kill(ctx) }},
-		{"empty client name", func() error { return Client{h: malformed("", ObjectKindClient)}.Detach(ctx) }},
-		{"client name with newline", func() error { return Client{h: malformed("/dev/pts/1\n", ObjectKindClient)}.Message(ctx, "hello") }},
-		{"client name with NUL", func() error { _, e := Client{h: malformed("/dev/pts/1\x00", ObjectKindClient)}.Info(ctx); return e }},
+		{
+			"malformed pane",
+			func() error { return Pane{h: malformed("%x", ObjectKindPane)}.Kill(ctx) },
+		},
+		{
+			"malformed window",
+			func() error { return Window{h: malformed("@", ObjectKindWindow)}.Kill(ctx) },
+		},
+		{
+			"malformed session",
+			func() error { return Session{h: malformed("$01", ObjectKindSession)}.Kill(ctx) },
+		},
+		{
+			"empty client name",
+			func() error { return Client{h: malformed("", ObjectKindClient)}.Detach(ctx) },
+		},
+		{
+			"client name with newline",
+			func() error { return Client{h: malformed("/dev/pts/1\n", ObjectKindClient)}.Message(ctx, "hello") },
+		},
+		{
+			"client name with NUL",
+			func() error { _, e := Client{h: malformed("/dev/pts/1\x00", ObjectKindClient)}.Info(ctx); return e },
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := tc.call()
 
 			var op *OperationError
-			if !errors.Is(e, ErrInvalidHandle) || !errors.As(e, &op) || op.Outcome.Effect != EffectNotSent {
+			if !errors.Is(e, ErrInvalidHandle) || !errors.As(e, &op) ||
+				op.Outcome.Effect != EffectNotSent {
 				t.Fatalf("got %#v, want ErrInvalidHandle with effect EffectNotSent", e)
 			}
 
@@ -283,7 +426,13 @@ func TestIDsAndLiteralNames(t *testing.T) {
 
 func TestErrorRedactionAndEffects(t *testing.T) {
 	secret := "secret-token-content"
-	e := &CommandError{Command: "send-keys", Result: Result{Stdout: nil, Stderr: []byte(secret), ExitCode: 0}, Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrOutputLimit}
+	e := &CommandError{
+		Command: "send-keys",
+		Result:  Result{Stdout: nil, Stderr: []byte(secret), ExitCode: 0},
+		Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil},
+		Timeout: TimeoutSourceNone,
+		Err:     ErrOutputLimit,
+	}
 
 	wrapped := opError("Submit", e)
 	if strings.Contains(wrapped.Error(), secret) || !errors.Is(wrapped, ErrOutputLimit) {
@@ -315,7 +464,18 @@ func TestStderrClassifiesMissingAndDuplicateSessions(t *testing.T) {
 
 func TestStartupVersionPatternMatchesStableGate(t *testing.T) {
 	re := regexp.MustCompile(supportedStablePattern)
-	for _, version := range []string{"3.5", "3.6", "3.6a", "3.7c", "3.10", "4.0", "10.1b", "3.7-vendor", "03.6", "3.06"} {
+	for _, version := range []string{
+		"3.5",
+		"3.6",
+		"3.6a",
+		"3.7c",
+		"3.10",
+		"4.0",
+		"10.1b",
+		"3.7-vendor",
+		"03.6",
+		"3.06",
+	} {
 		if got, want := re.MatchString(version), ParseVersion(version).AtLeast(3, 6); got != want {
 			// Noncanonical numeric spellings are intentionally rejected on startup.
 			if version == "03.6" || version == "3.06" {
@@ -331,7 +491,12 @@ func TestEmptyBufferWriteIsNotSilentSuccess(t *testing.T) {
 	s := localServer(t)
 
 	name, _ := NamedBuffer("x")
-	if e := s.WriteBuffer(context.Background(), name, nil); !errors.Is(e, ErrUnsupported) || outcomeOf(e).Effect != EffectNotSent {
+	if e := s.WriteBuffer(
+		context.Background(),
+		name,
+		nil,
+	); !errors.Is(e, ErrUnsupported) ||
+		outcomeOf(e).Effect != EffectNotSent {
 		t.Fatal(e)
 	}
 }
@@ -398,7 +563,11 @@ func TestConfigRootOptionsValidation(t *testing.T) {
 		badFeatCfg.TerminalFeatures = badFeature
 
 		if _, err := New(badFeatCfg); !errors.Is(err, ErrInvalidArgument) {
-			t.Fatalf("expected ErrInvalidArgument for bad TerminalFeatures %v, got %v", badFeature, err)
+			t.Fatalf(
+				"expected ErrInvalidArgument for bad TerminalFeatures %v, got %v",
+				badFeature,
+				err,
+			)
 		}
 	}
 }

@@ -30,7 +30,10 @@ func TestIntegrationInspectCreateAndCapture(t *testing.T) {
 
 	session := exactFixtureSession(t, ctx, s)
 
-	link, e := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "logs;#{literal}", Program: tmux.Exec("/bin/sh")})
+	link, e := session.NewWindow(
+		ctx,
+		tmux.NewWindowOptions{Name: "logs;#{literal}", Program: tmux.Exec("/bin/sh")},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -40,7 +43,14 @@ func TestIntegrationInspectCreateAndCapture(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	split, e := pane.Split(ctx, tmux.SplitOptions{Direction: tmux.Horizontal, Size: tmux.SplitSize{Percent: 40}, Program: tmux.Exec("/bin/sh")})
+	split, e := pane.Split(
+		ctx,
+		tmux.SplitOptions{
+			Direction: tmux.Horizontal,
+			Size:      tmux.SplitSize{Percent: 40},
+			Program:   tmux.Exec("/bin/sh"),
+		},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -81,7 +91,12 @@ func exactFixtureSession(t *testing.T, ctx context.Context, s *tmux.Server) tmux
 	return session
 }
 
-func setAndReadTitle(t *testing.T, ctx context.Context, pane tmux.Pane, title string) tmux.PaneInfo {
+func setAndReadTitle(
+	t *testing.T,
+	ctx context.Context,
+	pane tmux.Pane,
+	title string,
+) tmux.PaneInfo {
 	t.Helper()
 
 	if e := pane.SetTitle(ctx, title); e != nil {
@@ -152,7 +167,8 @@ func TestIntegrationOptionsInheritanceAndEmpty(t *testing.T) {
 	}
 
 	inherited := paneUserOption(t, ctx, pane, "@probe")
-	if v, ok := inherited.Effective.Get(); !ok || v != "global" || inherited.Local.State() != tmux.ValueStateUnavailable {
+	if v, ok := inherited.Effective.Get(); !ok || v != "global" ||
+		inherited.Local.State() != tmux.ValueStateUnavailable {
 		t.Fatal(inherited)
 	}
 
@@ -181,7 +197,12 @@ func TestIntegrationOptionsInheritanceAndEmpty(t *testing.T) {
 	assertHistoryLimitRoundTrip(t, ctx, session, 5000)
 }
 
-func paneUserOption(t *testing.T, ctx context.Context, pane tmux.Pane, name string) tmux.OptionValue[string] {
+func paneUserOption(
+	t *testing.T,
+	ctx context.Context,
+	pane tmux.Pane,
+	name string,
+) tmux.OptionValue[string] {
 	t.Helper()
 
 	value, e := pane.Options().User(ctx, name)
@@ -192,7 +213,12 @@ func paneUserOption(t *testing.T, ctx context.Context, pane tmux.Pane, name stri
 	return value
 }
 
-func assertHistoryLimitRoundTrip(t *testing.T, ctx context.Context, session tmux.Session, limit int) {
+func assertHistoryLimitRoundTrip(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	limit int,
+) {
 	t.Helper()
 
 	if e := session.Options().SetHistoryLimit(ctx, limit); e != nil {
@@ -227,14 +253,18 @@ func TestIntegrationLinkedGraphAndStaleIndex(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	other, e := s.NewSession(ctx, tmux.NewSessionOptions{Name: "other", Program: tmux.Exec("/bin/sh")})
+	other, e := s.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "other", Program: tmux.Exec("/bin/sh")},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
 
 	zero := 0
 
-	linked, e := original[0].Window().Link(ctx, other, tmux.LinkOptions{Index: &zero, Replace: true})
+	linked, e := original[0].Window().
+		Link(ctx, other, tmux.LinkOptions{Index: &zero, Replace: true})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -284,7 +314,10 @@ func TestIntegrationTwoServersAndReplacement(t *testing.T) {
 		t.Fatal(e)
 	}
 	// Same private endpoint; new lookup may discover a replacement, old handle may not.
-	replacement, e := a.NewSession(ctx, tmux.NewSessionOptions{Name: "replacement", Program: tmux.Exec("/bin/sh")})
+	replacement, e := a.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "replacement", Program: tmux.Exec("/bin/sh")},
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -331,7 +364,13 @@ func TestIntegrationNoServerAndExistingOnly(t *testing.T) {
 		t.Fatalf("missing server: %v", e)
 	}
 
-	if _, e = s.NewSession(ctx, tmux.NewSessionOptions{Start: tmux.StartPolicyExistingOnly}); !errors.Is(e, tmux.ErrNoServer) {
+	if _, e = s.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Start: tmux.StartPolicyExistingOnly},
+	); !errors.Is(
+		e,
+		tmux.ErrNoServer,
+	) {
 		t.Fatalf("existing-only: %v", e)
 	}
 
@@ -356,7 +395,11 @@ func TestIntegrationProcessEnvironmentNotSession(t *testing.T) {
 		Env: map[string]string{
 			envKey: envVal,
 		},
-		Program: tmux.Exec("/bin/sh", "-c", "printf '%s' \"$"+envKey+"\" > "+resultFile+" && sleep 60"),
+		Program: tmux.Exec(
+			"/bin/sh",
+			"-c",
+			"printf '%s' \"$"+envKey+"\" > "+resultFile+" && sleep 60",
+		),
 	})
 	if err != nil {
 		t.Fatalf("NewSession with Env failed: %v", err)
@@ -414,7 +457,10 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 
 	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly})
 	if !errors.Is(err, tmux.ErrNoServer) {
-		t.Fatalf("expected ErrNoServer for StartPolicyExistingOnly on unstarted server, got %v", err)
+		t.Fatalf(
+			"expected ErrNoServer for StartPolicyExistingOnly on unstarted server, got %v",
+			err,
+		)
 	}
 
 	aliasCmd, err := tmux.NewCommand("new", "-d", "-s", "s-alias")
@@ -451,7 +497,11 @@ func TestIntegrationRunWithStartPolicy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	seqRes, err := server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly})
+	seqRes, err := server.RunSequenceWith(
+		ctx,
+		seq,
+		tmux.RunOptions{Start: tmux.StartPolicyExistingOnly},
+	)
 	if err != nil {
 		t.Fatalf("RunSequenceWith failed: %v", err)
 	}
@@ -541,7 +591,13 @@ func TestIntegrationSplitWindowStdin(t *testing.T) {
 	}
 
 	targetPane := otherPane(t, ctx, server, window, pane)
-	awaitCaptureContains(t, ctx, targetPane, "first line from split-window stdin", "second line with #{special} syntax")
+	awaitCaptureContains(
+		t,
+		ctx,
+		targetPane,
+		"first line from split-window stdin",
+		"second line with #{special} syntax",
+	)
 }
 
 // TestIntegrationDisplayMessageStdin verifies that raw RunWith executing "display-message -I"
@@ -573,10 +629,22 @@ func TestIntegrationDisplayMessageStdin(t *testing.T) {
 		t.Fatalf("RunWith display-message -I failed: %v", err)
 	}
 
-	awaitCaptureContains(t, ctx, emptyPane, "hello to empty pane from display-message -I", "second line")
+	awaitCaptureContains(
+		t,
+		ctx,
+		emptyPane,
+		"hello to empty pane from display-message -I",
+		"second line",
+	)
 }
 
-func otherPane(t *testing.T, ctx context.Context, server *tmux.Server, window tmux.Window, known tmux.Pane) tmux.Pane {
+func otherPane(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	window tmux.Window,
+	known tmux.Pane,
+) tmux.Pane {
 	t.Helper()
 
 	panes, err := window.Panes(ctx)
@@ -616,7 +684,13 @@ func awaitCaptureContains(t *testing.T, ctx context.Context, pane tmux.Pane, wan
 
 		select {
 		case <-ctx.Done():
-			t.Fatalf("pane %s never showed %q; last capture %q (%v)", pane.ID(), want, captured, err)
+			t.Fatalf(
+				"pane %s never showed %q; last capture %q (%v)",
+				pane.ID(),
+				want,
+				captured,
+				err,
+			)
 		case <-ticker.C:
 		}
 	}
@@ -666,7 +740,11 @@ func TestIntegrationRunSequenceWithStdinSingleStream(t *testing.T) {
 	inputData := []byte("payload for sequence single stream\n")
 	// The first command consumes stdin to EOF. The second command finds stdin exhausted,
 	// demonstrating that stdin is a single shared stream delivered to the tmux process, not duplicated.
-	_, _ = server.RunSequenceWith(ctx, seq, tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: inputData})
+	_, _ = server.RunSequenceWith(
+		ctx,
+		seq,
+		tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: inputData},
+	)
 
 	got, err := server.ReadBuffer(ctx, b1)
 	if err != nil {
@@ -678,7 +756,10 @@ func TestIntegrationRunSequenceWithStdinSingleStream(t *testing.T) {
 	}
 
 	if _, err := server.ReadBuffer(ctx, b2); !errors.Is(err, tmux.ErrNotFound) {
-		t.Fatalf("expected buffer 2 not to exist because stdin was consumed by command 1, got %v", err)
+		t.Fatalf(
+			"expected buffer 2 not to exist because stdin was consumed by command 1, got %v",
+			err,
+		)
 	}
 }
 
@@ -917,7 +998,12 @@ func TestIntegrationRootShell(t *testing.T) {
 	closeOnCleanup(t, r)
 	closeOnCleanup(t, w)
 
-	shCmd, err := server.PrepareRootShell(ctx, "echo streaming_rootshell", tmux.Streams{Out: w}, tmux.RootShellOptions{})
+	shCmd, err := server.PrepareRootShell(
+		ctx,
+		"echo streaming_rootshell",
+		tmux.Streams{Out: w},
+		tmux.RootShellOptions{},
+	)
 	if err != nil {
 		t.Fatalf("PrepareRootShell failed: %v", err)
 	}
@@ -1008,7 +1094,11 @@ func TestIntegrationRunWithEmptyInputSlice(t *testing.T) {
 		t.Fatalf("NewCommand failed: %v", err)
 	}
 
-	_, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: []byte{}})
+	_, err = server.RunWith(
+		ctx,
+		cmd,
+		tmux.RunOptions{Start: tmux.StartPolicyAllowStart, Input: []byte{}},
+	)
 	if err != nil {
 		t.Fatalf("RunWith with empty input slice failed: %v", err)
 	}
@@ -1101,8 +1191,13 @@ func TestIntegrationControlNewSessionRejectsInvalidEnvironmentName(test *testing
 	}
 
 	operationError, ok := errors.AsType[*tmux.OperationError](err)
-	if !errors.Is(err, tmux.ErrInvalidArgument) || !ok || operationError.Outcome.Effect != tmux.EffectNotSent {
-		test.Fatalf("invalid environment = %v, outcome = %#v; want invalid argument, not sent", err, operationError)
+	if !errors.Is(err, tmux.ErrInvalidArgument) || !ok ||
+		operationError.Outcome.Effect != tmux.EffectNotSent {
+		test.Fatalf(
+			"invalid environment = %v, outcome = %#v; want invalid argument, not sent",
+			err,
+			operationError,
+		)
 	}
 }
 
@@ -1227,7 +1322,10 @@ func TestIntegrationSetPaneOutputAction(t *testing.T) {
 		t.Errorf("expected PaneContinueEvent for pane %s", pane.ID())
 	}
 
-	if err := conn.SetPaneOutputActions(ctx, tmux.PaneOutputSetting{Pane: boundPane, Action: tmux.PaneOutputOn}); err != nil {
+	if err := conn.SetPaneOutputActions(
+		ctx,
+		tmux.PaneOutputSetting{Pane: boundPane, Action: tmux.PaneOutputOn},
+	); err != nil {
 		t.Fatalf("SetPaneOutputActions failed: %v", err)
 	}
 }
@@ -1268,18 +1366,30 @@ func TestIntegrationClientRefreshExtended(t *testing.T) {
 	window, _ := firstWindowPane(t, ctx, session)
 
 	runSteps(t, []namedStep{
-		{"client.SetWindowSize", func() error { return client.SetWindowSize(ctx, window, tmux.Size{Width: 90, Height: 30}) }},
+		{
+			"client.SetWindowSize",
+			func() error { return client.SetWindowSize(ctx, window, tmux.Size{Width: 90, Height: 30}) },
+		},
 		{"client.ClearWindowSize", func() error { return client.ClearWindowSize(ctx, window) }},
 		{"client.ResetCursorTracking", func() error { return client.ResetCursorTracking(ctx) }},
 		{"client.Scroll", func() error { return client.Scroll(ctx, tmux.ScrollDirectionDown, 2) }},
 		{"client.Refresh with negated flag", func() error {
-			return client.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagReadOnly.Negate()}})
+			return client.Refresh(
+				ctx,
+				tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagReadOnly.Negate()}},
+			)
 		}},
-		{"conn.SetWindowSize", func() error { return conn.SetWindowSize(ctx, window, tmux.Size{Width: 95, Height: 35}) }},
+		{
+			"conn.SetWindowSize",
+			func() error { return conn.SetWindowSize(ctx, window, tmux.Size{Width: 95, Height: 35}) },
+		},
 		{"conn.ClearWindowSize", func() error { return conn.ClearWindowSize(ctx, window) }},
 		{"conn.ResetCursorTracking", func() error { return conn.ResetCursorTracking(ctx) }},
 		{"conn.Scroll", func() error { return conn.Scroll(ctx, tmux.ScrollDirectionUp, 1) }},
-		{"conn.Refresh", func() error { return conn.Refresh(ctx, tmux.RefreshOptions{StatusOnly: true}) }},
+		{
+			"conn.Refresh",
+			func() error { return conn.Refresh(ctx, tmux.RefreshOptions{StatusOnly: true}) },
+		},
 	})
 }
 
@@ -1318,12 +1428,22 @@ func TestIntegrationDedicatedCommands(t *testing.T) {
 		{"Pane.Unmark", func() error { return splitPane.Unmark(ctx) }},
 		{"Pane.SwapUp", func() error { return splitPane.SwapUp(ctx) }},
 		{"Pane.SwapDown", func() error { return splitPane.SwapDown(ctx) }},
-		{"Pane.Swap", func() error { return splitPane.Swap(ctx, initialPane, tmux.SwapPaneOptions{Select: true}) }},
-		{"Pane.ResizeRelative", func() error { return splitPane.ResizeRelative(ctx, 2, tmux.ResizeDirectionDown) }},
+		{
+			"Pane.Swap",
+			func() error { return splitPane.Swap(ctx, initialPane, tmux.SwapPaneOptions{Select: true}) },
+		},
+		{
+			"Pane.ResizeRelative",
+			func() error { return splitPane.ResizeRelative(ctx, 2, tmux.ResizeDirectionDown) },
+		},
 		{"Pane.ToggleZoom", func() error { return splitPane.ToggleZoom(ctx) }},
 		{"Pane.ToggleZoom back", func() error { return splitPane.ToggleZoom(ctx) }},
 		{"Pane.Join with FullSize", func() error {
-			return splitPane.Join(ctx, initialPane, tmux.JoinOptions{Direction: tmux.Vertical, FullSize: true})
+			return splitPane.Join(
+				ctx,
+				initialPane,
+				tmux.JoinOptions{Direction: tmux.Vertical, FullSize: true},
+			)
 		}},
 		{"Window.Rotate", func() error { return win.Window().Rotate(ctx, false) }},
 		{"Window.Rotate reverse", func() error { return win.Window().Rotate(ctx, true) }},
@@ -1331,18 +1451,38 @@ func TestIntegrationDedicatedCommands(t *testing.T) {
 		{"Session.RenumberWindows", func() error { return session.RenumberWindows(ctx) }},
 		{"Session.ClearAlerts", func() error { return session.ClearAlerts(ctx) }},
 		{"Session.LockScreen", func() error { return session.LockScreen(ctx) }},
-		{"Window.SelectWith", func() error { return win.Window().SelectWith(ctx, tmux.SelectWindowOptions{}) }},
-		{"Pane.SelectWith", func() error { return initialPane.SelectWith(ctx, tmux.SelectPaneOptions{PreserveZoom: true}) }},
+		{
+			"Window.SelectWith",
+			func() error { return win.Window().SelectWith(ctx, tmux.SelectWindowOptions{}) },
+		},
+		{
+			"Pane.SelectWith",
+			func() error { return initialPane.SelectWith(ctx, tmux.SelectPaneOptions{PreserveZoom: true}) },
+		},
 		{"Session collections", func() error { return sessionCollectionsListed(ctx, session) }},
-		{"CaptureToBuffer and ReadBuffer", func() error { return captureThroughBuffer(ctx, server, initialPane, "capture-buf-test") }},
+		{
+			"CaptureToBuffer and ReadBuffer",
+			func() error { return captureThroughBuffer(ctx, server, initialPane, "capture-buf-test") },
+		},
 		{"SendKeysWith", func() error {
-			return initialPane.SendKeysWith(ctx, tmux.SendKeysOptions{Reset: true, RepeatCount: 1}, tmux.Key("Enter"))
+			return initialPane.SendKeysWith(
+				ctx,
+				tmux.SendKeysOptions{Reset: true, RepeatCount: 1},
+				tmux.Key("Enter"),
+			)
 		}},
 		{"SendTextWith", func() error {
-			return initialPane.SendTextWith(ctx, tmux.SendKeysOptions{ExpandFormat: true}, "#{session_name}")
+			return initialPane.SendTextWith(
+				ctx,
+				tmux.SendKeysOptions{ExpandFormat: true},
+				"#{session_name}",
+			)
 		}},
 		{"Session.KillOtherWindows", func() error { return session.KillOtherWindows(ctx) }},
-		{"Server.KillOtherSessions", func() error { return server.KillOtherSessions(ctx, session.ID()) }},
+		{
+			"Server.KillOtherSessions",
+			func() error { return server.KillOtherSessions(ctx, session.ID()) },
+		},
 	})
 }
 
@@ -1411,7 +1551,12 @@ func sessionCollectionsListed(ctx context.Context, session tmux.Session) error {
 	return nil
 }
 
-func captureThroughBuffer(ctx context.Context, server *tmux.Server, pane tmux.Pane, name string) error {
+func captureThroughBuffer(
+	ctx context.Context,
+	server *tmux.Server,
+	pane tmux.Pane,
+	name string,
+) error {
 	err := pane.CaptureToBuffer(ctx, tmux.CaptureOptions{
 		Buffer:         name,
 		IncludeEscapes: true,
@@ -1504,8 +1649,19 @@ func TestIntegrationRecreateSocket_ConcurrentLoad(t *testing.T) {
 	}
 }
 
-func displayUntilStopped(ctx context.Context, server *tmux.Server, session tmux.Session, workerID int, stop <-chan struct{}) error {
-	cmd, err := tmux.NewCommand("display-message", "-t", string(session.ID()), fmt.Sprintf("load_worker_%d", workerID))
+func displayUntilStopped(
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+	workerID int,
+	stop <-chan struct{},
+) error {
+	cmd, err := tmux.NewCommand(
+		"display-message",
+		"-t",
+		string(session.ID()),
+		fmt.Sprintf("load_worker_%d", workerID),
+	)
 	if err != nil {
 		return fmt.Errorf("NewCommand: %w", err)
 	}
@@ -1525,11 +1681,20 @@ func displayUntilStopped(ctx context.Context, server *tmux.Server, session tmux.
 	}
 }
 
-func runWithRetries(ctx context.Context, server *tmux.Server, cmd tmux.Command, attempts int) error {
+func runWithRetries(
+	ctx context.Context,
+	server *tmux.Server,
+	cmd tmux.Command,
+	attempts int,
+) error {
 	var err error
 
 	for range attempts {
-		if _, err = server.RunWith(ctx, cmd, tmux.RunOptions{Start: tmux.StartPolicyExistingOnly}); err == nil {
+		if _, err = server.RunWith(
+			ctx,
+			cmd,
+			tmux.RunOptions{Start: tmux.StartPolicyExistingOnly},
+		); err == nil {
 			return nil
 		}
 

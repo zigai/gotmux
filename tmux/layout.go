@@ -73,12 +73,16 @@ type (
 	}
 
 	// SwapPaneOptions configures [Pane.Swap].
+	//
+	//exhaustruct:optional
 	SwapPaneOptions struct {
 		// Select makes the swapped pane active; otherwise focus stays put (-d flag when false).
 		Select bool
 	}
 
 	// SwapWindowOptions configures [WindowLink.Swap].
+	//
+	//exhaustruct:optional
 	SwapWindowOptions struct {
 		// Select makes the swapped window current; otherwise focus stays put (-d flag when false).
 		Select bool
@@ -90,7 +94,8 @@ func (s Size) valid() bool {
 }
 
 func (s SplitSize) args() ([]string, error) {
-	if s.Cells < 0 || s.Cells > 1<<20 || s.Percent < 0 || s.Percent > 100 || s.Cells != 0 && s.Percent != 0 {
+	if s.Cells < 0 || s.Cells > 1<<20 || s.Percent < 0 || s.Percent > 100 ||
+		s.Cells != 0 && s.Percent != 0 {
 		return nil, invalid("split size")
 	}
 

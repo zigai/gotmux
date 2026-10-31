@@ -25,7 +25,11 @@ func TestIntegrationServerAccess(t *testing.T) {
 	}
 
 	const testUser = "nobody"
-	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{IsGroup: false, ReadOnly: true}); err != nil {
+	if err := server.GrantAccess(
+		ctx,
+		testUser,
+		tmux.AccessOptions{IsGroup: false, ReadOnly: true},
+	); err != nil {
 		t.Fatalf("GrantAccess(RO) failed: %v", err)
 	}
 
@@ -34,7 +38,11 @@ func TestIntegrationServerAccess(t *testing.T) {
 		t.Errorf("expected user %q with ReadOnly=true and IsGroup=false, got: %+v", testUser, entry)
 	}
 
-	if err := server.GrantAccess(ctx, testUser, tmux.AccessOptions{IsGroup: false, ReadOnly: false}); err != nil {
+	if err := server.GrantAccess(
+		ctx,
+		testUser,
+		tmux.AccessOptions{IsGroup: false, ReadOnly: false},
+	); err != nil {
 		t.Fatalf("GrantAccess(RW) failed: %v", err)
 	}
 
@@ -42,12 +50,27 @@ func TestIntegrationServerAccess(t *testing.T) {
 		t.Errorf("expected user %q to have ReadOnly=false, got: %+v", testUser, entry)
 	}
 
-	if err := server.RevokeAccess(ctx, testUser, tmux.RevokeAccessOptions{IsGroup: false}); err != nil {
+	if err := server.RevokeAccess(
+		ctx,
+		testUser,
+		tmux.RevokeAccessOptions{IsGroup: false},
+	); err != nil {
 		t.Fatalf("RevokeAccess failed: %v", err)
 	}
 
-	if entries := accessEntries(t, ctx, server); slices.ContainsFunc(entries, func(e tmux.AccessEntry) bool { return e.Name == testUser }) {
-		t.Fatalf("expected user %q to be removed from access list, but still present: %+v", testUser, entries)
+	if entries := accessEntries(
+		t,
+		ctx,
+		server,
+	); slices.ContainsFunc(
+		entries,
+		func(e tmux.AccessEntry) bool { return e.Name == testUser },
+	) {
+		t.Fatalf(
+			"expected user %q to be removed from access list, but still present: %+v",
+			testUser,
+			entries,
+		)
 	}
 
 	exerciseGroupAccess(t, ctx, server)
@@ -64,7 +87,12 @@ func accessEntries(t *testing.T, ctx context.Context, server *tmux.Server) []tmu
 	return entries
 }
 
-func requireAccessEntry(t *testing.T, ctx context.Context, server *tmux.Server, name string) tmux.AccessEntry {
+func requireAccessEntry(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	name string,
+) tmux.AccessEntry {
 	t.Helper()
 
 	entries := accessEntries(t, ctx, server)
@@ -86,7 +114,11 @@ func exerciseGroupAccess(t *testing.T, ctx context.Context, server *tmux.Server)
 		return
 	}
 
-	if err := server.GrantAccess(ctx, group, tmux.AccessOptions{IsGroup: true, ReadOnly: true}); err != nil {
+	if err := server.GrantAccess(
+		ctx,
+		group,
+		tmux.AccessOptions{IsGroup: true, ReadOnly: true},
+	); err != nil {
 		return
 	}
 
@@ -97,7 +129,10 @@ func exerciseGroupAccess(t *testing.T, ctx context.Context, server *tmux.Server)
 		return
 	}
 
-	if !slices.ContainsFunc(entries, func(e tmux.AccessEntry) bool { return e.Name == group && e.IsGroup }) {
+	if !slices.ContainsFunc(
+		entries,
+		func(e tmux.AccessEntry) bool { return e.Name == group && e.IsGroup },
+	) {
 		t.Logf("group %q not listed as distinct group entry", group)
 	}
 }

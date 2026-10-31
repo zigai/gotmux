@@ -118,7 +118,14 @@ func splitSequence(text string, escapedSeparator bool) ([]string, error) {
 		}
 
 		if quote == 0 {
-			nextI, nextStart, handled, err := handleUnquotedSequenceChar(text, start, i, c, escapedSeparator, &out)
+			nextI, nextStart, handled, err := handleUnquotedSequenceChar(
+				text,
+				start,
+				i,
+				c,
+				escapedSeparator,
+				&out,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -160,11 +167,18 @@ func splitSequence(text string, escapedSeparator bool) ([]string, error) {
 	return out, nil
 }
 
-func isWordComment(c, quote byte, started bool) bool {
+func isWordComment(c byte, quote byte, started bool) bool {
 	return c == '#' && quote == 0 && !started
 }
 
-func handleUnquotedSequenceChar(text string, start, i int, c byte, escapedSeparator bool, out *[]string) (int, int, bool, error) {
+func handleUnquotedSequenceChar(
+	text string,
+	start int,
+	i int,
+	c byte,
+	escapedSeparator bool,
+	out *[]string,
+) (int, int, bool, error) {
 	if isSequenceInvalid(c) {
 		return 0, 0, false, ErrCommandText
 	}
@@ -183,7 +197,13 @@ func handleUnquotedSequenceChar(text string, start, i int, c byte, escapedSepara
 	return i, start, false, nil
 }
 
-func parseSequencePart(text string, start, i, advance int, out *[]string) (int, int, error) {
+func parseSequencePart(
+	text string,
+	start int,
+	i int,
+	advance int,
+	out *[]string,
+) (int, int, error) {
 	part, err := extractPart(text, start, i)
 	if err != nil {
 		return 0, 0, err
@@ -207,7 +227,7 @@ func flushWord(words *[]string, b *strings.Builder, started *bool) {
 	}
 }
 
-func canEscape(c, quote byte) bool {
+func canEscape(c byte, quote byte) bool {
 	return c == '\\' && quote != '\''
 }
 
@@ -226,7 +246,7 @@ func handleEscape(b *strings.Builder, text string, i int, started *bool) (int, e
 	return next, nil
 }
 
-func extractPart(text string, start, end int) (string, error) {
+func extractPart(text string, start int, end int) (string, error) {
 	part := strings.Trim(text[start:end], " \t")
 	if part == "" {
 		return "", ErrCommandText

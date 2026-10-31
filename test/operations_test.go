@@ -24,7 +24,7 @@ func assertWindowZoomed(t *testing.T, ctx context.Context, w tmux.Window, expect
 	}
 }
 
-func assertPaneFocus(t *testing.T, ctx context.Context, active, inactive tmux.Pane) {
+func assertPaneFocus(t *testing.T, ctx context.Context, active tmux.Pane, inactive tmux.Pane) {
 	t.Helper()
 
 	activeInfo, err := active.Info(ctx)
@@ -46,7 +46,12 @@ func assertPaneFocus(t *testing.T, ctx context.Context, active, inactive tmux.Pa
 	}
 }
 
-func assertWindowLinkFocus(t *testing.T, ctx context.Context, active, inactive tmux.WindowLink) {
+func assertWindowLinkFocus(
+	t *testing.T,
+	ctx context.Context,
+	active tmux.WindowLink,
+	inactive tmux.WindowLink,
+) {
 	t.Helper()
 
 	activeInfo, err := active.Info(ctx)
@@ -276,7 +281,11 @@ func testOperationsLayoutCycling(t *testing.T, ctx context.Context, session tmux
 
 	prevLayout := windowLayout(t, ctx, window)
 	if prevLayout != initialLayout {
-		t.Fatalf("expected layout restored on PreviousLayout, got %q, want %q", prevLayout, initialLayout)
+		t.Fatalf(
+			"expected layout restored on PreviousLayout, got %q, want %q",
+			prevLayout,
+			initialLayout,
+		)
 	}
 }
 
@@ -313,7 +322,11 @@ func testOperationsInputGating(t *testing.T, ctx context.Context, session tmux.S
 	assertPaneInputOff(t, ctx, pane, "0")
 }
 
-func testOperationsWindowSelectAndLastWindow(t *testing.T, ctx context.Context, session tmux.Session) {
+func testOperationsWindowSelectAndLastWindow(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+) {
 	t.Helper()
 
 	var winOpts1 tmux.NewWindowOptions

@@ -46,7 +46,7 @@ func main() {
 }
 
 func run(root string, check bool) error {
-	data, err := os.ReadFile(filepath.Join(root, "internal/schema/options.json"))
+	data, err := os.ReadFile(filepath.Join(root, "internal", "schema", "options.json"))
 	if err != nil {
 		return fmt.Errorf("read schema: %w", err)
 	}
@@ -61,7 +61,7 @@ func run(root string, check bool) error {
 		return err
 	}
 
-	path := filepath.Join(root, "tmux/options_generated.go")
+	path := filepath.Join(root, "tmux", "options_generated.go")
 	if check {
 		current, err := os.ReadFile(path)
 		if err != nil {

@@ -202,7 +202,12 @@ func (oe *OperationError) Error() string {
 func (oe *OperationError) Unwrap() error { return oe.Err }
 
 func (ce *CommandError) Error() string {
-	return fmt.Sprintf("tmux: %s failed (effect %s, exit %d)", ce.Command, ce.Outcome.Effect, ce.Result.ExitCode)
+	return fmt.Sprintf(
+		"tmux: %s failed (effect %s, exit %d)",
+		ce.Command,
+		ce.Outcome.Effect,
+		ce.Result.ExitCode,
+	)
 }
 func (ce *CommandError) Unwrap() error { return ce.Err }
 
@@ -223,7 +228,7 @@ func (ue *UnsupportedError) Unwrap() error {
 func (de *discoveryError) Error() string { return de.Err.Error() }
 func (de *discoveryError) Unwrap() error { return de.Err }
 func invalid(field string) error         { return fmt.Errorf("%w: %s", ErrInvalidArgument, field) }
-func decodeError(kind, field string, err error) error {
+func decodeError(kind string, field string, err error) error {
 	return &DecodeError{Record: kind, Field: field, Offset: 0, Err: err}
 }
 
@@ -269,12 +274,17 @@ func opError(name string, err error) error {
 
 	// A helper already labeled this failure with the same operation. Only its
 	// direct result passes through; a wrapped one is relabeled as usual.
-	if oe, ok := err.(*OperationError); ok && oe.Operation == name { //nolint:errorlint // deliberately matches only an unwrapped helper result
+	//nolint:errorlint // deliberately matches only an unwrapped helper result
+	if oe, ok := err.(*OperationError); ok && oe.Operation == name {
 		return oe
 	}
 
 	if _, ok := errors.AsType[*discoveryError](err); ok && name != "Server.Probe" {
-		return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Err: err}
+		return &OperationError{
+			Operation: name,
+			Outcome:   Outcome{Effect: EffectNotSent, Steps: nil, Created: nil},
+			Err:       err,
+		}
 	}
 
 	if op, ok := errors.AsType[*OperationError](err); ok {
@@ -285,7 +295,11 @@ func opError(name string, err error) error {
 		return &OperationError{Operation: name, Outcome: cmd.Outcome, Err: err}
 	}
 
-	return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectNotSent, Steps: nil, Created: nil}, Err: err}
+	return &OperationError{
+		Operation: name,
+		Outcome:   Outcome{Effect: EffectNotSent, Steps: nil, Created: nil},
+		Err:       err,
+	}
 }
 
 func afterError(name string, err error, created ...CreatedObject) error {
@@ -293,7 +307,11 @@ func afterError(name string, err error, created ...CreatedObject) error {
 		return nil
 	}
 
-	return &OperationError{Operation: name, Outcome: Outcome{Effect: EffectConfirmed, Steps: nil, Created: created}, Err: err}
+	return &OperationError{
+		Operation: name,
+		Outcome:   Outcome{Effect: EffectConfirmed, Steps: nil, Created: created},
+		Err:       err,
+	}
 }
 
 func outcomeOf(err error) Outcome {

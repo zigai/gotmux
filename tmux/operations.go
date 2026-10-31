@@ -21,6 +21,8 @@ type PaneDirection uint8
 
 type (
 	// UnlinkOptions configures unlinking a window from a session slot.
+	//
+	//exhaustruct:optional
 	UnlinkOptions struct {
 		// Force allows unlinking even if this is the last link to the window (-k flag).
 		// By default, tmux rejects unlinking a window's only link to prevent accidental
@@ -29,6 +31,8 @@ type (
 	}
 
 	// RespawnOptions configures re-executing a command in an existing window or pane.
+	//
+	//exhaustruct:optional
 	RespawnOptions struct {
 		// Program specifies the new command. Zero value re-runs the stored respawn command.
 		Program Program
@@ -52,6 +56,8 @@ type (
 	}
 
 	// LinkOptions configures linking an existing window into another session.
+	//
+	//exhaustruct:optional
 	LinkOptions struct {
 		// Index selects an exact slot; nil chooses the first free slot at or above base-index.
 		Index *int
@@ -64,6 +70,8 @@ type (
 	}
 
 	// JoinOptions configures joining a source pane into another window beside a target pane.
+	//
+	//exhaustruct:optional
 	JoinOptions struct {
 		// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
 		Direction Direction
@@ -82,6 +90,8 @@ type (
 	}
 
 	// BreakOptions configures breaking a pane out of its window into a new standalone window.
+	//
+	//exhaustruct:optional
 	BreakOptions struct {
 		// Index optionally specifies the slot index for the new window.
 		Index *int
@@ -95,6 +105,8 @@ type (
 	}
 
 	// PipeOptions configures piping pane terminal I/O to/from a shell command.
+	//
+	//exhaustruct:optional
 	PipeOptions struct {
 		// OnlyIfNotPiped avoids starting if a pipe is already open (-o flag).
 		OnlyIfNotPiped bool
@@ -110,11 +122,22 @@ type (
 	}
 )
 
-func (s *Server) endpointAction(ctx context.Context, label string, name string, args ...string) error {
+func (s *Server) endpointAction(
+	ctx context.Context,
+	label string,
+	name string,
+	args ...string,
+) error {
 	return s.endpointActionFrom(ctx, label, s.begin, name, args...)
 }
 
-func (s *Server) endpointActionFrom(ctx context.Context, label string, begin func(context.Context) (context.Context, *operation, error), name string, args ...string) error {
+func (s *Server) endpointActionFrom(
+	ctx context.Context,
+	label string,
+	begin func(context.Context) (context.Context, *operation, error),
+	name string,
+	args ...string,
+) error {
 	opCtx, op, err := begin(ctx)
 	if err != nil {
 		return opError(label, err)
@@ -143,7 +166,14 @@ func (s *Server) KillOtherSessions(ctx context.Context, target SessionID) error 
 		return opError("Server.KillOtherSessions", invalid("target session"))
 	}
 
-	return s.endpointAction(ctx, "Server.KillOtherSessions", "kill-session", "-a", "-t", string(target))
+	return s.endpointAction(
+		ctx,
+		"Server.KillOtherSessions",
+		"kill-session",
+		"-a",
+		"-t",
+		string(target),
+	)
 }
 
 // Kill terminates this session and all windows that have no remaining links in other sessions.
@@ -158,7 +188,15 @@ func (s Session) Rename(ctx context.Context, name string) error {
 		return opError("Session.Rename", err)
 	}
 
-	return s.h.act(ctx, "Session.Rename", "rename-session", "-t", s.h.id, "--", wire.LiteralFormat(name))
+	return s.h.act(
+		ctx,
+		"Session.Rename",
+		"rename-session",
+		"-t",
+		s.h.id,
+		"--",
+		wire.LiteralFormat(name),
+	)
 }
 
 // LockScreen locks this session by running the lock-command on attached clients.
@@ -253,7 +291,7 @@ func (p Pane) ClearHistory(ctx context.Context) error {
 
 // Select switches the active window in its session to this window using default options.
 func (w Window) Select(ctx context.Context) error {
-	return w.SelectWith(ctx, SelectWindowOptions{}) //nolint:exhaustruct_v5 // convenience wrapper uses defaults
+	return w.SelectWith(ctx, SelectWindowOptions{})
 }
 
 // Select switches the active/focused window in this session to this link slot.
@@ -265,7 +303,7 @@ func (l WindowLink) Select(ctx context.Context) error {
 // By default, tmux rejects unlinking a window if this is its last remaining link;
 // use [WindowLink.UnlinkWith] with Force: true to explicitly permit that destruction.
 func (l WindowLink) Unlink(ctx context.Context) error {
-	return l.UnlinkWith(ctx, UnlinkOptions{Force: false})
+	return l.UnlinkWith(ctx, UnlinkOptions{})
 }
 
 // UnlinkWith removes this window link from its session slot using explicit options.
@@ -377,7 +415,12 @@ func tmuxEnvFlags(env map[string]string) ([]string, error) {
 
 func respawn(ctx context.Context, label string, h handle, name string, opts RespawnOptions) error {
 	if opts.PreserveEnvironment {
-		return opError(label, unsupported("preserving the original process environment; use explicit environment overrides"))
+		return opError(
+			label,
+			unsupported(
+				"preserving the original process environment; use explicit environment overrides",
+			),
+		)
 	}
 
 	extra, argv, err := programArgs(opts.Dir, opts.Env, opts.Program)
@@ -466,7 +509,16 @@ func (w Window) Link(ctx context.Context, s Session, opts LinkOptions) (WindowLi
 	return mutateLink(opCtx, "Window.Link", op, w.h, w.h.guard(), "link-window", args, target)
 }
 
-func mutateLink(ctx context.Context, label string, op *operation, h handle, g *guard, name string, args []string, target string) (WindowLink, error) {
+func mutateLink(
+	ctx context.Context,
+	label string,
+	op *operation,
+	h handle,
+	g *guard,
+	name string,
+	args []string,
+	target string,
+) (WindowLink, error) {
 	if strings.HasSuffix(target, ":") {
 		index, err := freeWindowIndex(ctx, label, op, h.server, h.origin, target)
 		if err != nil {
@@ -483,9 +535,26 @@ func mutateLink(ctx context.Context, label string, op *operation, h handle, g *g
 		}
 	}
 
-	nodes := []wireNode{leaf(command(name, args...)), leaf(command("display-message", "-p", "-t", target, wire.RecordFormat(fieldsFor(ObjectKindWindow))))}
+	nodes := []wireNode{
+		leaf(command(name, args...)),
+		leaf(
+			command(
+				"display-message",
+				"-p",
+				"-t",
+				target,
+				wire.RecordFormat(fieldsFor(ObjectKindWindow)),
+			),
+		),
+	}
 
-	r, err := h.server.execute(ctx, op, plan{nodes: nodes, mode: replyRecords, allowStart: false}, g, nil)
+	r, err := h.server.execute(
+		ctx,
+		op,
+		plan{nodes: nodes, mode: replyRecords, allowStart: false},
+		g,
+		nil,
+	)
 	if err != nil {
 		return WindowLink{}, opError(label, err)
 	}
@@ -508,7 +577,8 @@ func parseLinkedWindow(label string, h handle, target string, data []byte) (Wind
 		return WindowLink{}, afterError(label, err)
 	}
 
-	if string(link.WindowID) != h.id || string(link.SessionID)+":"+strconv.Itoa(link.Index) != target {
+	if string(link.WindowID) != h.id ||
+		string(link.SessionID)+":"+strconv.Itoa(link.Index) != target {
 		return WindowLink{}, afterError(label, ErrLinkChanged)
 	}
 
@@ -528,7 +598,10 @@ func (l WindowLink) Move(ctx context.Context, s Session, opts LinkOptions) (Wind
 	}
 
 	if opts.Index == nil && opts.Replace {
-		return WindowLink{}, opError("WindowLink.Move", invalid("Replace requires an explicit index"))
+		return WindowLink{}, opError(
+			"WindowLink.Move",
+			invalid("Replace requires an explicit index"),
+		)
 	}
 
 	args := []string{"-s", l.target(), "-t", target}
@@ -616,7 +689,13 @@ func (p Pane) Join(ctx context.Context, target Pane, opts JoinOptions) error {
 	}
 	defer op.close()
 
-	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("join-pane", args...)), p.h.guard(), nil)
+	_, err = p.h.server.execute(
+		opCtx,
+		op,
+		emptyPlan(command("join-pane", args...)),
+		p.h.guard(),
+		nil,
+	)
 
 	return opError("Pane.Join", err)
 }
@@ -640,7 +719,13 @@ func (p Pane) Swap(ctx context.Context, other Pane, opts SwapPaneOptions) error 
 		args = append(args, "-d")
 	}
 
-	_, err = p.h.server.execute(opCtx, op, emptyPlan(command("swap-pane", args...)), p.h.guard(), nil)
+	_, err = p.h.server.execute(
+		opCtx,
+		op,
+		emptyPlan(command("swap-pane", args...)),
+		p.h.guard(),
+		nil,
+	)
 
 	return opError("Pane.Swap", err)
 }
@@ -670,7 +755,13 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 
 	args := breakArgs(p.h.id, target, opts)
 
-	r, err := p.h.server.execute(opCtx, op, recordsPlan(command("break-pane", args...)), p.h.guard(), nil)
+	r, err := p.h.server.execute(
+		opCtx,
+		op,
+		recordsPlan(command("break-pane", args...)),
+		p.h.guard(),
+		nil,
+	)
 	if err != nil {
 		return WindowLink{}, opError("Pane.Break", err)
 	}
@@ -681,12 +772,20 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 			err = ErrProtocol
 		}
 
-		return WindowLink{}, afterError("Pane.Break", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
+		return WindowLink{}, afterError(
+			"Pane.Break",
+			err,
+			recoverCreated(r.Stdout, ObjectKindWindow)...,
+		)
 	}
 
 	_, link, err := p.h.server.decodeWindow(rows[0], &p.h.origin)
 	if err != nil {
-		return WindowLink{}, afterError("Pane.Break", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
+		return WindowLink{}, afterError(
+			"Pane.Break",
+			err,
+			recoverCreated(r.Stdout, ObjectKindWindow)...,
+		)
 	}
 
 	if err = opCtx.Err(); err != nil {
@@ -696,8 +795,16 @@ func (p Pane) Break(ctx context.Context, s Session, opts BreakOptions) (WindowLi
 	return link.Handle(), nil
 }
 
-func breakArgs(paneID, target string, opts BreakOptions) []string {
-	args := []string{"-s", paneID, "-t", target, "-P", "-F", wire.RecordFormat(fieldsFor(ObjectKindWindow))}
+func breakArgs(paneID string, target string, opts BreakOptions) []string {
+	args := []string{
+		"-s",
+		paneID,
+		"-t",
+		target,
+		"-P",
+		"-F",
+		wire.RecordFormat(fieldsFor(ObjectKindWindow)),
+	}
 	if !opts.Select {
 		args = append(args, "-d")
 	}
@@ -771,8 +878,29 @@ func (p Pane) SelectAdjacent(ctx context.Context, direction PaneDirection) error
 
 // The native link/move command claims this slot without -k. If another client
 // claims it first, tmux rejects the mutation rather than overwriting that client.
-func freeWindowIndex(ctx context.Context, label string, op *operation, server *Server, id ServerIdentity, target string) (int, error) {
-	r, err := server.execute(ctx, op, recordsPlan(command("display-message", "-p", "-t", target, wire.RecordFormat([]string{"base-index"}))), newGuard(id), nil)
+func freeWindowIndex(
+	ctx context.Context,
+	label string,
+	op *operation,
+	server *Server,
+	id ServerIdentity,
+	target string,
+) (int, error) {
+	r, err := server.execute(
+		ctx,
+		op,
+		recordsPlan(
+			command(
+				"display-message",
+				"-p",
+				"-t",
+				target,
+				wire.RecordFormat([]string{"base-index"}),
+			),
+		),
+		newGuard(id),
+		nil,
+	)
 	if err != nil {
 		return 0, err
 	}

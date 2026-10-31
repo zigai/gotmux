@@ -19,7 +19,10 @@ func TestHookAndBindingPayloadsNeverEvaluate(t *testing.T) {
 		t.Fatal("unknown syntax not preserved")
 	}
 
-	b := parseBinding(`bind-key -r -T prefix C-a send-keys "literal;" ; display-message done`, KeyTablePrefix)
+	b := parseBinding(
+		`bind-key -r -T prefix C-a send-keys "literal;" ; display-message done`,
+		KeyTablePrefix,
+	)
 	if !b.Parsed || !b.Repeat || b.Key != "C-a" {
 		t.Fatal(b)
 	}
@@ -222,7 +225,12 @@ func assertValidParsedBinding(t *testing.T, b BindingInfo) {
 	t.Helper()
 
 	if !b.Key.Valid() || !b.Table.Valid() {
-		t.Fatalf("parseBinding marked invalid key (%q) or table (%q) as parsed: %+v", b.Key, b.Table, b)
+		t.Fatalf(
+			"parseBinding marked invalid key (%q) or table (%q) as parsed: %+v",
+			b.Key,
+			b.Table,
+			b,
+		)
 	}
 
 	cmds, ok := b.Payload.Commands()

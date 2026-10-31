@@ -79,6 +79,8 @@ type (
 	CopyAction string
 
 	// CaptureOptions configures capturing terminal output and scrollback history from a pane.
+	//
+	//exhaustruct:optional
 	CaptureOptions struct {
 		// Start specifies the starting line offset (negative values index into history).
 		Start *int
@@ -127,6 +129,8 @@ type (
 	}
 
 	// CopyModeOptions configures entering or exiting copy mode on a pane.
+	//
+	//exhaustruct:optional
 	CopyModeOptions struct {
 		// PageUp immediately scrolls up one page upon entering copy mode (-u flag).
 		PageUp bool
@@ -148,6 +152,8 @@ type (
 	}
 
 	// SendKeysOptions configures sending key presses or text input to a pane.
+	//
+	//exhaustruct:optional
 	SendKeysOptions struct {
 		// ExpandFormat expands format specifiers in key or text arguments (-F flag).
 		ExpandFormat bool
@@ -269,7 +275,13 @@ func (p Pane) Submit(ctx context.Context, text string) error {
 	}
 
 	nodes = append(nodes, leaf(command("send-keys", "-t", p.h.id, "--", string(KeyEnter))))
-	_, err = p.h.server.execute(opCtx, op, plan{nodes: nodes, mode: replyEmpty, allowStart: false}, p.h.guard(), nil)
+	_, err = p.h.server.execute(
+		opCtx,
+		op,
+		plan{nodes: nodes, mode: replyEmpty, allowStart: false},
+		p.h.guard(),
+		nil,
+	)
 
 	return opError("Pane.Submit", err)
 }
@@ -425,7 +437,10 @@ func (p Pane) Capture(ctx context.Context, opts CaptureOptions) ([]byte, error) 
 	}
 
 	if opts.MaxBytes > p.h.server.config.Limits.OutputBytes {
-		return nil, opError("Pane.Capture", invalid("MaxBytes may only tighten the configured limit"))
+		return nil, opError(
+			"Pane.Capture",
+			invalid("MaxBytes may only tighten the configured limit"),
+		)
 	}
 
 	opCtx, op, err := p.h.server.begin(ctx)
@@ -438,7 +453,13 @@ func (p Pane) Capture(ctx context.Context, opts CaptureOptions) ([]byte, error) 
 		op.output = min(op.output, opts.MaxBytes+int64(len(guardOK)))
 	}
 
-	r, err := p.h.server.execute(opCtx, op, plainPlan(command("capture-pane", args...)), p.h.guard(), nil)
+	r, err := p.h.server.execute(
+		opCtx,
+		op,
+		plainPlan(command("capture-pane", args...)),
+		p.h.guard(),
+		nil,
+	)
 	if opts.MaxBytes > 0 && int64(len(r.Stdout)) > opts.MaxBytes {
 		r.Stdout = r.Stdout[:opts.MaxBytes]
 
@@ -462,10 +483,19 @@ func (p Pane) CaptureWithTitle(ctx context.Context, opts CaptureOptions) (Captur
 	}
 
 	if opts.MaxBytes > p.h.server.config.Limits.OutputBytes {
-		return CaptureResult{}, opError("Pane.CaptureWithTitle", invalid("MaxBytes may only tighten the configured limit"))
+		return CaptureResult{}, opError(
+			"Pane.CaptureWithTitle",
+			invalid("MaxBytes may only tighten the configured limit"),
+		)
 	}
 
-	titleCmd := command("display-message", "-p", "-t", p.h.id, wire.RecordFormat([]string{"pane_title"}))
+	titleCmd := command(
+		"display-message",
+		"-p",
+		"-t",
+		p.h.id,
+		wire.RecordFormat([]string{"pane_title"}),
+	)
 	capCmd := command("capture-pane", capArgs...)
 
 	opCtx, op, err := p.h.server.begin(ctx)
@@ -611,13 +641,19 @@ func isMouseKey(s string) bool {
 
 	for _, event := range []string{
 		"MouseMove", "WheelDown", "WheelUp",
-		"MouseDragEnd1", "MouseDragEnd2", "MouseDragEnd3", "MouseDragEnd6", "MouseDragEnd7", "MouseDragEnd8", "MouseDragEnd9", "MouseDragEnd10", "MouseDragEnd11",
-		"MouseDrag1", "MouseDrag2", "MouseDrag3", "MouseDrag6", "MouseDrag7", "MouseDrag8", "MouseDrag9", "MouseDrag10", "MouseDrag11",
-		"MouseDown1", "MouseDown2", "MouseDown3", "MouseDown6", "MouseDown7", "MouseDown8", "MouseDown9", "MouseDown10", "MouseDown11",
+		"MouseDragEnd1", "MouseDragEnd2", "MouseDragEnd3", "MouseDragEnd6", "MouseDragEnd7",
+		"MouseDragEnd8", "MouseDragEnd9", "MouseDragEnd10", "MouseDragEnd11",
+		"MouseDrag1", "MouseDrag2", "MouseDrag3", "MouseDrag6", "MouseDrag7",
+		"MouseDrag8", "MouseDrag9", "MouseDrag10", "MouseDrag11",
+		"MouseDown1", "MouseDown2", "MouseDown3", "MouseDown6", "MouseDown7",
+		"MouseDown8", "MouseDown9", "MouseDown10", "MouseDown11",
 		"MouseUp1", "MouseUp2", "MouseUp3", "MouseUp6", "MouseUp7", "MouseUp8", "MouseUp9", "MouseUp10", "MouseUp11",
-		"SecondClick1", "SecondClick2", "SecondClick3", "SecondClick6", "SecondClick7", "SecondClick8", "SecondClick9", "SecondClick10", "SecondClick11",
-		"DoubleClick1", "DoubleClick2", "DoubleClick3", "DoubleClick6", "DoubleClick7", "DoubleClick8", "DoubleClick9", "DoubleClick10", "DoubleClick11",
-		"TripleClick1", "TripleClick2", "TripleClick3", "TripleClick6", "TripleClick7", "TripleClick8", "TripleClick9", "TripleClick10", "TripleClick11",
+		"SecondClick1", "SecondClick2", "SecondClick3", "SecondClick6", "SecondClick7",
+		"SecondClick8", "SecondClick9", "SecondClick10", "SecondClick11",
+		"DoubleClick1", "DoubleClick2", "DoubleClick3", "DoubleClick6", "DoubleClick7",
+		"DoubleClick8", "DoubleClick9", "DoubleClick10", "DoubleClick11",
+		"TripleClick1", "TripleClick2", "TripleClick3", "TripleClick6", "TripleClick7",
+		"TripleClick8", "TripleClick9", "TripleClick10", "TripleClick11",
 	} {
 		if len(s) > len(event) && strings.EqualFold(s[:len(event)], event) {
 			rest = s[len(event):]
@@ -659,7 +695,9 @@ func isFunctionKey(s string) bool {
 }
 
 func captureArgs(id string, opts CaptureOptions) ([]string, error) {
-	if opts.Screen > CaptureScreenCopyMode || opts.MaxBytes < 0 || (opts.EntireHistory && opts.Start != nil) || (opts.ScrollbackEnd && opts.End != nil) {
+	if opts.Screen > CaptureScreenCopyMode || opts.MaxBytes < 0 ||
+		(opts.EntireHistory && opts.Start != nil) ||
+		(opts.ScrollbackEnd && opts.End != nil) {
 		return nil, invalid("capture options")
 	}
 

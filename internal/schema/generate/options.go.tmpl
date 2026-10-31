@@ -21,7 +21,7 @@ func (v {{$type}}) valid() bool {
 // Get reads a scalar option by its tmux name, preserving local and effective values.
 func (o {{$scope}}) Get(ctx context.Context, name string) (OptionValue[string], error) { return o.target.read(ctx,"{{$scope}}.Get",name) }
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o {{$scope}}) Set(ctx context.Context, name,value string) error { return o.target.set(ctx,"{{$scope}}.Set",name,value,false) }
+func (o {{$scope}}) Set(ctx context.Context, name string,value string) error { return o.target.set(ctx,"{{$scope}}.Set",name,value,false) }
 // SetWith sets a scalar option with custom options (such as -a for append, -F for format expansion, or -o for only-if-unset).
 func (o {{$scope}}) SetWith(ctx context.Context, name string, opts SetOptionOptions) error { return o.target.setWith(ctx,"{{$scope}}.Set",name,opts) }
 // Unset removes the local value of an option by its tmux name.
@@ -35,7 +35,7 @@ func (o {{$scope}}) ListWith(ctx context.Context, opts ListOptionOptions) ([]Opt
 // User reads the value of a user-defined option (prefixed with @) in this scope.
 func (o {{$scope}}) User(ctx context.Context, name string) (OptionValue[string],error) { return userGet(ctx,"{{$scope}}.User",o.target,name) }
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o {{$scope}}) SetUser(ctx context.Context,name,value string) error { return userSet(ctx,"{{$scope}}.SetUser",o.target,name,value,false) }
+func (o {{$scope}}) SetUser(ctx context.Context,name string,value string) error { return userSet(ctx,"{{$scope}}.SetUser",o.target,name,value,false) }
 // SetUserWith sets a user-defined option (prefixed with @) with custom mutation options.
 func (o {{$scope}}) SetUserWith(ctx context.Context, name string, opts SetOptionOptions) error { return userSetWith(ctx,"{{$scope}}.SetUser",o.target,name,opts) }
 // UnsetUser removes a user-defined option (prefixed with @) from this scope.

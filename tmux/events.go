@@ -241,7 +241,9 @@ func (e PaneContinueEvent) eventBytes() int64 {
 }
 func (e PaneContinueEvent) cloneEvent() Event { return e }
 func (e LayoutChangedEvent) eventBytes() int64 {
-	return int64(len(e.name)+len(e.Layout)+len(e.VisibleLayout)+len(e.Flags)) + layoutChangedEventBaseOverhead
+	return int64(
+		len(e.name)+len(e.Layout)+len(e.VisibleLayout)+len(e.Flags),
+	) + layoutChangedEventBaseOverhead
 }
 func (e LayoutChangedEvent) cloneEvent() Event { return e }
 
@@ -264,7 +266,9 @@ func (e ClientEvent) cloneEvent() Event { return e }
 func (e SubscriptionEvent) Data() []byte { return bytes.Clone(e.data) }
 
 func (e SubscriptionEvent) eventBytes() int64 {
-	return int64(len(e.name)+len(e.Name)+len(e.RawHeader)+len(e.data)) + subscriptionEventBaseOverhead
+	return int64(
+		len(e.name)+len(e.Name)+len(e.RawHeader)+len(e.data),
+	) + subscriptionEventBaseOverhead
 }
 func (e SubscriptionEvent) cloneEvent() Event { e.data = bytes.Clone(e.data); return e }
 
@@ -311,7 +315,7 @@ func (e WindowPaneChangedEvent) eventBytes() int64 {
 }
 func (e WindowPaneChangedEvent) cloneEvent() Event { return e }
 
-func decodeFlowEvent(base eventBase, name, rest string) (Event, bool, error) {
+func decodeFlowEvent(base eventBase, name string, rest string) (Event, bool, error) {
 	switch name {
 	case "pause":
 		if !PaneID(rest).Valid() {
@@ -354,7 +358,12 @@ func decodeEvent(line []byte, maxBytes int64) (Event, error) {
 	return nil, ErrProtocol
 }
 
-func decodeKnownEvent(base eventBase, name, rest string, maxBytes int64) (Event, bool, error) {
+func decodeKnownEvent(
+	base eventBase,
+	name string,
+	rest string,
+	maxBytes int64,
+) (Event, bool, error) {
 	if ev, ok, err := decodeFlowEvent(base, name, rest); ok {
 		return ev, true, err
 	}
@@ -375,7 +384,7 @@ func decodeKnownEvent(base eventBase, name, rest string, maxBytes int64) (Event,
 	return decodeLifecycleEvent(base, name, rest)
 }
 
-func decodeServerEvent(base eventBase, name, rest string) (Event, bool, error) {
+func decodeServerEvent(base eventBase, name string, rest string) (Event, bool, error) {
 	switch name {
 	case "config-error":
 		return ConfigErrorEvent{eventBase: base, Error: rest}, true, nil
@@ -397,7 +406,7 @@ func decodeServerEvent(base eventBase, name, rest string) (Event, bool, error) {
 	}
 }
 
-func decodePasteBufferEvent(base eventBase, name, rest string) (Event, bool, error) {
+func decodePasteBufferEvent(base eventBase, name string, rest string) (Event, bool, error) {
 	if name != "paste-buffer-changed" && name != "paste-buffer-deleted" {
 		return nil, false, nil
 	}
@@ -413,7 +422,7 @@ func decodePasteBufferEvent(base eventBase, name, rest string) (Event, bool, err
 	return PasteBufferDeletedEvent{eventBase: base, Name: rest}, true, nil
 }
 
-func decodeTargetEvent(base eventBase, name, rest string) (Event, bool, error) {
+func decodeTargetEvent(base eventBase, name string, rest string) (Event, bool, error) {
 	if ev, ok, err := decodePasteBufferEvent(base, name, rest); ok {
 		return ev, true, err
 	}
@@ -441,7 +450,7 @@ func decodeTargetEvent(base eventBase, name, rest string) (Event, bool, error) {
 	}
 }
 
-func decodeLifecycleEvent(base eventBase, name, rest string) (Event, bool, error) {
+func decodeLifecycleEvent(base eventBase, name string, rest string) (Event, bool, error) {
 	switch {
 	case name == "layout-change":
 		ev, err := decodeLayoutEvent(base, rest)
@@ -486,7 +495,12 @@ func isSessionEvent(name string) bool {
 
 func isWindowEvent(name string) bool {
 	switch name {
-	case "window-add", "window-close", "window-renamed", "unlinked-window-add", "unlinked-window-close", "unlinked-window-renamed":
+	case "window-add",
+		"window-close",
+		"window-renamed",
+		"unlinked-window-add",
+		"unlinked-window-close",
+		"unlinked-window-renamed":
 		return true
 	default:
 		return false
@@ -503,7 +517,7 @@ func isValidEventName(name string) bool {
 	return true
 }
 
-func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event, error) {
+func decodeOutputEvent(base eventBase, name string, rest string, maxBytes int64) (Event, error) {
 	id, tail, ok := strings.Cut(rest, " ")
 	if !ok {
 		id = rest
@@ -541,7 +555,12 @@ func decodeOutputEvent(base eventBase, name, rest string, maxBytes int64) (Event
 		return nil, ErrProtocol
 	}
 
-	return PaneOutputEvent{eventBase: base, PaneID: PaneID(strings.Clone(id)), Age: age, data: data}, nil
+	return PaneOutputEvent{
+		eventBase: base,
+		PaneID:    PaneID(strings.Clone(id)),
+		Age:       age,
+		data:      data,
+	}, nil
 }
 
 func decodeLayoutEvent(base eventBase, rest string) (Event, error) {
@@ -559,7 +578,7 @@ func decodeLayoutEvent(base eventBase, rest string) (Event, error) {
 	}, nil
 }
 
-func decodeSessionEvent(base eventBase, name, rest string) (Event, error) {
+func decodeSessionEvent(base eventBase, name string, rest string) (Event, error) {
 	if name == "sessions-changed" {
 		return SessionEvent{
 			eventBase: base,
@@ -606,7 +625,7 @@ func decodeWindowEvent(base eventBase, rest string) (Event, error) {
 	}, nil
 }
 
-func decodeClientEvent(base eventBase, name, rest string) (Event, error) {
+func decodeClientEvent(base eventBase, name string, rest string) (Event, error) {
 	id, tail, _ := strings.Cut(rest, " ")
 	if !ClientName(id).Valid() {
 		return nil, ErrProtocol

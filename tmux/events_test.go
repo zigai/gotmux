@@ -34,7 +34,10 @@ func TestOutputEventQuotaBoundsRetainedMemory(t *testing.T) {
 	runtime.ReadMemStats(&before)
 
 	for range 20 {
-		event, err := decodeEvent([]byte("%output %0 "+strings.Repeat("\\000", 100000)+"\n"), 500000)
+		event, err := decodeEvent(
+			[]byte("%output %0 "+strings.Repeat("\\000", 100000)+"\n"),
+			500000,
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -53,7 +56,12 @@ func TestOutputEventQuotaBoundsRetainedMemory(t *testing.T) {
 
 	retained := after.HeapAlloc - before.HeapAlloc
 	if retained > 4*budget {
-		t.Fatalf("queue reserves %d bytes, accounts %d, but retains %d heap bytes", stream.maxBytes, stream.bytes, retained)
+		t.Fatalf(
+			"queue reserves %d bytes, accounts %d, but retains %d heap bytes",
+			stream.maxBytes,
+			stream.bytes,
+			retained,
+		)
 	}
 }
 
@@ -61,9 +69,28 @@ func eventConnection(t *testing.T) *Connection {
 	t.Helper()
 
 	_, cancel := context.WithCancelCause(context.Background())
-	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, Flags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
-	//nolint:exhaustruct_v5 // test fixture intentionally initializes mock connection fields
-	c := &Connection{cancel: cancel, stopCh: make(chan struct{}), opts: opts, streams: map[*EventStream]struct{}{}, done: make(chan struct{})}
+	opts, _ := normalizeControlOptions(
+		ControlOptions{
+			PaneOutput:       false,
+			NoEcho:           false,
+			Flags:            nil,
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			QueueDepth:       0,
+			QueuedBytes:      0,
+			FrameBytes:       0,
+			EventBytes:       0,
+			MaxStreams:       0,
+		},
+	)
+	c := &Connection{
+		cancel:  cancel,
+		stopCh:  make(chan struct{}),
+		opts:    opts,
+		streams: map[*EventStream]struct{}{},
+		done:    make(chan struct{}),
+	}
 
 	t.Cleanup(func() { c.stop(nil, true); c.work.Wait() })
 
@@ -71,7 +98,12 @@ func eventConnection(t *testing.T) *Connection {
 }
 
 func oneEvent() Event {
-	return PaneOutputEvent{eventBase: eventBase{name: "output", received: time.Now()}, PaneID: "%1", Age: UnavailableValue[time.Duration](), data: []byte("abc")}
+	return PaneOutputEvent{
+		eventBase: eventBase{name: "output", received: time.Now()},
+		PaneID:    "%1",
+		Age:       UnavailableValue[time.Duration](),
+		data:      []byte("abc"),
+	}
 }
 
 func testEventOptions(byteCount int64, count int) EventOptions {
@@ -147,7 +179,13 @@ func TestEventReservationCeiling(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if _, e := c.Events(context.Background(), testEventOptions(1, 0)); !errors.Is(e, ErrResourceLimit) {
+	if _, e := c.Events(
+		context.Background(),
+		testEventOptions(1, 0),
+	); !errors.Is(
+		e,
+		ErrResourceLimit,
+	) {
 		t.Fatalf("stream beyond EventBytes: got %v, want ErrResourceLimit", e)
 	}
 
@@ -174,8 +212,17 @@ func TestEventStreamCountCeiling(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if _, e := c.Events(context.Background(), testEventOptions(100, 0)); !errors.Is(e, ErrResourceLimit) {
-		t.Fatalf("third stream under EventBytes but beyond MaxStreams: got %v, want ErrResourceLimit", e)
+	if _, e := c.Events(
+		context.Background(),
+		testEventOptions(100, 0),
+	); !errors.Is(
+		e,
+		ErrResourceLimit,
+	) {
+		t.Fatalf(
+			"third stream under EventBytes but beyond MaxStreams: got %v, want ErrResourceLimit",
+			e,
+		)
 	}
 
 	if err := first.Close(); err != nil {
@@ -204,7 +251,11 @@ func TestEventOptionsRejectInvalid(t *testing.T) {
 			}
 
 			if len(c.streams) != 0 || c.eventReserved != 0 {
-				t.Fatalf("rejected options left %d streams and %d reserved bytes", len(c.streams), c.eventReserved)
+				t.Fatalf(
+					"rejected options left %d streams and %d reserved bytes",
+					len(c.streams),
+					c.eventReserved,
+				)
 			}
 		})
 	}
@@ -335,7 +386,13 @@ func TestZeroResourceValues(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	if _, e := c.Events(context.Background(), testEventOptions(0, 0)); !errors.Is(e, ErrInvalidHandle) {
+	if _, e := c.Events(
+		context.Background(),
+		testEventOptions(0, 0),
+	); !errors.Is(
+		e,
+		ErrInvalidHandle,
+	) {
 		t.Fatal(e)
 	}
 
@@ -470,7 +527,8 @@ func TestDecodeClientAndPaneModeEvents(t *testing.T) {
 	}
 
 	clientFlagsEv, ok := ev.(ClientFlagsChangedEvent)
-	if !ok || clientFlagsEv.ClientName != ClientName("/dev/pts/1") || clientFlagsEv.Flags != "read-only" {
+	if !ok || clientFlagsEv.ClientName != ClientName("/dev/pts/1") ||
+		clientFlagsEv.Flags != "read-only" {
 		t.Fatalf("unexpected ClientFlagsChangedEvent: %+v", ev)
 	}
 

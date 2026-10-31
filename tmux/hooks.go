@@ -37,6 +37,8 @@ type (
 	KeyTable string
 
 	// BindOptions configures key binding registration and modification.
+	//
+	//exhaustruct:optional
 	BindOptions struct {
 		// Repeat allows the bound key to be pressed multiple times without re-entering prefix (-r flag).
 		Repeat bool
@@ -49,6 +51,8 @@ type (
 	}
 
 	// UnbindOptions configures key binding removal behavior.
+	//
+	//exhaustruct:optional
 	UnbindOptions struct {
 		// All removes all key bindings in the specified table (-a flag).
 		// When All is true, key may be empty ("").
@@ -59,6 +63,8 @@ type (
 	}
 
 	// BindingsOptions configures key binding listing and filtering queries.
+	//
+	//exhaustruct:optional
 	BindingsOptions struct {
 		// Table optionally restricts listing to a specific key table (-T flag).
 		// If Table is empty, all key tables are listed.
@@ -190,7 +196,12 @@ func (w Window) Hooks() HookScope { return HookScope{target: w.Options().target}
 func (p Pane) Hooks() HookScope { return HookScope{target: p.Options().target} }
 
 // Set registers a command sequence to execute when the named hook event triggers at index.
-func (h HookScope) Set(ctx context.Context, name string, index int, commands CommandSequence) error {
+func (h HookScope) Set(
+	ctx context.Context,
+	name string,
+	index int,
+	commands CommandSequence,
+) error {
 	if !validFormatName(name) || index < 0 || index > 1<<30 || len(commands.commands) == 0 {
 		return opError("HookScope.Set", invalid("hook name/index/commands"))
 	}
@@ -201,9 +212,17 @@ func (h HookScope) Set(ctx context.Context, name string, index int, commands Com
 	}
 	defer op.close()
 
-	node := leaf(command("set-hook", append(h.target.args(), "--", name+"["+strconv.Itoa(index)+"]")...))
+	node := leaf(
+		command("set-hook", append(h.target.args(), "--", name+"["+strconv.Itoa(index)+"]")...),
+	)
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
-	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
+	_, err = h.target.server.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false},
+		g,
+		nil,
+	)
 
 	return opError("HookScope.Set", err)
 }
@@ -240,7 +259,13 @@ func (h HookScope) SetWhole(ctx context.Context, name string, commands CommandSe
 
 	node := leaf(command("set-hook", append(h.target.args(), "--", name)...))
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
-	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
+	_, err = h.target.server.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false},
+		g,
+		nil,
+	)
 
 	return opError("HookScope.SetWhole", err)
 }
@@ -259,7 +284,13 @@ func (h HookScope) Append(ctx context.Context, name string, commands CommandSequ
 
 	node := leaf(command("set-hook", append(h.target.args(), "-a", "--", name)...))
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
-	_, err = h.target.server.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, g, nil)
+	_, err = h.target.server.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false},
+		g,
+		nil,
+	)
 
 	return opError("HookScope.Append", err)
 }
@@ -308,7 +339,13 @@ func (h HookScope) List(ctx context.Context) ([]HookInfo, error) {
 	}
 	defer op.close()
 
-	r, err := h.target.server.execute(opCtx, op, plainPlan(command("show-hooks", h.target.args()...)), g, nil)
+	r, err := h.target.server.execute(
+		opCtx,
+		op,
+		plainPlan(command("show-hooks", h.target.args()...)),
+		g,
+		nil,
+	)
 	if err != nil {
 		return nil, opError("HookScope.List", err)
 	}
@@ -365,7 +402,10 @@ func (h HookScope) parseHooksOutput(label string, stdout []byte) ([]HookInfo, er
 			index = idx
 		}
 
-		out = append(out, HookInfo{Name: name, Index: index, Scope: h.target.scope, Payload: parsePayload(value)})
+		out = append(
+			out,
+			HookInfo{Name: name, Index: index, Scope: h.target.scope, Payload: parsePayload(value)},
+		)
 	}
 
 	return out, nil
@@ -374,8 +414,10 @@ func (h HookScope) parseHooksOutput(label string, stdout []byte) ([]HookInfo, er
 func (b BindingInfo) Raw() string { return b.raw }
 
 func validateBind(table KeyTable, key Key, commands CommandSequence, opts BindOptions) error {
-	isCommandlessEdit := len(commands.commands) == 0 && (opts.Note != "" || opts.ClearNote || opts.Repeat)
-	if !table.Valid() || !key.Valid() || (!isCommandlessEdit && len(commands.commands) == 0) || !wire.ValidString(opts.Note) {
+	isCommandlessEdit := len(commands.commands) == 0 &&
+		(opts.Note != "" || opts.ClearNote || opts.Repeat)
+	if !table.Valid() || !key.Valid() || (!isCommandlessEdit && len(commands.commands) == 0) ||
+		!wire.ValidString(opts.Note) {
 		return invalid("binding")
 	}
 
@@ -401,7 +443,13 @@ func bindArgs(table KeyTable, key Key, opts BindOptions) []string {
 //
 // If commands is empty, [BindOptions.Note], [BindOptions.ClearNote], or [BindOptions.Repeat]
 // can be used to update an existing binding's note or repeat flag without replacing its command.
-func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands CommandSequence, opts BindOptions) error {
+func (s *Server) Bind(
+	ctx context.Context,
+	table KeyTable,
+	key Key,
+	commands CommandSequence,
+	opts BindOptions,
+) error {
 	if err := validateBind(table, key, commands, opts); err != nil {
 		return opError("Server.Bind", err)
 	}
@@ -419,24 +467,42 @@ func (s *Server) Bind(ctx context.Context, table KeyTable, key Key, commands Com
 
 	args := bindArgs(table, key, opts)
 	if len(commands.commands) == 0 {
-		_, err = s.execute(opCtx, op, emptyPlan(command("bind-key", args...)), newGuard(info.Identity), nil)
+		_, err = s.execute(
+			opCtx,
+			op,
+			emptyPlan(command("bind-key", args...)),
+			newGuard(info.Identity),
+			nil,
+		)
+
 		return opError("Server.Bind", err)
 	}
 
 	node := leaf(command("bind-key", args...))
 	node.args = append(node.args, wireArg{text: "", nested: commands.nodes()})
-	_, err = s.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false}, newGuard(info.Identity), nil)
+	_, err = s.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyEmpty, allowStart: false},
+		newGuard(info.Identity),
+		nil,
+	)
 
 	return opError("Server.Bind", err)
 }
 
 // Unbind removes a key binding from the specified key table.
 func (s *Server) Unbind(ctx context.Context, table KeyTable, key Key) error {
-	return s.UnbindWith(ctx, table, key, UnbindOptions{All: false, Quiet: false})
+	return s.UnbindWith(ctx, table, key, UnbindOptions{})
 }
 
 // UnbindWith removes key bindings with options such as -a (remove all bindings) and -q (quiet).
-func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, opts UnbindOptions) error {
+func (s *Server) UnbindWith(
+	ctx context.Context,
+	table KeyTable,
+	key Key,
+	opts UnbindOptions,
+) error {
 	if !opts.All && !key.Valid() {
 		return opError("Server.Unbind", invalid("key"))
 	}
@@ -471,13 +537,7 @@ func (s *Server) UnbindWith(ctx context.Context, table KeyTable, key Key, opts U
 // If a binding's command text uses complex shell or tmux syntax outside what our non-evaluating
 // parser supports, [BindingInfo.Parsed] will be false and [BindingInfo.Raw] provides the verbatim text.
 func (s *Server) Bindings(ctx context.Context, table KeyTable) ([]BindingInfo, error) {
-	return s.FindBindings(ctx, BindingsOptions{
-		Table:      table,
-		Key:        "",
-		FirstMatch: false,
-		NotesOnly:  false,
-		Prefix:     "",
-	})
+	return s.FindBindings(ctx, BindingsOptions{Table: table})
 }
 
 func listKeysArgs(opts BindingsOptions) []string {
@@ -494,20 +554,45 @@ func listKeysArgs(opts BindingsOptions) []string {
 	return args
 }
 
-func (s *Server) listKeys(ctx context.Context, op *operation, info ServerInfo, args []string) (Result, error) {
+func (s *Server) listKeys(
+	ctx context.Context,
+	op *operation,
+	info ServerInfo,
+	args []string,
+) (Result, error) {
 	if info.Version.Major != 3 || info.Version.Minor != 7 {
-		return s.execute(ctx, op, plainPlan(command("list-keys", args...)), newGuard(info.Identity), nil)
+		return s.execute(
+			ctx,
+			op,
+			plainPlan(command("list-keys", args...)),
+			newGuard(info.Identity),
+			nil,
+		)
 	}
 
 	marker := rand.Text() + "\t"
 
-	r, err := s.execute(ctx, op, plainPlan(command("list-keys", append([]string{"-F", marker + listKeysTemplate}, args...)...)), newGuard(info.Identity), nil)
+	r, err := s.execute(
+		ctx,
+		op,
+		plainPlan(
+			command("list-keys", append([]string{"-F", marker + listKeysTemplate}, args...)...),
+		),
+		newGuard(info.Identity),
+		nil,
+	)
 	if err != nil {
 		return r, err
 	}
 
 	if len(r.Stdout) == 0 {
-		r, err = s.execute(ctx, op, plainPlan(command("show-messages")), newGuard(info.Identity), nil)
+		r, err = s.execute(
+			ctx,
+			op,
+			plainPlan(command("show-messages")),
+			newGuard(info.Identity),
+			nil,
+		)
 		if err != nil {
 			return r, err
 		}
@@ -646,7 +731,8 @@ func bindingQueryNoMatch(err error, opts BindingsOptions) bool {
 	}
 
 	commandError, ok := errors.AsType[*CommandError](err)
-	if !ok || commandError.Command != "list-keys" || commandError.Timeout != TimeoutSourceNone || len(commandError.Result.Stdout) != 0 {
+	if !ok || commandError.Command != "list-keys" || commandError.Timeout != TimeoutSourceNone ||
+		len(commandError.Result.Stdout) != 0 {
 		return false
 	}
 
@@ -718,7 +804,7 @@ func parseBindingNote(trimmed string, opts BindingsOptions) BindingNote {
 	return BindingNote{Raw: trimmed, Key: first, Note: second}
 }
 
-func parseBindingsLines(stdout []byte, defaultTable, filterTable KeyTable) []BindingInfo {
+func parseBindingsLines(stdout []byte, defaultTable KeyTable, filterTable KeyTable) []BindingInfo {
 	var out []BindingInfo
 
 	for line := range bytes.SplitSeq(bytes.TrimSuffix(stdout, []byte{'\n'}), []byte{'\n'}) {
@@ -735,7 +821,12 @@ func parseBindingsLines(stdout []byte, defaultTable, filterTable KeyTable) []Bin
 	return out
 }
 
-func (s *Server) notedBindings(ctx context.Context, op *operation, info ServerInfo, bindings []BindingInfo) ([]BindingInfo, error) {
+func (s *Server) notedBindings(
+	ctx context.Context,
+	op *operation,
+	info ServerInfo,
+	bindings []BindingInfo,
+) ([]BindingInfo, error) {
 	noted := make(map[KeyTable]map[Key]bool)
 	out := []BindingInfo{}
 
@@ -745,13 +836,7 @@ func (s *Server) notedBindings(ctx context.Context, op *operation, info ServerIn
 			args := []string{"-N", "-P", "", "-T", string(binding.Table)}
 
 			result, err := s.listKeys(ctx, op, info, args)
-			if err != nil && !bindingQueryNoMatch(err, BindingsOptions{
-				Table:      binding.Table,
-				Key:        "",
-				FirstMatch: false,
-				NotesOnly:  false,
-				Prefix:     "",
-			}) {
+			if err != nil && !bindingQueryNoMatch(err, BindingsOptions{Table: binding.Table}) {
 				return nil, err
 			}
 
@@ -817,7 +902,11 @@ func parseBinding(raw string, table KeyTable) BindingInfo {
 	}
 
 	b.Parsed = true
-	b.Payload = CommandPayload{raw: raw, sequence: CommandSequence{commands: commands}, parsed: true}
+	b.Payload = CommandPayload{
+		raw:      raw,
+		sequence: CommandSequence{commands: commands},
+		parsed:   true,
+	}
 
 	return b
 }

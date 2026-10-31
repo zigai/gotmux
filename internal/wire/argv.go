@@ -15,9 +15,11 @@ var (
 type (
 	QuoteWriter struct{ W io.Writer }
 	Counter     struct {
+		//exhaustruct:optional
 		N     int64
 		Limit int64
-		Err   error
+		//exhaustruct:optional
+		Err error
 	}
 )
 
@@ -64,7 +66,9 @@ func (q QuoteWriter) Write(p []byte) (int, error) {
 
 		if start < i {
 			if _, err := q.W.Write(p[start:i]); err != nil {
-				return start, err //nolint:wrapcheck // QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+				// QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+				//nolint:wrapcheck // Underlying writer errors are propagated.
+				return start, err
 			}
 		}
 
@@ -77,7 +81,9 @@ func (q QuoteWriter) Write(p []byte) (int, error) {
 
 	if start < len(p) {
 		if _, err := q.W.Write(p[start:]); err != nil {
-			return start, err //nolint:wrapcheck // QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+			// QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+			//nolint:wrapcheck // Underlying writer errors are propagated.
+			return start, err
 		}
 	}
 
@@ -86,11 +92,15 @@ func (q QuoteWriter) Write(p []byte) (int, error) {
 
 func WriteQuoted(w io.Writer, s string) error {
 	if _, err := io.WriteString(w, `"`); err != nil {
-		return err //nolint:wrapcheck // WriteQuoted writes to io.Writer and propagates underlying writer errors directly
+		// WriteQuoted writes to io.Writer and propagates underlying writer errors directly.
+		//nolint:wrapcheck // Underlying writer errors are propagated.
+		return err
 	}
 
 	if _, err := io.WriteString(QuoteWriter{W: w}, s); err != nil {
-		return err //nolint:wrapcheck // WriteQuoted writes to io.Writer and propagates underlying writer errors directly
+		// WriteQuoted writes to io.Writer and propagates underlying writer errors directly.
+		//nolint:wrapcheck // Underlying writer errors are propagated.
+		return err
 	}
 
 	_, err := io.WriteString(w, `"`)
@@ -144,8 +154,11 @@ func isSafeQuoteByte(b byte) bool {
 }
 
 func writeOctalEscape(w io.Writer, b byte) error {
-	esc := [4]byte{'\\', '0' + (b >> 6), '0' + ((b >> 3) & 7), '0' + (b & 7)} //nolint:mnd // octal digit bit-shift constants
+	//nolint:mnd // octal digit bit-shift constants
+	esc := [4]byte{'\\', '0' + (b >> 6), '0' + ((b >> 3) & 7), '0' + (b & 7)}
 	_, err := w.Write(esc[:])
 
-	return err //nolint:wrapcheck // QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+	// QuoteWriter implements io.Writer and must propagate underlying writer errors directly
+	//nolint:wrapcheck // Underlying writer errors are propagated.
+	return err
 }

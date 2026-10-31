@@ -28,6 +28,8 @@ type (
 	}
 
 	// AccessOptions configures server socket access permissions (server-access -a).
+	//
+	//exhaustruct:optional
 	AccessOptions struct {
 		// IsGroup specifies that the target is a UNIX group name rather than a user (-g flag).
 		IsGroup bool
@@ -38,6 +40,8 @@ type (
 	}
 
 	// RevokeAccessOptions configures [Server.RevokeAccess].
+	//
+	//exhaustruct:optional
 	RevokeAccessOptions struct {
 		// IsGroup specifies that the name is a UNIX group rather than a user (-g flag).
 		IsGroup bool
@@ -61,7 +65,13 @@ func (s *Server) AccessList(ctx context.Context) ([]AccessEntry, error) {
 		return nil, opError("Server.AccessList", err)
 	}
 
-	r, err := s.execute(opCtx, op, plainPlan(command("server-access", "-l")), newGuard(info.Identity), nil)
+	r, err := s.execute(
+		opCtx,
+		op,
+		plainPlan(command("server-access", "-l")),
+		newGuard(info.Identity),
+		nil,
+	)
 	if err != nil {
 		return nil, opError("Server.AccessList", err)
 	}

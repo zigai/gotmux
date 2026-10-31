@@ -16,7 +16,16 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-func assertEnvironment(t *testing.T, ctx context.Context, scope tmux.EnvironmentScope, name string, hidden bool, value string, present, removed bool) {
+func assertEnvironment(
+	t *testing.T,
+	ctx context.Context,
+	scope tmux.EnvironmentScope,
+	name string,
+	hidden bool,
+	value string,
+	present bool,
+	removed bool,
+) {
 	t.Helper()
 
 	got, err := scope.GetWith(ctx, name, tmux.GetEnvironmentOptions{Hidden: hidden})
@@ -26,7 +35,17 @@ func assertEnvironment(t *testing.T, ctx context.Context, scope tmux.Environment
 
 	actual, ok := got.Value.Get()
 	if actual != value || ok != present || got.Unset != removed || got.Hidden != hidden {
-		t.Fatalf("%s: got %+v (%q,%v), want value %q present=%v removed=%v hidden=%v", name, got, actual, ok, value, present, removed, hidden)
+		t.Fatalf(
+			"%s: got %+v (%q,%v), want value %q present=%v removed=%v hidden=%v",
+			name,
+			got,
+			actual,
+			ok,
+			value,
+			present,
+			removed,
+			hidden,
+		)
 	}
 
 	if !present && got.Value.State() != tmux.ValueStateUnavailable {
@@ -112,7 +131,12 @@ IFS= read -r hold`
 
 	path := filepath.Join(dir, "result")
 
-	awaitObservation(t, ctx, "child environment", func() bool { _, err := os.Stat(path); return err == nil })
+	awaitObservation(
+		t,
+		ctx,
+		"child environment",
+		func() bool { _, err := os.Stat(path); return err == nil },
+	)
 
 	got, err := os.ReadFile(path)
 	if err != nil {
@@ -146,7 +170,10 @@ func TestIntegrationResourcesArray(t *testing.T) {
 
 	const literal = "a b;'\"\\#{pane_id}"
 
-	updates = []tmux.ArrayUpdate{{Index: 2, Value: literal, Unset: false}, {Index: 7, Value: "second", Unset: false}}
+	updates = []tmux.ArrayUpdate{
+		{Index: 2, Value: literal, Unset: false},
+		{Index: 7, Value: "second", Unset: false},
+	}
 
 	result, err := options.UpdateArray(ctx, name, updates)
 	if err != nil {
@@ -157,9 +184,18 @@ func TestIntegrationResourcesArray(t *testing.T) {
 		t.Fatal(diff)
 	}
 
-	assertArray(t, ctx, options, name, []tmux.ArrayEntry{{Index: 2, Value: literal}, {Index: 7, Value: "second"}})
+	assertArray(
+		t,
+		ctx,
+		options,
+		name,
+		[]tmux.ArrayEntry{{Index: 2, Value: literal}, {Index: 7, Value: "second"}},
+	)
 
-	updates = []tmux.ArrayUpdate{{Index: 2, Value: "replacement", Unset: false}, {Index: 7, Value: "", Unset: true}}
+	updates = []tmux.ArrayUpdate{
+		{Index: 2, Value: "replacement", Unset: false},
+		{Index: 7, Value: "", Unset: true},
+	}
 	if _, err := options.UpdateArray(ctx, name, updates); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +203,10 @@ func TestIntegrationResourcesArray(t *testing.T) {
 	want := []tmux.ArrayEntry{{Index: 2, Value: "replacement"}}
 	assertArray(t, ctx, options, name, want)
 
-	updates = []tmux.ArrayUpdate{{Index: 2, Value: "must not apply", Unset: false}, {Index: -1, Value: "invalid", Unset: false}}
+	updates = []tmux.ArrayUpdate{
+		{Index: 2, Value: "must not apply", Unset: false},
+		{Index: -1, Value: "invalid", Unset: false},
+	}
 
 	result, err = options.UpdateArray(ctx, name, updates)
 	if !errors.Is(err, tmux.ErrInvalidArgument) || len(result.Applied) != 0 {
@@ -252,11 +291,41 @@ func TestIntegrationOptionOriginUsesNativeScope(t *testing.T) {
 		value   string
 		want    tmux.Scope
 	}{
-		{name: "window through session", options: session.Options(), option: "monitor-activity", value: "on", want: tmux.ScopeWindow},
-		{name: "global window through global session", options: server.GlobalSessionOptions(), option: "monitor-activity", value: "on", want: tmux.ScopeGlobalWindow},
-		{name: "server through session", options: session.Options(), option: "escape-time", value: "25", want: tmux.ScopeServer},
-		{name: "session", options: session.Options(), option: "status-left", value: "local", want: tmux.ScopeSession},
-		{name: "user", options: session.Options(), option: "@origin", value: "local", want: tmux.ScopeSession},
+		{
+			name:    "window through session",
+			options: session.Options(),
+			option:  "monitor-activity",
+			value:   "on",
+			want:    tmux.ScopeWindow,
+		},
+		{
+			name:    "global window through global session",
+			options: server.GlobalSessionOptions(),
+			option:  "monitor-activity",
+			value:   "on",
+			want:    tmux.ScopeGlobalWindow,
+		},
+		{
+			name:    "server through session",
+			options: session.Options(),
+			option:  "escape-time",
+			value:   "25",
+			want:    tmux.ScopeServer,
+		},
+		{
+			name:    "session",
+			options: session.Options(),
+			option:  "status-left",
+			value:   "local",
+			want:    tmux.ScopeSession,
+		},
+		{
+			name:    "user",
+			options: session.Options(),
+			option:  "@origin",
+			value:   "local",
+			want:    tmux.ScopeSession,
+		},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -294,7 +363,8 @@ func TestIntegrationOptionOriginRequiresLocalValue(t *testing.T) {
 	}
 
 	got, err = session.Options().Get(ctx, "status-left")
-	if err != nil || got.Local.State() != tmux.ValueStateUnavailable || got.Origin.State() != tmux.ValueStateUnavailable {
+	if err != nil || got.Local.State() != tmux.ValueStateUnavailable ||
+		got.Origin.State() != tmux.ValueStateUnavailable {
 		t.Fatalf("inherited option origin must stay unproven: %+v, %v", got, err)
 	}
 }
@@ -342,7 +412,13 @@ func TestIntegrationArrayIncludesInheritedDefaults(t *testing.T) {
 	}
 }
 
-func assertArray(t *testing.T, ctx context.Context, options tmux.SessionOptions, name string, want []tmux.ArrayEntry) {
+func assertArray(
+	t *testing.T,
+	ctx context.Context,
+	options tmux.SessionOptions,
+	name string,
+	want []tmux.ArrayEntry,
+) {
 	t.Helper()
 
 	got, err := options.Array(ctx, name)

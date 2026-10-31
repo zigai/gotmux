@@ -32,9 +32,12 @@ type controlUnit struct {
 	event Event
 }
 type controlStreamReader struct {
-	r       io.Reader
-	hasCR   bool
+	r io.Reader
+	//exhaustruct:optional
+	hasCR bool
+	//exhaustruct:optional
 	seenDSC bool
+	//exhaustruct:optional
 	pending []byte
 }
 
@@ -103,9 +106,15 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 // Arbitrary output-producing commands are not accepted on this transport.
 func readControlUnit(r *bufio.Reader, maxBytes int64, publish func(Event)) (controlUnit, error) {
 	if b, err := r.Peek(1); err == nil && b[0] == dscEscapeByte {
-		if dsc, err := r.Peek(dscPreambleLength); err == nil && bytes.Equal(dsc, []byte("\x1bP1000p")) {
+		if dsc, err := r.Peek(
+			dscPreambleLength,
+		); err == nil &&
+			bytes.Equal(dsc, []byte("\x1bP1000p")) {
 			_, _ = r.Discard(dscPreambleLength)
-		} else if trailer, err := r.Peek(dscTrailerLength); err == nil && bytes.Equal(trailer, []byte("\x1b\\")) {
+		} else if trailer, err := r.Peek(
+			dscTrailerLength,
+		); err == nil &&
+			bytes.Equal(trailer, []byte("\x1b\\")) {
 			_, _ = r.Discard(dscTrailerLength)
 			return controlUnit{frame: nil, event: nil}, io.EOF
 		}
@@ -184,7 +193,14 @@ func checkFrameEnd(line []byte, ending string, id frameID, ordinary bool) (bool,
 	return failed, nil
 }
 
-func processFrameLine(line []byte, id frameID, maxBytes int64, f *controlFrame, ordinary *bool, publish func(Event)) (bool, error) {
+func processFrameLine(
+	line []byte,
+	id frameID,
+	maxBytes int64,
+	f *controlFrame,
+	ordinary *bool,
+	publish func(Event),
+) (bool, error) {
 	if ending := frameEnding(line); ending != "" {
 		failed, err := checkFrameEnd(line, ending, id, *ordinary)
 		if err != nil {
@@ -218,7 +234,12 @@ func processFrameLine(line []byte, id frameID, maxBytes int64, f *controlFrame, 
 	return false, nil
 }
 
-func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(Event)) (*controlFrame, error) {
+func readFrame(
+	r *bufio.Reader,
+	beginLine []byte,
+	maxBytes int64,
+	publish func(Event),
+) (*controlFrame, error) {
 	id, err := frameHeader(beginLine, "begin")
 	if err != nil {
 		return nil, err
@@ -268,7 +289,12 @@ func readFrame(r *bufio.Reader, beginLine []byte, maxBytes int64, publish func(E
 	}
 }
 
-func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (int64, error) {
+func appendRecordChunk(
+	r *bufio.Reader,
+	maxBytes int64,
+	used int64,
+	f *controlFrame,
+) (int64, error) {
 	wireChunk, wireErr := readRecordWireChunk(r, maxBytes-used)
 	if wireErr != nil {
 		return 0, wireErr
@@ -280,12 +306,7 @@ func appendRecordChunk(r *bufio.Reader, maxBytes, used int64, f *controlFrame) (
 }
 
 func newControlStreamReader(r io.Reader) io.Reader {
-	return &controlStreamReader{
-		r:       r,
-		hasCR:   false,
-		seenDSC: false,
-		pending: nil,
-	}
+	return &controlStreamReader{r: r}
 }
 
 func (c *controlStreamReader) Read(p []byte) (int, error) {

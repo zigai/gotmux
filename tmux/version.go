@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	supportedStablePattern    = `^([a-zA-Z_-]+-)?(([4-9]|[1-9][0-9]+)[.][0-9]+|3[.]([6-9]|[1-9][0-9]+))[a-z]?(-.*)?$|^master$|^next$`
+	supportedStablePattern = `^([a-zA-Z_-]+-)?(([4-9]|[1-9][0-9]+)[.][0-9]+|3[.]([6-9]|[1-9][0-9]+))[a-z]?(-.*)?$` +
+		`|^master$|^next$`
 	unsupportedStartupVersion = "TGO-GUARD-1:unsupported-version\n"
 	minMajorVersion           = 3
 	minMinorVersion           = 6
@@ -112,7 +113,7 @@ func ParseVersion(raw string) Version {
 
 // AtLeast reports whether the version's major and minor numbers are greater than
 // or equal to the specified numbers.
-func (v Version) AtLeast(major, minor int) bool {
+func (v Version) AtLeast(major int, minor int) bool {
 	return v.Major > major || (v.Major == major && v.Minor >= minor)
 }
 
@@ -206,20 +207,34 @@ func (s *Server) Capabilities(ctx context.Context) (Capabilities, error) {
 		Commands:  nil,
 	}
 
-	r, err := s.execute(opCtx, op, recordsPlan(command("list-commands", "-F", wire.RecordFormat([]string{"command_list_name"}))), newGuard(info.Identity), nil)
+	r, err := s.execute(
+		opCtx,
+		op,
+		recordsPlan(
+			command("list-commands", "-F", wire.RecordFormat([]string{"command_list_name"})),
+		),
+		newGuard(info.Identity),
+		nil,
+	)
 	if err != nil {
 		return Capabilities{}, opError("Server.Capabilities", err)
 	}
 
 	rows, err := wire.ParseRecords(r.Stdout, 1)
 	if err != nil {
-		return Capabilities{}, afterError("Server.Capabilities", decodeError("commands", "command_list_name", err))
+		return Capabilities{}, afterError(
+			"Server.Capabilities",
+			decodeError("commands", "command_list_name", err),
+		)
 	}
 
 	c.Commands = make([]string, 0, len(rows))
 	for _, row := range rows {
 		if _, err := NewCommand(row[0]); err != nil {
-			return Capabilities{}, afterError("Server.Capabilities", decodeError("commands", "command_list_name", err))
+			return Capabilities{}, afterError(
+				"Server.Capabilities",
+				decodeError("commands", "command_list_name", err),
+			)
 		}
 
 		c.Commands = append(c.Commands, row[0])

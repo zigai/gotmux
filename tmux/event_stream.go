@@ -23,11 +23,14 @@ const (
 type OverflowPolicy uint8
 
 // EventOptions configures capacity and overflow policy for an [EventStream].
+//
+//exhaustruct:optional
 type EventOptions struct {
 	// MaxBytes is the memory quota in bytes reserved upfront for this stream's queue.
+	// Zero uses the default quota.
 	MaxBytes int64
 
-	// MaxCount bounds the maximum number of buffered events.
+	// MaxCount bounds the maximum number of buffered events. Zero uses the default limit.
 	MaxCount int
 
 	// Overflow determines behavior when capacity limits are exceeded.
@@ -37,17 +40,23 @@ type EventOptions struct {
 // EventStream delivers an asynchronous stream of tmux notifications to a single reader.
 // Canceling an individual [EventStream.Next] call leaves queued events intact for subsequent reads.
 type EventStream struct {
-	conn        *Connection
-	mu          sync.Mutex
-	queue       []Event
-	bytes       int64
-	maxBytes    int64
-	maxCount    int
-	done        chan struct{}
-	wake        chan struct{}
-	terminal    error
+	conn *Connection
+	//exhaustruct:optional
+	mu sync.Mutex
+	//exhaustruct:optional
+	queue []Event
+	//exhaustruct:optional
+	bytes    int64
+	maxBytes int64
+	maxCount int
+	done     chan struct{}
+	wake     chan struct{}
+	//exhaustruct:optional
+	terminal error
+	//exhaustruct:optional
 	releaseOnce sync.Once
-	reading     atomic.Bool
+	//exhaustruct:optional
+	reading atomic.Bool
 }
 
 // Events creates a new [EventStream] with upfront reserved byte capacity.
@@ -178,17 +187,11 @@ func (c *Connection) checkStreamCapacity(maxBytes int64) error {
 
 func newEventStream(conn *Connection, maxBytes int64, maxCount int) *EventStream {
 	return &EventStream{
-		conn:        conn,
-		mu:          sync.Mutex{},
-		queue:       nil,
-		bytes:       0,
-		maxBytes:    maxBytes,
-		maxCount:    maxCount,
-		done:        make(chan struct{}),
-		wake:        make(chan struct{}, 1),
-		terminal:    nil,
-		releaseOnce: sync.Once{},
-		reading:     atomic.Bool{},
+		conn:     conn,
+		maxBytes: maxBytes,
+		maxCount: maxCount,
+		done:     make(chan struct{}),
+		wake:     make(chan struct{}, 1),
 	}
 }
 

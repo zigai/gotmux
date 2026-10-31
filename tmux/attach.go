@@ -37,6 +37,8 @@ type (
 	DetachMode uint8
 
 	// AttachOptions configures interactive terminal attachment to a session.
+	//
+	//exhaustruct:optional
 	AttachOptions struct {
 		// ReadOnly attaches the client in read-only mode (-r flag), preventing input transmission.
 		ReadOnly bool
@@ -54,6 +56,8 @@ type (
 	}
 
 	// CommandOptions configures prepared subprocess command execution.
+	//
+	//exhaustruct:optional
 	CommandOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
 		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
@@ -80,6 +84,8 @@ type (
 		Err *os.File
 	}
 	// TerminalOptions configures interactive terminal command preparation.
+	//
+	//exhaustruct:optional
 	TerminalOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
 		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
@@ -88,6 +94,8 @@ type (
 	}
 
 	// RootShellOptions configures root shell compatibility command execution (-c flag).
+	//
+	//exhaustruct:optional
 	RootShellOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
 		// When [StartPolicyAllowStart] (the zero value), daemon auto-spawn is permitted.
@@ -180,7 +188,12 @@ func validateTerminals(t Streams) error {
 // checks. Tmux manages terminal mode setup and restoration.
 //
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
-func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareAttach(
+	ctx context.Context,
+	session SessionID,
+	streams Streams,
+	opts AttachOptions,
+) (*exec.Cmd, error) {
 	if !session.Valid() {
 		return nil, opError("Server.PrepareAttach", invalid("session"))
 	}
@@ -193,7 +206,12 @@ func (s *Server) PrepareAttach(ctx context.Context, session SessionID, streams S
 // It validates streams; the caller manages Start, Wait, signals, cancellation, and exit codes.
 //
 // Fails with [ErrTransportUnsupported] if invoked on a control-bound server.
-func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareAttachTarget(
+	ctx context.Context,
+	target string,
+	streams Streams,
+	opts AttachOptions,
+) (*exec.Cmd, error) {
 	if !wire.ValidString(target) {
 		return nil, opError("Server.PrepareAttachTarget", invalid("target"))
 	}
@@ -209,7 +227,11 @@ func (s *Server) PrepareAttachTarget(ctx context.Context, target string, streams
 }
 
 // PrepareAttach returns an unstarted [exec.Cmd] for interactive terminal attachment to this session.
-func (s Session) PrepareAttach(ctx context.Context, streams Streams, opts AttachOptions) (*exec.Cmd, error) {
+func (s Session) PrepareAttach(
+	ctx context.Context,
+	streams Streams,
+	opts AttachOptions,
+) (*exec.Cmd, error) {
 	if err := s.h.check(); err != nil {
 		return nil, opError("Session.PrepareAttach", err)
 	}
@@ -280,7 +302,10 @@ func (s Session) attachmentArgs(opts AttachOptions) ([]string, error) {
 }
 
 // The returned cleanup cancels and joins the connection-lifetime watcher.
-func attachmentContext(ctx context.Context, lifetime *Connection) (context.Context, context.CancelFunc) {
+func attachmentContext(
+	ctx context.Context,
+	lifetime *Connection,
+) (context.Context, context.CancelFunc) {
 	attachCtx, cancel := context.WithCancel(ctx)
 	if lifetime == nil {
 		return attachCtx, cancel
@@ -355,7 +380,12 @@ func (s *Server) prepareSubprocessCheck(ctx context.Context, opName string) erro
 	return nil
 }
 
-func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []string, streams Streams) (*exec.Cmd, error) {
+func (s *Server) prepareTerminalArgs(
+	ctx context.Context,
+	opName string,
+	argv []string,
+	streams Streams,
+) (*exec.Cmd, error) {
 	if err := s.prepareSubprocessCheck(ctx, opName); err != nil {
 		return nil, err
 	}
@@ -370,7 +400,11 @@ func (s *Server) prepareTerminalArgs(ctx context.Context, opName string, argv []
 	return cmd, nil
 }
 
-func (s *Server) prepareRawArgv(opName string, commands []Command, start StartPolicy) ([]string, error) {
+func (s *Server) prepareRawArgv(
+	opName string,
+	commands []Command,
+	start StartPolicy,
+) ([]string, error) {
 	allowStart, err := s.rawAllowStart(start)
 	if err != nil {
 		return nil, opError(opName, err)
@@ -393,7 +427,11 @@ func (s *Server) prepareRawArgv(opName string, commands []Command, start StartPo
 	return append(s.baseArgs(allowStart), args...), nil
 }
 
-func (s *Server) rootShellArgv(opName string, shellCommand string, start StartPolicy) ([]string, error) {
+func (s *Server) rootShellArgv(
+	opName string,
+	shellCommand string,
+	start StartPolicy,
+) ([]string, error) {
 	allowStart, err := s.rawAllowStart(start)
 	if err != nil {
 		return nil, opError(opName, err)
@@ -427,7 +465,12 @@ func validateSequenceCommands(commands []Command) error {
 // It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareTerminal(ctx context.Context, c Command, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareTerminal(
+	ctx context.Context,
+	c Command,
+	streams Streams,
+	opts TerminalOptions,
+) (*exec.Cmd, error) {
 	if !c.Valid() {
 		return nil, opError("Server.PrepareTerminal", invalid("command"))
 	}
@@ -445,7 +488,12 @@ func (s *Server) PrepareTerminal(ctx context.Context, c Command, streams Streams
 // It validates that streams refer to real terminal devices; the caller owns the process lifecycle.
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequence, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareTerminalSequence(
+	ctx context.Context,
+	seq CommandSequence,
+	streams Streams,
+	opts TerminalOptions,
+) (*exec.Cmd, error) {
 	commands := seq.commands
 	if err := validateSequenceCommands(commands); err != nil {
 		return nil, opError("Server.PrepareTerminalSequence", err)
@@ -466,7 +514,11 @@ func (s *Server) PrepareTerminalSequence(ctx context.Context, seq CommandSequenc
 // attaching to a session. The server handle remains side-effect free; the caller owns the process lifecycle.
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams Streams, opts TerminalOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareDefaultTerminal(
+	ctx context.Context,
+	streams Streams,
+	opts TerminalOptions,
+) (*exec.Cmd, error) {
 	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
 		return nil, opError("Server.PrepareDefaultTerminal", err)
@@ -485,7 +537,12 @@ func (s *Server) PrepareDefaultTerminal(ctx context.Context, streams Streams, op
 // Start, Wait, managing signals, and closing the supplied stream files).
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareCommand(ctx context.Context, c Command, streams Streams, opts CommandOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareCommand(
+	ctx context.Context,
+	c Command,
+	streams Streams,
+	opts CommandOptions,
+) (*exec.Cmd, error) {
 	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareCommand"); err != nil {
 		return nil, err
 	}
@@ -512,7 +569,12 @@ func (s *Server) PrepareCommand(ctx context.Context, c Command, streams Streams,
 // nor subject to [Limits.CommandTimeout]. The caller owns the process lifecycle.
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareSequence(ctx context.Context, seq CommandSequence, streams Streams, opts CommandOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareSequence(
+	ctx context.Context,
+	seq CommandSequence,
+	streams Streams,
+	opts CommandOptions,
+) (*exec.Cmd, error) {
 	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareSequence"); err != nil {
 		return nil, err
 	}
@@ -558,7 +620,12 @@ func (s *Server) PrepareForegroundServer(ctx context.Context) (*exec.Cmd, error)
 // honoring default-shell semantics and start policy without rewriting to a tmux command.
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) PrepareRootShell(ctx context.Context, shellCommand string, streams Streams, opts RootShellOptions) (*exec.Cmd, error) {
+func (s *Server) PrepareRootShell(
+	ctx context.Context,
+	shellCommand string,
+	streams Streams,
+	opts RootShellOptions,
+) (*exec.Cmd, error) {
 	if err := s.prepareSubprocessCheck(ctx, "Server.PrepareRootShell"); err != nil {
 		return nil, err
 	}
@@ -582,7 +649,11 @@ func (s *Server) PrepareRootShell(ctx context.Context, shellCommand string, stre
 // capturing standard output and standard error into a bounded [Result].
 //
 // Fails with [ErrTransportUnsupported] on control-bound servers and on the subprocess servers derived from them.
-func (s *Server) RunRootShell(ctx context.Context, shellCommand string, opts RootShellOptions) (Result, error) {
+func (s *Server) RunRootShell(
+	ctx context.Context,
+	shellCommand string,
+	opts RootShellOptions,
+) (Result, error) {
 	if err := s.prepareSubprocessCheck(ctx, "Server.RunRootShell"); err != nil {
 		return failedResult(), err
 	}

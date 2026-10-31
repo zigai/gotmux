@@ -10,7 +10,8 @@ import (
 	"github.com/zigai/gotmux/internal/wire"
 )
 
-// readBoundary separates request outputs; every request selects at least one field, so a zero-field record cannot be a row.
+// readBoundary separates request outputs; every request selects at least one field, so a zero-field record cannot be
+// a row.
 const readBoundary = "TGO1:0:"
 
 // ReadRequest selects the server-wide lists returned by [Server.Read]. Each present
@@ -38,7 +39,12 @@ type readRequest struct {
 	node   wireNode
 }
 
-func listRequest(kind ObjectKind, opts QueryOptions, target string, scope ...string) (readRequest, error) {
+func listRequest(
+	kind ObjectKind,
+	opts QueryOptions,
+	target string,
+	scope ...string,
+) (readRequest, error) {
 	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
 	if err != nil {
 		return readRequest{}, err
@@ -60,7 +66,13 @@ func recordQueryRequest(query RecordQuery) (readRequest, error) {
 	return listFields(query.Kind, fields, query.Filter, "")
 }
 
-func listFields(kind ObjectKind, fields []string, filter Format, target string, scope ...string) (readRequest, error) {
+func listFields(
+	kind ObjectKind,
+	fields []string,
+	filter Format,
+	target string,
+	scope ...string,
+) (readRequest, error) {
 	name, args, err := listCommandAndArgs(kind, target)
 	if err != nil {
 		return readRequest{}, err
@@ -107,7 +119,12 @@ func identityNode() wireNode {
 // readRecords runs requests as one tmux command list. A control connection verified its daemon
 // when it attached; otherwise the list starts with an identity probe answered by the
 // same daemon in the same round trip.
-func (s *Server) readRecords(ctx context.Context, label string, op *operation, requests []readRequest) (ServerInfo, [][]map[string]string, error) {
+func (s *Server) readRecords(
+	ctx context.Context,
+	label string,
+	op *operation,
+	requests []readRequest,
+) (ServerInfo, [][]map[string]string, error) {
 	probed := s.conn == nil
 
 	nodes := make([]wireNode, 0, 2*len(requests)+1)
@@ -166,7 +183,11 @@ func readError(label string, err error) error {
 	return afterError(label, err)
 }
 
-func (s *Server) decodeRead(data []byte, probed bool, requests []readRequest) (ServerInfo, [][]map[string]string, error) {
+func (s *Server) decodeRead(
+	data []byte,
+	probed bool,
+	requests []readRequest,
+) (ServerInfo, [][]map[string]string, error) {
 	reader := bytes.NewReader(data)
 
 	var info ServerInfo
@@ -176,7 +197,9 @@ func (s *Server) decodeRead(data []byte, probed bool, requests []readRequest) (S
 	} else {
 		values, err := wire.ReadRecordFields(reader, int64(reader.Len()))
 		if err != nil || len(values) != len(schema.Identity) {
-			return ServerInfo{}, nil, &discoveryError{Err: decodeError("server", "record", wire.ErrRecord)}
+			return ServerInfo{}, nil, &discoveryError{
+				Err: decodeError("server", "record", wire.ErrRecord),
+			}
 		}
 
 		info, err = s.serverInfo(recordMap(schema.Identity, values))
@@ -204,7 +227,11 @@ func (s *Server) decodeRead(data []byte, probed bool, requests []readRequest) (S
 		}
 
 		if len(values) != len(requests[current].fields) {
-			return ServerInfo{}, nil, decodeError(string(requests[current].kind), "record", wire.ErrRecord)
+			return ServerInfo{}, nil, decodeError(
+				string(requests[current].kind),
+				"record",
+				wire.ErrRecord,
+			)
 		}
 
 		out[current] = append(out[current], recordMap(requests[current].fields, values))
@@ -217,7 +244,7 @@ func (s *Server) decodeRead(data []byte, probed bool, requests []readRequest) (S
 	return info, out, nil
 }
 
-func recordMap(fields, values []string) map[string]string {
+func recordMap(fields []string, values []string) map[string]string {
 	m := make(map[string]string, len(fields))
 	for i, f := range fields {
 		m[f] = values[i]
@@ -227,7 +254,7 @@ func recordMap(fields, values []string) map[string]string {
 }
 
 func (s *Server) serverInfo(raw map[string]string) (ServerInfo, error) {
-	d := &recordDecoder{kind: "server", raw: raw, err: nil}
+	d := &recordDecoder{kind: "server", raw: raw}
 	id := s.decodeIdentity(d)
 
 	if s.bound != nil && s.bound.valid() && d.err == nil && !id.sameDaemon(*s.bound) {
@@ -274,7 +301,12 @@ func (s *Server) Read(ctx context.Context, request ReadRequest) (ReadResult, err
 	return out, opError(label, err)
 }
 
-func (s *Server) readLists(ctx context.Context, label string, op *operation, request ReadRequest) (ReadResult, error) {
+func (s *Server) readLists(
+	ctx context.Context,
+	label string,
+	op *operation,
+	request ReadRequest,
+) (ReadResult, error) {
 	requests, err := request.lists()
 	if err != nil {
 		return ReadResult{}, err
@@ -322,8 +354,20 @@ func (r ReadRequest) lists() ([]readRequest, error) {
 	return requests, nil
 }
 
-func (s *Server) decodeLists(label string, info ServerInfo, requests []readRequest, rows [][]map[string]string) (ReadResult, error) {
-	out := ReadResult{Server: info, Sessions: nil, Windows: nil, Links: nil, Panes: nil, Clients: nil}
+func (s *Server) decodeLists(
+	label string,
+	info ServerInfo,
+	requests []readRequest,
+	rows [][]map[string]string,
+) (ReadResult, error) {
+	out := ReadResult{
+		Server:   info,
+		Sessions: nil,
+		Windows:  nil,
+		Links:    nil,
+		Panes:    nil,
+		Clients:  nil,
+	}
 
 	var err error
 

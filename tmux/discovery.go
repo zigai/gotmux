@@ -12,7 +12,9 @@ import (
 	"syscall"
 )
 
-var discoveryCache = &socketVerdicts{mu: sync.Mutex{}, verdicts: map[string]socketVerdict{}}
+const defaultSocketBase = "/tmp"
+
+var discoveryCache = &socketVerdicts{verdicts: map[string]socketVerdict{}}
 
 type socketCandidate struct {
 	path string
@@ -26,6 +28,7 @@ type socketVerdict struct {
 }
 
 type socketVerdicts struct {
+	//exhaustruct:optional
 	mu       sync.Mutex
 	verdicts map[string]socketVerdict
 }
@@ -71,7 +74,11 @@ func DiscoverServers(baseCfg Config) ([]*Server, error) {
 
 		if err := dial(context.Background(), candidate.path); err != nil {
 			if errors.Is(err, syscall.ECONNREFUSED) {
-				verdicts[candidate.path] = socketVerdict{file: candidate.info, refused: true, verifiedBinary: ""}
+				verdicts[candidate.path] = socketVerdict{
+					file:           candidate.info,
+					refused:        true,
+					verifiedBinary: "",
+				}
 			}
 
 			continue
@@ -95,7 +102,11 @@ func DiscoverServers(baseCfg Config) ([]*Server, error) {
 		}
 
 		if _, err := server.Probe(context.Background()); err == nil {
-			verdicts[candidate.path] = socketVerdict{file: candidate.info, refused: false, verifiedBinary: server.runner.binary}
+			verdicts[candidate.path] = socketVerdict{
+				file:           candidate.info,
+				refused:        false,
+				verifiedBinary: server.runner.binary,
+			}
 			servers = append(servers, server)
 		}
 	}
@@ -112,7 +123,8 @@ func (c *socketVerdicts) lookup(candidate socketCandidate) (socketVerdict, bool)
 	verdict, ok := c.verdicts[candidate.path]
 	// tmpfs reuses inode numbers, so a new socket file can share the old
 	// identity; its bind time still differs.
-	if !ok || !os.SameFile(verdict.file, candidate.info) || !verdict.file.ModTime().Equal(candidate.info.ModTime()) {
+	if !ok || !os.SameFile(verdict.file, candidate.info) ||
+		!verdict.file.ModTime().Equal(candidate.info.ModTime()) {
 		return socketVerdict{file: nil, refused: false, verifiedBinary: ""}, false
 	}
 
@@ -148,7 +160,7 @@ func socketCandidates() ([]socketCandidate, error) {
 	uid := os.Getuid()
 	dirs := []string{
 		filepath.Join(os.TempDir(), "tmux-"+strconv.Itoa(uid)),
-		filepath.Join("/tmp", "tmux-"+strconv.Itoa(uid)),
+		filepath.Join(defaultSocketBase, "tmux-"+strconv.Itoa(uid)),
 	}
 
 	if tmpdir := os.Getenv("TMUX_TMPDIR"); tmpdir != "" {
@@ -179,7 +191,10 @@ func socketCandidates() ([]socketCandidate, error) {
 			}
 
 			if info.Mode()&os.ModeSocket != 0 {
-				sockets = append(sockets, socketCandidate{path: filepath.Join(dir, entry.Name()), info: info})
+				sockets = append(
+					sockets,
+					socketCandidate{path: filepath.Join(dir, entry.Name()), info: info},
+				)
 			}
 		}
 	}

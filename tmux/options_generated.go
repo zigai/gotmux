@@ -170,7 +170,7 @@ func (o PaneOptions) Get(ctx context.Context, name string) (OptionValue[string],
 }
 
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o PaneOptions) Set(ctx context.Context, name, value string) error {
+func (o PaneOptions) Set(ctx context.Context, name string, value string) error {
 	return o.target.set(ctx, "PaneOptions.Set", name, value, false)
 }
 
@@ -205,7 +205,7 @@ func (o PaneOptions) User(ctx context.Context, name string) (OptionValue[string]
 }
 
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o PaneOptions) SetUser(ctx context.Context, name, value string) error {
+func (o PaneOptions) SetUser(ctx context.Context, name string, value string) error {
 	return userSet(ctx, "PaneOptions.SetUser", o.target, name, value, false)
 }
 
@@ -406,7 +406,7 @@ func (o ServerOptions) Get(ctx context.Context, name string) (OptionValue[string
 }
 
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o ServerOptions) Set(ctx context.Context, name, value string) error {
+func (o ServerOptions) Set(ctx context.Context, name string, value string) error {
 	return o.target.set(ctx, "ServerOptions.Set", name, value, false)
 }
 
@@ -441,7 +441,7 @@ func (o ServerOptions) User(ctx context.Context, name string) (OptionValue[strin
 }
 
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o ServerOptions) SetUser(ctx context.Context, name, value string) error {
+func (o ServerOptions) SetUser(ctx context.Context, name string, value string) error {
 	return userSet(ctx, "ServerOptions.SetUser", o.target, name, value, false)
 }
 
@@ -645,7 +645,7 @@ func (o SessionOptions) Get(ctx context.Context, name string) (OptionValue[strin
 }
 
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o SessionOptions) Set(ctx context.Context, name, value string) error {
+func (o SessionOptions) Set(ctx context.Context, name string, value string) error {
 	return o.target.set(ctx, "SessionOptions.Set", name, value, false)
 }
 
@@ -680,7 +680,7 @@ func (o SessionOptions) User(ctx context.Context, name string) (OptionValue[stri
 }
 
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o SessionOptions) SetUser(ctx context.Context, name, value string) error {
+func (o SessionOptions) SetUser(ctx context.Context, name string, value string) error {
 	return userSet(ctx, "SessionOptions.SetUser", o.target, name, value, false)
 }
 
@@ -1092,7 +1092,7 @@ func (o WindowOptions) Get(ctx context.Context, name string) (OptionValue[string
 }
 
 // Set sets a scalar option by its tmux name. Tmux validates the value.
-func (o WindowOptions) Set(ctx context.Context, name, value string) error {
+func (o WindowOptions) Set(ctx context.Context, name string, value string) error {
 	return o.target.set(ctx, "WindowOptions.Set", name, value, false)
 }
 
@@ -1127,7 +1127,7 @@ func (o WindowOptions) User(ctx context.Context, name string) (OptionValue[strin
 }
 
 // SetUser sets the value of a user-defined option (prefixed with @) in this scope.
-func (o WindowOptions) SetUser(ctx context.Context, name, value string) error {
+func (o WindowOptions) SetUser(ctx context.Context, name string, value string) error {
 	return userSet(ctx, "WindowOptions.SetUser", o.target, name, value, false)
 }
 

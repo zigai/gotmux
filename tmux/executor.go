@@ -25,7 +25,10 @@ func (s *Server) beginCallerBounded(ctx context.Context) (context.Context, *oper
 	return s.beginWithin(ctx, false)
 }
 
-func (s *Server) beginWithin(ctx context.Context, commandTimeout bool) (context.Context, *operation, error) {
+func (s *Server) beginWithin(
+	ctx context.Context,
+	commandTimeout bool,
+) (context.Context, *operation, error) {
 	if s == nil || s.runner == nil {
 		return nil, nil, ErrInvalidHandle
 	}
@@ -64,7 +67,12 @@ func (s *Server) beginWithin(ctx context.Context, commandTimeout bool) (context.
 	}, nil
 }
 
-func (s *Server) executeProcess(ctx context.Context, op *operation, args []string, input []byte) (Result, error) {
+func (s *Server) executeProcess(
+	ctx context.Context,
+	op *operation,
+	args []string,
+	input []byte,
+) (Result, error) {
 	result, started, err := s.runner.run(ctx, args, input, max(op.output, 0), max(op.stderr, 0))
 	op.output -= int64(len(result.Stdout))
 	op.stderr -= int64(len(result.Stderr))
@@ -82,11 +90,25 @@ func (s *Server) executeProcess(ctx context.Context, op *operation, args []strin
 		effect = EffectUnknown
 	}
 
-	return result, &CommandError{Command: "process", Result: cloneResult(result), Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
+	return result, &CommandError{
+		Command: "process",
+		Result:  cloneResult(result),
+		Outcome: Outcome{Effect: effect, Steps: nil, Created: nil},
+		Timeout: contextSource(op.callerDone, err),
+		Err:     err,
+	}
 }
 
 func isNotFoundStderr(s string) bool {
-	for _, prefix := range []string{"can't find pane:", "can't find window:", "can't find session:", "can't find client:", "no such session:", "no such buffer:", "no buffer "} {
+	for _, prefix := range []string{
+		"can't find pane:",
+		"can't find window:",
+		"can't find session:",
+		"can't find client:",
+		"no such session:",
+		"no such buffer:",
+		"no buffer ",
+	} {
 		if strings.HasPrefix(s, prefix) {
 			return true
 		}
@@ -96,7 +118,8 @@ func isNotFoundStderr(s string) bool {
 }
 
 func isNoServerStderr(s string) bool {
-	return strings.HasPrefix(s, "error connecting to ") || strings.HasPrefix(s, "no server running on ")
+	return strings.HasPrefix(s, "error connecting to ") ||
+		strings.HasPrefix(s, "no server running on ")
 }
 
 func classifyStderr(data []byte) error {
@@ -126,12 +149,25 @@ func classifyStderr(data []byte) error {
 	return nil
 }
 
-func (s *Server) execute(ctx context.Context, op *operation, p plan, g *guard, input []byte) (Result, error) {
+func (s *Server) execute(
+	ctx context.Context,
+	op *operation,
+	p plan,
+	g *guard,
+	input []byte,
+) (Result, error) {
 	cmdName := planName(p)
 
 	failed := func(err error) (Result, error) {
 		r := failedResult()
-		return r, &CommandError{Command: cmdName, Result: r, Outcome: notSentOutcome(), Timeout: contextSource(op.callerDone, err), Err: err}
+
+		return r, &CommandError{
+			Command: cmdName,
+			Result:  r,
+			Outcome: notSentOutcome(),
+			Timeout: contextSource(op.callerDone, err),
+			Err:     err,
+		}
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -165,7 +201,13 @@ func (s *Server) execute(ctx context.Context, op *operation, p plan, g *guard, i
 	}
 
 	if err = ctx.Err(); err != nil {
-		return r, &CommandError{Command: cmdName, Result: cloneResult(r), Outcome: Outcome{Effect: EffectConfirmed, Steps: nil, Created: nil}, Timeout: contextSource(op.callerDone, err), Err: err}
+		return r, &CommandError{
+			Command: cmdName,
+			Result:  cloneResult(r),
+			Outcome: Outcome{Effect: EffectConfirmed, Steps: nil, Created: nil},
+			Timeout: contextSource(op.callerDone, err),
+			Err:     err,
+		}
 	}
 
 	return r, nil
@@ -215,7 +257,13 @@ func (s *Server) resolveGuard(p plan, g *guard) (*guard, plan) {
 	return g, p
 }
 
-func (s *Server) dispatchPlan(ctx context.Context, op *operation, p plan, n int64, input []byte) (Result, error) {
+func (s *Server) dispatchPlan(
+	ctx context.Context,
+	op *operation,
+	p plan,
+	n int64,
+	input []byte,
+) (Result, error) {
 	if s.conn != nil {
 		if input != nil {
 			return failedResult(), unsupportedControl("stdin over control", ErrTransportUnsupported)

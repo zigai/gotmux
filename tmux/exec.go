@@ -23,21 +23,30 @@ type runner struct {
 }
 
 type buffer struct {
-	mu         sync.Mutex
-	b          bytes.Buffer
-	limit      int64
-	overflow   func()
+	//exhaustruct:optional
+	mu sync.Mutex
+	//exhaustruct:optional
+	b        bytes.Buffer
+	limit    int64
+	overflow func()
+	//exhaustruct:optional
 	overflowed bool
 }
 
 type commandOutput struct {
+	//exhaustruct:optional
 	readers []*os.File
+	//exhaustruct:optional
 	writers []*os.File
+	//exhaustruct:optional
 	copying sync.WaitGroup
 }
 
 func newBuffer(limit int64, overflow func()) *buffer {
-	return &buffer{limit: limit, overflow: overflow, mu: sync.Mutex{}, b: bytes.Buffer{}, overflowed: false}
+	return &buffer{
+		limit:    limit,
+		overflow: overflow,
+	}
 }
 
 func (b *buffer) Write(p []byte) (int, error) {
@@ -84,10 +93,21 @@ func (b *buffer) Overflowed() bool {
 }
 
 func newRunner(binary string, env []string, dir string, concurrent int) *runner {
-	return &runner{binary: binary, env: append([]string{}, env...), dir: dir, slots: semaphore.NewWeighted(int64(concurrent))}
+	return &runner{
+		binary: binary,
+		env:    append([]string{}, env...),
+		dir:    dir,
+		slots:  semaphore.NewWeighted(int64(concurrent)),
+	}
 }
 
-func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, errMax int64) (Result, bool, error) {
+func (r *runner) run(
+	ctx context.Context,
+	args []string,
+	input []byte,
+	outMax int64,
+	errMax int64,
+) (Result, bool, error) {
 	result := Result{Stdout: nil, Stderr: nil, ExitCode: -1}
 	if e := r.slots.Acquire(ctx, 1); e != nil {
 		return result, false, e //nolint:wrapcheck // semaphore error is propagated directly
@@ -143,8 +163,8 @@ func (r *runner) run(ctx context.Context, args []string, input []byte, outMax, e
 	return result, started, e
 }
 
-func openOutput(cmd *exec.Cmd, stdout, stderr io.Writer) (*commandOutput, error) {
-	output := &commandOutput{readers: nil, writers: nil, copying: sync.WaitGroup{}}
+func openOutput(cmd *exec.Cmd, stdout io.Writer, stderr io.Writer) (*commandOutput, error) {
+	output := &commandOutput{}
 
 	for _, sink := range []io.Writer{stdout, stderr} {
 		reader, writer, e := os.Pipe()

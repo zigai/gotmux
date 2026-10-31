@@ -24,6 +24,8 @@ type (
 	PaneBorderLines string
 
 	// NewSessionOptions configures the creation of a new tmux session.
+	//
+	//exhaustruct:optional
 	NewSessionOptions struct {
 		// Name is the session name (cannot contain colons or periods). Empty defaults to automatic naming.
 		Name string
@@ -62,6 +64,8 @@ type (
 	}
 
 	// NewWindowOptions configures the creation of a new window inside an existing session.
+	//
+	//exhaustruct:optional
 	NewWindowOptions struct {
 		// Name is the window name (#{window_name}).
 		// Backslashes, control bytes, and invalid UTF-8 are rejected.
@@ -97,6 +101,8 @@ type (
 	}
 
 	// SplitOptions configures splitting an existing pane into two panes.
+	//
+	//exhaustruct:optional
 	SplitOptions struct {
 		// Direction specifies vertical (top/bottom) or horizontal (side-by-side) split.
 		Direction Direction
@@ -153,6 +159,8 @@ type (
 	}
 
 	// NewPaneOptions configures creating a new (potentially floating or modal) pane via tmux new-pane.
+	//
+	//exhaustruct:optional
 	NewPaneOptions struct {
 		// Width specifies the pane width in character cells or percentage (e.g. "50%" or "40").
 		Width string
@@ -268,7 +276,10 @@ func (s *Server) NewSession(ctx context.Context, opts NewSessionOptions) (Sessio
 
 	r, err := s.execute(opCtx, op, p, sg.guard, nil)
 	if string(r.Stdout) == unsupportedStartupVersion {
-		return Session{}, opError("Server.NewSession", unsupported("answering tmux version requires recognized stable 3.6+"))
+		return Session{}, opError(
+			"Server.NewSession",
+			unsupported("answering tmux version requires recognized stable 3.6+"),
+		)
 	}
 
 	if err != nil {
@@ -287,7 +298,14 @@ func (s *Server) NewSession(ctx context.Context, opts NewSessionOptions) (Sessio
 	return sess, nil
 }
 
-func (s *Server) exactGroupArgs(ctx context.Context, label string, op *operation, sg startGuard, args []string, name string) ([]string, error) {
+func (s *Server) exactGroupArgs(
+	ctx context.Context,
+	label string,
+	op *operation,
+	sg startGuard,
+	args []string,
+	name string,
+) ([]string, error) {
 	if name == "" {
 		return args, nil
 	}
@@ -311,8 +329,14 @@ func (s *Server) exactGroupArgs(ctx context.Context, label string, op *operation
 	return args, nil
 }
 
-func (s *Server) exactGroupTarget(ctx context.Context, label string, op *operation, id ServerIdentity, name string) (string, error) {
-	sessions, err := s.sessions(ctx, label, op, id, QueryOptions{Filter: "", ExtraFields: nil})
+func (s *Server) exactGroupTarget(
+	ctx context.Context,
+	label string,
+	op *operation,
+	id ServerIdentity,
+	name string,
+) (string, error) {
+	sessions, err := s.sessions(ctx, label, op, id, QueryOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -356,7 +380,13 @@ func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLi
 		return WindowLink{}, opError("Session.NewWindow", err)
 	}
 
-	r, err := s.h.server.execute(opCtx, op, recordsPlan(command("new-window", args...)), s.h.guard(), nil)
+	r, err := s.h.server.execute(
+		opCtx,
+		op,
+		recordsPlan(command("new-window", args...)),
+		s.h.guard(),
+		nil,
+	)
 	if err != nil {
 		return WindowLink{}, creationError("NewWindow", err, r.Stdout, ObjectKindWindow)
 	}
@@ -367,12 +397,20 @@ func (s Session) NewWindow(ctx context.Context, opts NewWindowOptions) (WindowLi
 			err = decodeError("window", "record count", wire.ErrRecord)
 		}
 
-		return WindowLink{}, afterError("Session.NewWindow", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
+		return WindowLink{}, afterError(
+			"Session.NewWindow",
+			err,
+			recoverCreated(r.Stdout, ObjectKindWindow)...,
+		)
 	}
 
 	_, link, err := s.h.server.decodeWindow(rows[0], s.h.expectedOrigin())
 	if err != nil {
-		return WindowLink{}, afterError("Session.NewWindow", err, recoverCreated(r.Stdout, ObjectKindWindow)...)
+		return WindowLink{}, afterError(
+			"Session.NewWindow",
+			err,
+			recoverCreated(r.Stdout, ObjectKindWindow)...,
+		)
 	}
 
 	if err = opCtx.Err(); err != nil {
@@ -434,7 +472,13 @@ func (p Pane) Split(ctx context.Context, opts SplitOptions) (Pane, error) {
 	return v.Handle(), nil
 }
 
-func createNewPane(ctx context.Context, h handle, opName string, targetID string, opts NewPaneOptions) (Pane, error) {
+func createNewPane(
+	ctx context.Context,
+	h handle,
+	opName string,
+	targetID string,
+	opts NewPaneOptions,
+) (Pane, error) {
 	if err := h.check(); err != nil {
 		return Pane{}, opError(opName, err)
 	}
@@ -490,7 +534,9 @@ func creationError(name string, err error, data []byte, kind ObjectKind) error {
 	outcome := outcomeOf(err)
 
 	outcome.Created = append(outcome.Created, recoverCreated(data, kind)...)
-	if name == "NewSession" && errors.Is(err, ErrAlreadyExists) && len(data) == 0 && len(outcome.Created) == 0 && rejectionComplete(err) {
+	if name == "NewSession" && errors.Is(err, ErrAlreadyExists) && len(data) == 0 &&
+		len(outcome.Created) == 0 &&
+		rejectionComplete(err) {
 		outcome.Effect = EffectRejected
 	}
 
@@ -536,7 +582,7 @@ func newSessionArgs(opts NewSessionOptions) ([]string, error) {
 	}
 
 	if opts.Group != "" {
-		if err = sessionName(opts.Group, false); err != nil {
+		if err := sessionName(opts.Group, false); err != nil {
 			return nil, err
 		}
 
@@ -583,13 +629,25 @@ func newSessionPlan(args []string, sg startGuard) plan {
 
 	p.allowStart = sg.allowStart
 	if p.allowStart {
-		p.nodes = []wireNode{leaf(command("start-server")), conditionNode(startupVersionCondition(), p.nodes, []wireNode{markerNode(unsupportedStartupVersion)}, "")}
+		p.nodes = []wireNode{
+			leaf(command("start-server")),
+			conditionNode(
+				startupVersionCondition(),
+				p.nodes,
+				[]wireNode{markerNode(unsupportedStartupVersion)},
+				"",
+			),
+		}
 	}
 
 	return p
 }
 
-func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start StartPolicy) (startGuard, error) {
+func (s *Server) resolveStartGuard(
+	ctx context.Context,
+	op *operation,
+	start StartPolicy,
+) (startGuard, error) {
 	info, err := s.verifiedInfo(ctx, op)
 	switch {
 	case err == nil:
@@ -600,7 +658,7 @@ func (s *Server) resolveStartGuard(ctx context.Context, op *operation, start Sta
 			return startGuard{guard: nil, allowStart: false}, verErr
 		}
 
-		if verErr = supportedVersion(v); verErr != nil {
+		if verErr := supportedVersion(v); verErr != nil {
 			return startGuard{guard: nil, allowStart: false}, verErr
 		}
 
@@ -829,7 +887,13 @@ func tmuxEnvArgs(env map[string]string) ([]string, error) {
 }
 
 func createdFromHandle(h handle) CreatedObject {
-	return CreatedObject{Kind: h.kind, RawID: h.id, Identity: PresentValue(h.origin), SessionID: UnavailableValue[SessionID](), WindowIndex: UnavailableValue[int]()}
+	return CreatedObject{
+		Kind:        h.kind,
+		RawID:       h.id,
+		Identity:    PresentValue(h.origin),
+		SessionID:   UnavailableValue[SessionID](),
+		WindowIndex: UnavailableValue[int](),
+	}
 }
 
 func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
@@ -856,7 +920,15 @@ func recoverCreated(data []byte, kind ObjectKind) []CreatedObject {
 	fields := fieldsFor(kind)
 	for i, f := range fields {
 		if f == field {
-			return []CreatedObject{{Kind: kind, RawID: rows[0][i], Identity: UnavailableValue[ServerIdentity](), SessionID: UnavailableValue[SessionID](), WindowIndex: UnavailableValue[int]()}}
+			return []CreatedObject{
+				{
+					Kind:        kind,
+					RawID:       rows[0][i],
+					Identity:    UnavailableValue[ServerIdentity](),
+					SessionID:   UnavailableValue[SessionID](),
+					WindowIndex: UnavailableValue[int](),
+				},
+			}
 		}
 	}
 

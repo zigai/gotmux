@@ -17,7 +17,13 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-func attachOn(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, slave *os.File) (tmux.Client, chan error) {
+func attachOn(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+	slave *os.File,
+) (tmux.Client, chan error) {
 	t.Helper()
 
 	var options tmux.AttachOptions
@@ -25,7 +31,14 @@ func attachOn(t *testing.T, ctx context.Context, server *tmux.Server, session tm
 	return attachWith(t, ctx, server, session, slave, options)
 }
 
-func attachWith(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, slave *os.File, options tmux.AttachOptions) (tmux.Client, chan error) {
+func attachWith(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+	slave *os.File,
+	options tmux.AttachOptions,
+) (tmux.Client, chan error) {
 	t.Helper()
 
 	client, _, done := attachCancelable(t, ctx, server, session, slave, options)
@@ -33,7 +46,14 @@ func attachWith(t *testing.T, ctx context.Context, server *tmux.Server, session 
 	return client, done
 }
 
-func attachCancelable(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, slave *os.File, options tmux.AttachOptions) (tmux.Client, context.CancelFunc, chan error) {
+func attachCancelable(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+	slave *os.File,
+	options tmux.AttachOptions,
+) (tmux.Client, context.CancelFunc, chan error) {
 	t.Helper()
 
 	attachCtx, cancel := context.WithCancel(ctx)
@@ -131,7 +151,10 @@ func TestIntegrationClientHandleRefusesReattachedTerminal(t *testing.T) {
 func TestIntegrationSwitchAndDetachActOnOneClient(t *testing.T) {
 	server, first, ctx := apiFixture(t)
 
-	second, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "second", Program: tmux.Shell("sleep 60")})
+	second, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "second", Program: tmux.Shell("sleep 60")},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -269,7 +292,15 @@ func TestIntegrationMenuAndPopupReturnOnCancellation(t *testing.T) {
 	t.Run("Menu", func(t *testing.T) {
 		client, _, output := uiClient(t, ctx, server, session)
 		command := testCommand(t, "set-option", "-t", string(session.ID()), "@cancel-effect", "ran")
-		items := []tmux.MenuItem{{Label: "TGO_CANCEL_MENU", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
+		items := []tmux.MenuItem{
+			{
+				Label:       "TGO_CANCEL_MENU",
+				Key:         "x",
+				Commands:    testSequence(t, command),
+				IsSeparator: false,
+				Disabled:    false,
+			},
+		}
 
 		menuCtx, cancel := context.WithCancel(ctx)
 		result := make(chan error, 1)
@@ -279,7 +310,12 @@ func TestIntegrationMenuAndPopupReturnOnCancellation(t *testing.T) {
 			result <- client.Menu(menuCtx, items, options)
 		}()
 
-		awaitObservation(t, ctx, "menu rendered", func() bool { return output.contains("TGO_CANCEL_MENU") })
+		awaitObservation(
+			t,
+			ctx,
+			"menu rendered",
+			func() bool { return output.contains("TGO_CANCEL_MENU") },
+		)
 
 		if info.Version.AtLeast(3, 8) {
 			// From tmux 3.8, display-menu returns once the menu is shown.
@@ -297,7 +333,15 @@ func TestIntegrationMenuAndPopupReturnOnCancellation(t *testing.T) {
 
 			cancel()
 
-			if err := receiveResult(t, ctx, result, "canceled Menu"); !errors.Is(err, context.Canceled) {
+			if err := receiveResult(
+				t,
+				ctx,
+				result,
+				"canceled Menu",
+			); !errors.Is(
+				err,
+				context.Canceled,
+			) {
 				t.Fatalf("canceled Menu returned %v, want context.Canceled", err)
 			}
 		}
@@ -328,7 +372,15 @@ func TestIntegrationMenuAndPopupReturnOnCancellation(t *testing.T) {
 		awaitFile(t, ctx, ready)
 		cancel()
 
-		if err := receiveResult(t, ctx, result, "canceled Popup"); !errors.Is(err, context.Canceled) {
+		if err := receiveResult(
+			t,
+			ctx,
+			result,
+			"canceled Popup",
+		); !errors.Is(
+			err,
+			context.Canceled,
+		) {
 			t.Fatalf("canceled Popup returned %v, want context.Canceled", err)
 		}
 
@@ -373,7 +425,10 @@ func TestIntegrationClientMessageStaysLiteral(t *testing.T) {
 
 		logged = lines
 
-		return slices.ContainsFunc(lines, func(line string) bool { return strings.HasSuffix(line, text) })
+		return slices.ContainsFunc(
+			lines,
+			func(line string) bool { return strings.HasSuffix(line, text) },
+		)
 	})
 
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
@@ -392,7 +447,8 @@ func TestIntegrationControlCreationHandshakeFailureHasUnknownEffect(t *testing.T
 	}
 
 	operationErr, ok := errors.AsType[*tmux.OperationError](err)
-	if !ok || operationErr.Outcome.Effect != tmux.EffectUnknown || !errors.Is(err, tmux.ErrProtocol) {
+	if !ok || operationErr.Outcome.Effect != tmux.EffectUnknown ||
+		!errors.Is(err, tmux.ErrProtocol) {
 		t.Fatalf("startup failure: %v, outcome %#v", err, operationErr)
 	}
 
@@ -424,22 +480,46 @@ func TestIntegrationRefreshRejectsForeignHandles(t *testing.T) {
 		name string
 		run  func() error
 	}{
-		{"client window size", func() error { return client.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) }},
-		{"connection window size", func() error { return connection.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) }},
+		{
+			"client window size",
+			func() error { return client.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) },
+		},
+		{
+			"connection window size",
+			func() error { return connection.SetWindowSize(ctx, foreignWindow, tmux.Size{Width: 80, Height: 24}) },
+		},
 		{"client window clear", func() error { return client.ClearWindowSize(ctx, foreignWindow) }},
-		{"connection window clear", func() error { return connection.ClearWindowSize(ctx, foreignWindow) }},
+		{
+			"connection window clear",
+			func() error { return connection.ClearWindowSize(ctx, foreignWindow) },
+		},
 		{"client pane refresh", func() error {
-			return client.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: foreignBound, Action: tmux.PaneOutputOff}}})
+			return client.Refresh(
+				ctx,
+				tmux.RefreshOptions{
+					PaneActions: []tmux.PaneOutputSetting{
+						{Pane: foreignBound, Action: tmux.PaneOutputOff},
+					},
+				},
+			)
 		}},
 		{"connection pane refresh", func() error {
-			return connection.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: foreignBound, Action: tmux.PaneOutputOff}}})
+			return connection.Refresh(
+				ctx,
+				tmux.RefreshOptions{
+					PaneActions: []tmux.PaneOutputSetting{
+						{Pane: foreignBound, Action: tmux.PaneOutputOff},
+					},
+				},
+			)
 		}},
 	}
 	for _, call := range calls {
 		err := call.run()
 
 		operationErr, ok := errors.AsType[*tmux.OperationError](err)
-		if !errors.Is(err, tmux.ErrInvalidHandle) || !ok || operationErr.Outcome.Effect != tmux.EffectNotSent {
+		if !errors.Is(err, tmux.ErrInvalidHandle) || !ok ||
+			operationErr.Outcome.Effect != tmux.EffectNotSent {
 			t.Errorf("%s: %v, want invalid handle/not sent", call.name, err)
 		}
 	}
@@ -473,7 +553,10 @@ func TestIntegrationConnectionClientIsItsOwn(t *testing.T) {
 	})
 
 	if !slices.Contains(clientNames(t, ctx, server), secondClient.Name()) {
-		t.Fatalf("closing the first connection removed the second connection's client %q", secondClient.Name())
+		t.Fatalf(
+			"closing the first connection removed the second connection's client %q",
+			secondClient.Name(),
+		)
 	}
 }
 
@@ -518,13 +601,18 @@ func TestIntegrationMenuAndPopupOutliveCommandTimeout(t *testing.T) {
 	const commandTimeout = 200 * time.Millisecond
 
 	short, err := tmux.New(tmux.Config{
-		Binary:           os.Getenv("TMUX_TEST_BINARY"),
-		SocketPath:       server.Endpoint().SocketPath,
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              nil,
-		Dir:              "",
-		Limits:           tmux.Limits{CommandTimeout: commandTimeout, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		Binary:     os.Getenv("TMUX_TEST_BINARY"),
+		SocketPath: server.Endpoint().SocketPath,
+		SocketName: "",
+		ConfigFile: "",
+		Env:        nil,
+		Dir:        "",
+		Limits: tmux.Limits{
+			CommandTimeout: commandTimeout,
+			OutputBytes:    0,
+			InputBytes:     0,
+			Concurrent:     0,
+		},
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
@@ -570,8 +658,23 @@ func TestIntegrationMenuAndPopupOutliveCommandTimeout(t *testing.T) {
 	})
 
 	t.Run("Menu", func(t *testing.T) {
-		command := testCommand(t, "set-option", "-t", string(session.ID()), "@late-choice", "chosen")
-		items := []tmux.MenuItem{{Label: "TGO_LATE_MENU", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
+		command := testCommand(
+			t,
+			"set-option",
+			"-t",
+			string(session.ID()),
+			"@late-choice",
+			"chosen",
+		)
+		items := []tmux.MenuItem{
+			{
+				Label:       "TGO_LATE_MENU",
+				Key:         "x",
+				Commands:    testSequence(t, command),
+				IsSeparator: false,
+				Disabled:    false,
+			},
+		}
 		result := make(chan error, 1)
 
 		go func() {
@@ -579,7 +682,12 @@ func TestIntegrationMenuAndPopupOutliveCommandTimeout(t *testing.T) {
 			result <- client.Menu(ctx, items, options)
 		}()
 
-		awaitObservation(t, ctx, "menu rendered", func() bool { return output.contains("TGO_LATE_MENU") })
+		awaitObservation(
+			t,
+			ctx,
+			"menu rendered",
+			func() bool { return output.contains("TGO_LATE_MENU") },
+		)
 		time.Sleep(3 * commandTimeout)
 
 		if _, err := terminal.WriteString("x"); err != nil {

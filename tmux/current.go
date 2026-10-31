@@ -108,7 +108,14 @@ func ParseTmuxVars(vars TmuxVars) (TmuxVarsInfo, error) {
 	if vars.TMUXPane != "" {
 		id := PaneID(vars.TMUXPane)
 		if !id.Valid() {
-			return TmuxVarsInfo{SocketPath: "", PID: 0, SessionID: "", PaneID: UnavailableValue[PaneID]()}, invalid("TMUX_PANE")
+			return TmuxVarsInfo{
+				SocketPath: "",
+				PID:        0,
+				SessionID:  "",
+				PaneID:     UnavailableValue[PaneID](),
+			}, invalid(
+				"TMUX_PANE",
+			)
 		}
 
 		paneID = PresentValue(id)
@@ -134,7 +141,7 @@ func CurrentFrom(ctx context.Context, vars TmuxVars) (CurrentInfo, error) {
 		return CurrentInfo{}, opError("CurrentFrom", err)
 	}
 
-	s, err := New(Config{Binary: "", SocketPath: hints.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "", Limits: Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false})
+	s, err := New(Config{SocketPath: hints.SocketPath})
 	if err != nil {
 		return CurrentInfo{}, opError("CurrentFrom", err)
 	}
@@ -196,7 +203,7 @@ func isNumeric(s string) bool {
 	return true
 }
 
-func parseTmux3Part(raw string, start, end int) (string, int, SessionID, bool, error) {
+func parseTmux3Part(raw string, start int, end int) (string, int, SessionID, bool, error) {
 	if !isNumeric(raw[start+1 : end]) {
 		return "", 0, "", false, nil
 	}
@@ -217,7 +224,7 @@ func parseTmux3Part(raw string, start, end int) (string, int, SessionID, bool, e
 	return sock, p, s, true, nil
 }
 
-func parseTmux2Part(raw string, start, end int) (string, int, error) {
+func parseTmux2Part(raw string, start int, end int) (string, int, error) {
 	pStr := raw[end+1:]
 	parsedPID, err := strconv.ParseInt(pStr, 10, 32)
 	p := int(parsedPID)

@@ -94,7 +94,13 @@ func TestIntegrationAPISequences(t *testing.T) {
 func TestIntegrationAPIQueries(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	windows, err := server.WindowsWith(ctx, tmux.QueryOptions{Filter: tmux.Format("#{==:#{session_id}," + string(session.ID()) + "}"), ExtraFields: []string{"window_activity"}})
+	windows, err := server.WindowsWith(
+		ctx,
+		tmux.QueryOptions{
+			Filter:      tmux.Format("#{==:#{session_id}," + string(session.ID()) + "}"),
+			ExtraFields: []string{"window_activity"},
+		},
+	)
 	if err != nil || len(windows) != 1 {
 		t.Fatalf("windows: %+v, %v", windows, err)
 	}
@@ -135,7 +141,13 @@ func stackedPaneFixture(t *testing.T) (*tmux.Server, tmux.Session, tmux.Pane, co
 		t.Fatal(err)
 	}
 
-	command, err := tmux.NewCommand("display-message", "-p", "-t", string(pane.ID()), "#{pane_in_mode}")
+	command, err := tmux.NewCommand(
+		"display-message",
+		"-p",
+		"-t",
+		string(pane.ID()),
+		"#{pane_in_mode}",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +195,10 @@ func TestIntegrationReadWithStackedPaneModes(t *testing.T) {
 		t.Fatalf("read panes = %+v, %v", read.Panes, err)
 	}
 
-	current, err := server.CurrentFrom(ctx, currentVars(session.ServerIdentity(), session.ID(), pane.ID()))
+	current, err := server.CurrentFrom(
+		ctx,
+		currentVars(session.ServerIdentity(), session.ID(), pane.ID()),
+	)
 	if err != nil || current.Pane.ID != pane.ID() {
 		t.Fatalf("current pane = %s, %v", current.Pane.ID, err)
 	}
@@ -304,7 +319,11 @@ func TestIntegrationAPIPaneNavigationAndCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := pane.CopyAction(ctx, tmux.CopyAction("search-forward"), "literal ; #{pane_id}"); err != nil {
+	if err := pane.CopyAction(
+		ctx,
+		tmux.CopyAction("search-forward"),
+		"literal ; #{pane_id}",
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -347,7 +366,11 @@ func TestIntegrationAPIAutomaticSlots(t *testing.T) {
 	}
 
 	options.Replace = true
-	if _, err := links[0].Window().Link(ctx, destination, options); !errors.Is(err, tmux.ErrInvalidArgument) {
+	if _, err := links[0].Window().
+		Link(ctx, destination, options); !errors.Is(
+		err,
+		tmux.ErrInvalidArgument,
+	) {
 		t.Fatalf("implicit replacement: %v", err)
 	}
 }
@@ -362,11 +385,18 @@ func TestIntegrationAPIControlSupport(t *testing.T) {
 	}
 
 	capabilities, err := bound.Capabilities(ctx)
-	if err != nil || !capabilities.HasCommand("list-windows") || capabilities.HasCommand("nonexistent-command") {
+	if err != nil || !capabilities.HasCommand("list-windows") ||
+		capabilities.HasCommand("nonexistent-command") {
 		t.Fatalf("capabilities: %+v, %v", capabilities, err)
 	}
 
-	clients, err := bound.ClientsWith(ctx, tmux.QueryOptions{Filter: "#{client_control_mode}", ExtraFields: []string{"client_termname"}})
+	clients, err := bound.ClientsWith(
+		ctx,
+		tmux.QueryOptions{
+			Filter:      "#{client_control_mode}",
+			ExtraFields: []string{"client_termname"},
+		},
+	)
 	if err != nil || len(clients) != 1 {
 		t.Fatalf("clients: %+v, %v", clients, err)
 	}
@@ -484,12 +514,25 @@ func TestIntegrationAPIAutomaticSlotConflict(t *testing.T) {
 func installSlotConflict(t *testing.T, ctx context.Context, destination tmux.Session) {
 	t.Helper()
 	// Claim the chosen slot after its discovery snapshot but before the mutation.
-	remove, err := tmux.NewCommand("set-hook", "-u", "-t", string(destination.ID()), "after-list-windows[0]")
+	remove, err := tmux.NewCommand(
+		"set-hook",
+		"-u",
+		"-t",
+		string(destination.ID()),
+		"after-list-windows[0]",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	claim, err := tmux.NewCommand("new-window", "-d", "-t", string(destination.ID())+":5", "-n", "conflict")
+	claim, err := tmux.NewCommand(
+		"new-window",
+		"-d",
+		"-t",
+		string(destination.ID())+":5",
+		"-n",
+		"conflict",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -521,7 +564,11 @@ func TestIntegrationWindowInfosAndLinkNames(t *testing.T) {
 	}
 
 	if links[0].WindowName != windows[0].Name {
-		t.Fatalf("expected WindowName %q to match window.Name %q", links[0].WindowName, windows[0].Name)
+		t.Fatalf(
+			"expected WindowName %q to match window.Name %q",
+			links[0].WindowName,
+			windows[0].Name,
+		)
 	}
 }
 
@@ -624,7 +671,8 @@ func TestIntegrationQueryRecords(t *testing.T) {
 				t.Fatalf("selected values = %+v, want %+v", records.Rows[0], want)
 			}
 
-			if records.Identity.ReportedSocket != server.Endpoint().SocketPath || !records.Version.AtLeast(3, 6) {
+			if records.Identity.ReportedSocket != server.Endpoint().SocketPath ||
+				!records.Version.AtLeast(3, 6) {
 				t.Fatalf("identity/version = %+v, %+v", records.Identity, records.Version)
 			}
 
@@ -741,7 +789,11 @@ func TestIntegrationCaptureWithTitle(t *testing.T) {
 	}
 
 	if string(res.Output) != string(plain) {
-		t.Fatalf("expected capture output %q to match plain capture %q", string(res.Output), string(plain))
+		t.Fatalf(
+			"expected capture output %q to match plain capture %q",
+			string(res.Output),
+			string(plain),
+		)
 	}
 }
 
@@ -784,7 +836,10 @@ func TestEnvironmentOperationNames(t *testing.T) {
 	var opErr *tmux.OperationError
 	if errors.As(err, &opErr) {
 		if opErr.Operation != "EnvironmentScope.Unset" {
-			t.Errorf("expected opErr.Operation to be 'EnvironmentScope.Unset', got %q", opErr.Operation)
+			t.Errorf(
+				"expected opErr.Operation to be 'EnvironmentScope.Unset', got %q",
+				opErr.Operation,
+			)
 		}
 	} else {
 		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
@@ -797,7 +852,10 @@ func TestEnvironmentOperationNames(t *testing.T) {
 
 	if errors.As(err, &opErr) {
 		if opErr.Operation != "EnvironmentScope.Remove" {
-			t.Errorf("expected opErr.Operation to be 'EnvironmentScope.Remove', got %q", opErr.Operation)
+			t.Errorf(
+				"expected opErr.Operation to be 'EnvironmentScope.Remove', got %q",
+				opErr.Operation,
+			)
 		}
 	} else {
 		t.Fatalf("expected *tmux.OperationError, got %T: %v", err, err)
@@ -818,7 +876,9 @@ func TestMissingObjectEffect(t *testing.T) {
 
 	if opErr, ok := errors.AsType[*tmux.OperationError](err); ok {
 		if opErr.Outcome.Effect == tmux.EffectConfirmed {
-			t.Errorf("read-only missing session lookup reported EffectConfirmed; it must not be EffectConfirmed.")
+			t.Errorf(
+				"read-only missing session lookup reported EffectConfirmed; it must not be EffectConfirmed.",
+			)
 		}
 	}
 }
@@ -833,7 +893,9 @@ func TestDuplicateSessionCreationReportsRejection(t *testing.T) {
 	_, err := server.NewSession(ctx, opts)
 
 	opErr, ok := errors.AsType[*tmux.OperationError](err)
-	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) || opErr.Outcome.Effect != tmux.EffectRejected || len(opErr.Outcome.Created) != 0 {
+	if !ok || !errors.Is(err, tmux.ErrAlreadyExists) ||
+		opErr.Outcome.Effect != tmux.EffectRejected ||
+		len(opErr.Outcome.Created) != 0 {
 		t.Fatalf("duplicate session = %#v, %v", opErr, err)
 	}
 
@@ -868,7 +930,10 @@ func TestCaptureIncludeEscapesRetainsHyperlinks(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
 	pane := firstPane(t, ctx, server)
-	if err := pane.Submit(ctx, `printf '\033]8;;https://example.invalid\033\\LINK\033]8;;\033\\\n'`); err != nil {
+	if err := pane.Submit(
+		ctx,
+		`printf '\033]8;;https://example.invalid\033\\LINK\033]8;;\033\\\n'`,
+	); err != nil {
 		t.Fatal(err)
 	}
 

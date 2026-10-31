@@ -23,7 +23,16 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = menuItemArg(MenuItem{Label: "", Key: "a", Commands: seq, Command: "", IsSeparator: false, Disabled: false})
+	_, err = menuItemArg(
+		MenuItem{
+			Label:       "",
+			Key:         "a",
+			Commands:    seq,
+			Command:     "",
+			IsSeparator: false,
+			Disabled:    false,
+		},
+	)
 	if err == nil {
 		t.Fatal("expected error on MenuItem with empty Label and Separator=false")
 	}
@@ -32,7 +41,16 @@ func TestMenuItemEmptyLabel(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument, got %v", err)
 	}
 
-	args, err := menuItemArg(MenuItem{Label: "", IsSeparator: true, Key: Key(""), Commands: CommandSequence{commands: nil}, Command: "", Disabled: false})
+	args, err := menuItemArg(
+		MenuItem{
+			Label:       "",
+			IsSeparator: true,
+			Key:         Key(""),
+			Commands:    CommandSequence{commands: nil},
+			Command:     "",
+			Disabled:    false,
+		},
+	)
 	if err != nil {
 		t.Fatalf("expected Separator=true to succeed, got %v", err)
 	}
@@ -93,7 +111,9 @@ func TestMenuItemKeylessAndSectionHeader(t *testing.T) {
 		t.Fatalf("expected section header MenuItem to succeed, got %v", err)
 	}
 
-	if len(headerArgs) != 3 || headerArgs[0].text != "-Section Header" || headerArgs[1].text != "" || headerArgs[2].text != "" {
+	if len(headerArgs) != 3 || headerArgs[0].text != "-Section Header" ||
+		headerArgs[1].text != "" ||
+		headerArgs[2].text != "" {
 		t.Fatalf("unexpected section header wireArgs: %+v", headerArgs)
 	}
 }
@@ -449,7 +469,6 @@ func TestPaneOutputActionValidation(t *testing.T) {
 }
 
 func TestSubscriptionTargetWildcards(t *testing.T) {
-	//nolint:exhaustruct_v5 // mock Connection for wildcard target validation
 	c := &Connection{}
 
 	pSpec, g, err := TargetAllPanes().subscriptionTarget(c)
@@ -470,54 +489,68 @@ func TestSubscriptionTargetWildcards(t *testing.T) {
 
 func TestClientRefreshValidation(t *testing.T) {
 	s := localServer(t)
-	//nolint:exhaustruct_v5 // test client handle
 	c := Client{h: handle{id: "/dev/pts/1", server: s}}
 	ctx := t.Context()
 
-	//nolint:exhaustruct_v5 // testing partial Size
 	err := c.Refresh(ctx, RefreshOptions{Size: Size{Width: 10, Height: 0}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for incomplete Size, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing partial WindowSizes
-	err = c.Refresh(ctx, RefreshOptions{WindowSizes: []WindowSizeOverride{{Window: "@1", Size: Size{Width: 10, Height: 0}}}})
+	err = c.Refresh(
+		ctx,
+		RefreshOptions{
+			WindowSizes: []WindowSizeOverride{{Window: "@1", Size: Size{Width: 10, Height: 0}}},
+		},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for incomplete WindowSize, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing invalid WindowID
-	err = c.Refresh(ctx, RefreshOptions{WindowSizes: []WindowSizeOverride{{Window: "invalid", Size: Size{Width: 80, Height: 24}}}})
+	err = c.Refresh(
+		ctx,
+		RefreshOptions{
+			WindowSizes: []WindowSizeOverride{
+				{Window: "invalid", Size: Size{Width: 80, Height: 24}},
+			},
+		},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid WindowID, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing invalid ScrollDirection
-	err = c.Refresh(ctx, RefreshOptions{Scroll: ScrollAdjustment{Direction: ScrollDirection(99), Amount: 0}})
+	err = c.Refresh(
+		ctx,
+		RefreshOptions{Scroll: ScrollAdjustment{Direction: ScrollDirection(99), Amount: 0}},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ScrollDirection, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing invalid ClipboardPane
 	err = c.Refresh(ctx, RefreshOptions{Clipboard: true, ClipboardPane: "invalid"})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ClipboardPane, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing invalid ClientFlag
 	err = c.Refresh(ctx, RefreshOptions{Flags: []ClientFlag{"invalid"}})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid ClientFlag, got %v", err)
 	}
 
 	pane, _ := s.PaneHandle("%1")
-	//nolint:exhaustruct_v5 // testing invalid PaneAction
-	err = c.Refresh(ctx, RefreshOptions{PaneActions: []PaneOutputSetting{{Pane: pane, Action: "invalid"}}})
+
+	err = c.Refresh(
+		ctx,
+		RefreshOptions{PaneActions: []PaneOutputSetting{{Pane: pane, Action: "invalid"}}},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid PaneAction, got %v", err)
 	}
-	//nolint:exhaustruct_v5 // testing invalid PaneReport
-	err = c.Refresh(ctx, RefreshOptions{PaneReports: []PaneReport{{PaneID: "invalid", Report: "ok"}}})
+
+	err = c.Refresh(
+		ctx,
+		RefreshOptions{PaneReports: []PaneReport{{PaneID: "invalid", Report: "ok"}}},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for invalid PaneReport, got %v", err)
 	}
@@ -654,8 +687,17 @@ func TestControlNewSessionRejectsNormalizedNames(test *testing.T) {
 				})
 			}
 
-			if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent || connection != nil || session.Valid() {
-				test.Fatalf("name %q: connection=%v session=%v error=%v outcome=%+v", testCase.value, connection, session, err, outcomeOf(err))
+			if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent ||
+				connection != nil ||
+				session.Valid() {
+				test.Fatalf(
+					"name %q: connection=%v session=%v error=%v outcome=%+v",
+					testCase.value,
+					connection,
+					session,
+					err,
+					outcomeOf(err),
+				)
 			}
 		})
 	}
@@ -713,7 +755,9 @@ func TestConnectionRefreshAdmissionHonorsDeadline(t *testing.T) {
 	err = connection.refreshClient(ctx, client, refresh, []string{"-t", string(client.Name())})
 
 	commandErr, ok := errors.AsType[*CommandError](err)
-	if !ok || !errors.Is(err, context.DeadlineExceeded) || commandErr.Timeout != TimeoutSourceCaller || commandErr.Outcome.Effect != EffectNotSent {
+	if !ok || !errors.Is(err, context.DeadlineExceeded) ||
+		commandErr.Timeout != TimeoutSourceCaller ||
+		commandErr.Outcome.Effect != EffectNotSent {
 		t.Fatalf("serialized refresh deadline: %v, command error %#v", err, commandErr)
 	}
 }
@@ -723,35 +767,34 @@ func TestControlNewSessionValidation(t *testing.T) {
 
 	ctx := t.Context()
 
-	//nolint:exhaustruct_v5 // testing nil server
 	_, _, err := nilServer.OpenControlNewSession(ctx, ControlNewSessionOptions{})
 	if !errors.Is(err, ErrInvalidHandle) {
 		t.Errorf("expected ErrInvalidHandle for nil server, got %v", err)
 	}
 
 	s := localServer(t)
-	//nolint:exhaustruct_v5,staticcheck // testing nil context validation
+	//nolint:staticcheck // testing nil context validation
 	_, _, err = s.OpenControlNewSession(nil, ControlNewSessionOptions{})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for nil context, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing NUL name
 	_, _, err = s.OpenControlNewSession(ctx, ControlNewSessionOptions{Name: "bad\x00name"})
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for NUL session name, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // testing negative size
-	_, _, err = s.OpenControlNewSession(ctx, ControlNewSessionOptions{Size: Size{Width: -5, Height: 10}})
+	_, _, err = s.OpenControlNewSession(
+		ctx,
+		ControlNewSessionOptions{Size: Size{Width: -5, Height: 10}},
+	)
 	if !errors.Is(err, ErrInvalidArgument) {
 		t.Errorf("expected ErrInvalidArgument for negative size, got %v", err)
 	}
 
 	boundServer := localServer(t)
-	//nolint:exhaustruct_v5 // mock control connection
 	boundServer.conn = &Connection{}
-	//nolint:exhaustruct_v5 // testing control-bound server
+
 	_, _, err = boundServer.OpenControlNewSession(ctx, ControlNewSessionOptions{})
 	if !errors.Is(err, ErrTransportUnsupported) {
 		t.Errorf("expected ErrTransportUnsupported for control-bound server, got %v", err)
@@ -767,7 +810,7 @@ func TestConnectionClientValidation(t *testing.T) {
 	if !errors.Is(err, ErrInvalidHandle) {
 		t.Errorf("expected ErrInvalidHandle for nil connection, got %v", err)
 	}
-	//nolint:exhaustruct_v5 // testing closed connection
+
 	closedConn := &Connection{closed: true, done: make(chan struct{})}
 
 	_, err = closedConn.Client(ctx)
@@ -780,28 +823,52 @@ func TestConnectionSetPaneOutputValidation(t *testing.T) {
 	var nilConn *Connection
 
 	ctx := t.Context()
-	//nolint:exhaustruct_v5 // test handle
 	pane := Pane{h: handle{id: "%1"}}
 
-	if err := nilConn.SetPaneOutputAction(ctx, pane, PaneOutputPause); !errors.Is(err, ErrInvalidHandle) {
+	if err := nilConn.SetPaneOutputAction(
+		ctx,
+		pane,
+		PaneOutputPause,
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on nil connection, got %v", err)
 	}
 
-	if err := nilConn.SetPaneOutputActions(ctx, PaneOutputSetting{Pane: pane, Action: PaneOutputPause}); !errors.Is(err, ErrInvalidHandle) {
+	if err := nilConn.SetPaneOutputActions(
+		ctx,
+		PaneOutputSetting{Pane: pane, Action: PaneOutputPause},
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on nil connection, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // test connection
 	conn := &Connection{identity: ServerIdentity{Generation: 1}}
-	//nolint:exhaustruct_v5 // mismatched origin
+
 	paneOther := Pane{h: handle{id: "%1", origin: ServerIdentity{Generation: 2}}}
-	if err := conn.SetPaneOutputAction(ctx, paneOther, PaneOutputPause); !errors.Is(err, ErrInvalidHandle) {
+	if err := conn.SetPaneOutputAction(
+		ctx,
+		paneOther,
+		PaneOutputPause,
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on mismatched pane origin, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // matching origin
 	paneSame := Pane{h: handle{id: "%1", origin: conn.identity}}
-	if err := conn.SetPaneOutputAction(ctx, paneSame, PaneOutputAction("bad")); !errors.Is(err, ErrInvalidArgument) {
+	if err := conn.SetPaneOutputAction(
+		ctx,
+		paneSame,
+		PaneOutputAction("bad"),
+	); !errors.Is(
+		err,
+		ErrInvalidArgument,
+	) {
 		t.Errorf("expected ErrInvalidArgument on invalid action, got %v", err)
 	}
 }
@@ -811,19 +878,41 @@ func TestConnectionWatchFormatValidation(t *testing.T) {
 
 	ctx := t.Context()
 
-	if err := nilConn.WatchFormat(ctx, "sub", TargetSession(), "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
+	if err := nilConn.WatchFormat(
+		ctx,
+		"sub",
+		TargetSession(),
+		"#{session_name}",
+	); !errors.Is(
+		err,
+		ErrInvalidArgument,
+	) {
 		t.Errorf("expected ErrInvalidArgument on nil connection, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // test connection
 	conn := &Connection{identity: ServerIdentity{Generation: 1}}
-	if err := conn.WatchFormat(ctx, "sub", nil, "#{session_name}"); !errors.Is(err, ErrInvalidArgument) {
+	if err := conn.WatchFormat(
+		ctx,
+		"sub",
+		nil,
+		"#{session_name}",
+	); !errors.Is(
+		err,
+		ErrInvalidArgument,
+	) {
 		t.Errorf("expected ErrInvalidArgument on nil target, got %v", err)
 	}
 
-	//nolint:exhaustruct_v5 // mismatched origin
 	paneOther := Pane{h: handle{id: "%1", origin: ServerIdentity{Generation: 2}}}
-	if err := conn.WatchFormat(ctx, "sub", paneOther, "#{pane_id}"); !errors.Is(err, ErrInvalidHandle) {
+	if err := conn.WatchFormat(
+		ctx,
+		"sub",
+		paneOther,
+		"#{pane_id}",
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on mismatched pane origin, got %v", err)
 	}
 }
@@ -858,13 +947,25 @@ func TestMessagesValidation(t *testing.T) {
 
 	var nilServer *Server
 
-	if _, err := nilServer.Messages(ctx, MessagesOptions{Jobs: false, Terminal: false}); !errors.Is(err, ErrInvalidHandle) {
+	if _, err := nilServer.Messages(
+		ctx,
+		MessagesOptions{Jobs: false, Terminal: false},
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.Messages, got: %v", err)
 	}
 
 	var invalidClient Client
 
-	if _, err := invalidClient.Messages(ctx, MessagesOptions{Jobs: false, Terminal: false}); !errors.Is(err, ErrInvalidHandle) {
+	if _, err := invalidClient.Messages(
+		ctx,
+		MessagesOptions{Jobs: false, Terminal: false},
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on invalidClient.Messages, got: %v", err)
 	}
 }
@@ -912,7 +1013,11 @@ func TestMessageWithRoundsDurationUpToMilliseconds(t *testing.T) {
 
 			writeMockResponse(t, response, []byte(guardOK))
 
-			if err := c.MessageWith(t.Context(), "hello", MessageOptions{Duration: tt.duration}); err != nil {
+			if err := c.MessageWith(
+				t.Context(),
+				"hello",
+				MessageOptions{Duration: tt.duration},
+			); err != nil {
 				t.Fatal(err)
 			}
 

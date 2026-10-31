@@ -112,7 +112,13 @@ func TestDifferentialCommandQuoting(t *testing.T) {
 	assertNoInjection(t, "at end of differential quoting tests")
 }
 
-func assertDisplayEchoes(t *testing.T, ctx context.Context, server *tmux.Server, input string, flags ...string) {
+func assertDisplayEchoes(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	input string,
+	flags ...string,
+) {
 	t.Helper()
 
 	args := append(append([]string{"display-message", "-p"}, flags...), "--", input)

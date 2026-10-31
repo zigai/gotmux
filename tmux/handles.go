@@ -54,6 +54,8 @@ type (
 	}
 
 	// SelectWindowOptions configures selecting a window.
+	//
+	//exhaustruct:optional
 	SelectWindowOptions struct {
 		// PreserveZoom preserves the window's zoom state (-Z flag).
 		PreserveZoom bool
@@ -63,6 +65,8 @@ type (
 	}
 
 	// SelectPaneOptions configures selecting a pane.
+	//
+	//exhaustruct:optional
 	SelectPaneOptions struct {
 		// PreserveZoom preserves the pane's zoom state (-Z flag).
 		PreserveZoom bool
@@ -214,7 +218,10 @@ func (h handle) guard() *guard {
 }
 
 func (h handle) equal(other handle) bool {
-	return h.valid() && other.valid() && h.kind == other.kind && h.id == other.id && h.server.endpoint == other.server.endpoint && h.origin.Equal(other.origin) && h.client == other.client
+	return h.valid() && other.valid() && h.kind == other.kind && h.id == other.id &&
+		h.server.endpoint == other.server.endpoint &&
+		h.origin.Equal(other.origin) &&
+		h.client == other.client
 }
 
 func (h handle) act(ctx context.Context, label string, name string, args ...string) error {
@@ -222,11 +229,22 @@ func (h handle) act(ctx context.Context, label string, name string, args ...stri
 }
 
 // actCallerBounded is act bounded only by the caller's context.
-func (h handle) actCallerBounded(ctx context.Context, label string, name string, args ...string) error {
+func (h handle) actCallerBounded(
+	ctx context.Context,
+	label string,
+	name string,
+	args ...string,
+) error {
 	return h.actWithin(ctx, label, false, name, args...)
 }
 
-func (h handle) actWithin(ctx context.Context, label string, commandTimeout bool, name string, args ...string) error {
+func (h handle) actWithin(
+	ctx context.Context,
+	label string,
+	commandTimeout bool,
+	name string,
+	args ...string,
+) error {
 	if err := h.check(); err != nil {
 		return opError(label, err)
 	}
@@ -243,7 +261,13 @@ func (h handle) actWithin(ctx context.Context, label string, commandTimeout bool
 }
 
 func (h handle) withOrigin(id string, kind ObjectKind) handle {
-	return handle{server: h.server, origin: h.origin, id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
+	return handle{
+		server: h.server,
+		origin: h.origin,
+		id:     id,
+		kind:   kind,
+		client: clientCheck{name: "", pid: 0, created: 0},
+	}
 }
 
 // ID returns the canonical tmux session ID string (e.g. "$0").
@@ -306,7 +330,8 @@ func (l WindowLink) Valid() bool {
 // Equal reports whether two window links refer to the same (session, index, window)
 // slot on the exact same daemon lifetime.
 func (l WindowLink) Equal(other WindowLink) bool {
-	return l.Valid() && other.Valid() && l.h.equal(other.h) && l.session == other.session && l.index == other.index
+	return l.Valid() && other.Valid() && l.h.equal(other.h) && l.session == other.session &&
+		l.index == other.index
 }
 
 // Index returns the 0-based slot index where this window is linked in the session.
@@ -366,7 +391,10 @@ func (l WindowLink) guard() *guard {
 		id = *l.h.server.bound
 	}
 
-	return &guard{identity: id, links: []linkCheck{{session: l.session, index: l.index, window: WindowID(l.h.id)}}, clients: nil}
+	return &guard{
+		identity: id,
+		links:    []linkCheck{{session: l.session, index: l.index, window: WindowID(l.h.id)}},
+	}
 }
 
 func (l WindowLink) act(ctx context.Context, label string, name string, args ...string) error {
@@ -387,7 +415,7 @@ func (l WindowLink) act(ctx context.Context, label string, name string, args ...
 
 // beginHandles binds only the operation's handle copies, retaining any verified
 // participant's identity so an unprobed source cannot bypass its daemon guard.
-func beginHandles(ctx context.Context, a, b *handle) (context.Context, *operation, error) {
+func beginHandles(ctx context.Context, a *handle, b *handle) (context.Context, *operation, error) {
 	if err := a.check(); err != nil {
 		return nil, nil, err
 	}
@@ -421,7 +449,12 @@ func beginHandles(ctx context.Context, a, b *handle) (context.Context, *operatio
 	return opCtx, op, nil
 }
 
-func sharedHandleIdentity(ctx context.Context, op *operation, a, b *handle) (ServerIdentity, error) {
+func sharedHandleIdentity(
+	ctx context.Context,
+	op *operation,
+	a *handle,
+	b *handle,
+) (ServerIdentity, error) {
 	if a.origin.valid() {
 		return a.origin, nil
 	}
@@ -529,7 +562,15 @@ func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
 	}
 	defer op.close()
 
-	rows, err := s.h.server.listRaw(opCtx, "Session.Clients", op, ObjectKindClient, s.h.origin, QueryOptions{Filter: "", ExtraFields: nil}, s.h.id)
+	rows, err := s.h.server.listRaw(
+		opCtx,
+		"Session.Clients",
+		op,
+		ObjectKindClient,
+		s.h.origin,
+		QueryOptions{},
+		s.h.id,
+	)
 	if err != nil {
 		return nil, opError("Session.Clients", err)
 	}
@@ -551,7 +592,7 @@ func (s Session) Clients(ctx context.Context) ([]ClientInfo, error) {
 
 // Panes queries all panes currently belonging to this session, sorted by numeric pane ID.
 func (s Session) Panes(ctx context.Context) ([]PaneInfo, error) {
-	return s.PanesWith(ctx, QueryOptions{Filter: "", ExtraFields: nil})
+	return s.PanesWith(ctx, QueryOptions{})
 }
 
 // PanesWith queries panes in all windows linked into this session that match the

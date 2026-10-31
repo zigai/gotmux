@@ -30,7 +30,14 @@ func assertPayload(t *testing.T, payload tmux.CommandPayload, want tmux.Command)
 	}
 }
 
-func assertHook(t *testing.T, ctx context.Context, session tmux.Session, name string, present bool, command tmux.Command) {
+func assertHook(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	name string,
+	present bool,
+	command tmux.Command,
+) {
 	t.Helper()
 
 	hooks, err := session.Hooks().List(ctx)
@@ -92,7 +99,13 @@ func TestIntegrationHooksLifecycle(t *testing.T) {
 	assertUserOption(t, ctx, session, "@hook-effect", "sentinel")
 }
 
-func assertUserOption(t *testing.T, ctx context.Context, session tmux.Session, name, value string) {
+func assertUserOption(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	name string,
+	value string,
+) {
 	t.Helper()
 
 	got, err := session.Options().User(ctx, name)
@@ -110,7 +123,14 @@ func TestIntegrationBindingsLifecycle(t *testing.T) {
 
 	const table tmux.KeyTable = "tgo-test"
 
-	command := testCommand(t, "set-option", "-t", string(session.ID()), "@binding-effect", "literal ; #{pane_id} '")
+	command := testCommand(
+		t,
+		"set-option",
+		"-t",
+		string(session.ID()),
+		"@binding-effect",
+		"literal ; #{pane_id} '",
+	)
 	sequence := testSequence(t, command)
 
 	options := tmux.BindOptions{Repeat: true, Note: "test note"}
@@ -152,7 +172,13 @@ func TestIntegrationBindingQueriesMatchNativeKeys(t *testing.T) {
 	sequence := testSequence(t, command)
 
 	for _, key := range []tmux.Key{"Enter", "PPage", "IC", "C-Up"} {
-		if err := server.Bind(ctx, table, key, sequence, tmux.BindOptions{Note: "note"}); err != nil {
+		if err := server.Bind(
+			ctx,
+			table,
+			key,
+			sequence,
+			tmux.BindOptions{Note: "note"},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -175,11 +201,21 @@ func TestIntegrationBindingQueriesEmptyAndErrors(t *testing.T) {
 	const table tmux.KeyTable = "query-empty"
 
 	command := testCommand(t, "display-message", "pressed")
-	if err := server.Bind(ctx, table, "x", testSequence(t, command), tmux.BindOptions{}); err != nil {
+	if err := server.Bind(
+		ctx,
+		table,
+		"x",
+		testSequence(t, command),
+		tmux.BindOptions{},
+	); err != nil {
 		t.Fatal(err)
 	}
 
-	for _, options := range []tmux.BindingsOptions{{Table: table, Key: "z"}, {Table: "absent-table"}, {Table: table, Key: "x", NotesOnly: true}} {
+	for _, options := range []tmux.BindingsOptions{
+		{Table: table, Key: "z"},
+		{Table: "absent-table"},
+		{Table: table, Key: "x", NotesOnly: true},
+	} {
 		got, err := server.FindBindings(ctx, options)
 		if err != nil || len(got) != 0 {
 			t.Fatalf("no match %+v: %+v, %v", options, got, err)
@@ -191,14 +227,26 @@ func TestIntegrationBindingQueriesEmptyAndErrors(t *testing.T) {
 		t.Fatalf("unbound notes: %+v, %v", notes, err)
 	}
 
-	if _, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, Key: "unsupported-key"}); !errors.Is(err, tmux.ErrInvalidArgument) {
+	if _, err := server.FindBindings(
+		ctx,
+		tmux.BindingsOptions{Table: table, Key: "unsupported-key"},
+	); !errors.Is(
+		err,
+		tmux.ErrInvalidArgument,
+	) {
 		t.Fatalf("invalid key error = %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	cancel()
 
-	if _, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: table, Key: "x"}); !errors.Is(err, context.Canceled) {
+	if _, err := server.FindBindings(
+		ctx,
+		tmux.BindingsOptions{Table: table, Key: "x"},
+	); !errors.Is(
+		err,
+		context.Canceled,
+	) {
 		t.Fatalf("canceled query error = %v", err)
 	}
 }
@@ -212,7 +260,13 @@ func TestIntegrationBindingsNotesOnlyPreservesUnicodeKey(test *testing.T) {
 
 	command := testCommand(test, "display-message", "noted")
 
-	if err := server.Bind(ctx, table, key, testSequence(test, command), tmux.BindOptions{Note: "note"}); err != nil {
+	if err := server.Bind(
+		ctx,
+		table,
+		key,
+		testSequence(test, command),
+		tmux.BindOptions{Note: "note"},
+	); err != nil {
 		test.Fatal(err)
 	}
 
@@ -236,7 +290,13 @@ func TestIntegrationBindingsNotesOnlyAndFirstMatch(t *testing.T) {
 		key  tmux.Key
 		note string
 	}{{key: "a"}, {key: "b", note: "first note"}, {key: "c", note: "second note"}} {
-		if err := server.Bind(ctx, table, binding.key, sequence, tmux.BindOptions{Repeat: true, Note: binding.note}); err != nil {
+		if err := server.Bind(
+			ctx,
+			table,
+			binding.key,
+			sequence,
+			tmux.BindOptions{Repeat: true, Note: binding.note},
+		); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -250,7 +310,10 @@ func TestIntegrationBindingsNotesOnlyAndFirstMatch(t *testing.T) {
 		assertBinding(t, binding, table, command)
 	}
 
-	got, err = server.FindBindings(ctx, tmux.BindingsOptions{Table: table, NotesOnly: true, FirstMatch: true})
+	got, err = server.FindBindings(
+		ctx,
+		tmux.BindingsOptions{Table: table, NotesOnly: true, FirstMatch: true},
+	)
 	if err != nil || len(got) != 1 || got[0].Key != "b" {
 		t.Fatalf("first noted binding: %+v, %v", got, err)
 	}
@@ -262,11 +325,20 @@ func TestIntegrationBindingNotesKeyAndPrefix(t *testing.T) {
 	const table tmux.KeyTable = "query-prefix"
 
 	command := testCommand(t, "display-message", "pressed")
-	if err := server.Bind(ctx, table, "Enter", testSequence(t, command), tmux.BindOptions{Note: "accept input"}); err != nil {
+	if err := server.Bind(
+		ctx,
+		table,
+		"Enter",
+		testSequence(t, command),
+		tmux.BindOptions{Note: "accept input"},
+	); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := server.BindingNotes(ctx, tmux.BindingsOptions{Table: table, Key: "enter", Prefix: "PRE "})
+	got, err := server.BindingNotes(
+		ctx,
+		tmux.BindingsOptions{Table: table, Key: "enter", Prefix: "PRE "},
+	)
 	if err != nil || len(got) != 1 || got[0].Key != "PRE Enter" || got[0].Note != "accept input" {
 		t.Fatalf("key plus prefix notes: %+v, %v", got, err)
 	}
@@ -280,7 +352,13 @@ func TestIntegrationBindingQueriesSingletons(t *testing.T) {
 	command := testCommand(t, "display-message", "pressed")
 	sequence := testSequence(t, command)
 
-	if err := server.Bind(ctx, table, "Enter", sequence, tmux.BindOptions{Note: "accept input"}); err != nil {
+	if err := server.Bind(
+		ctx,
+		table,
+		"Enter",
+		sequence,
+		tmux.BindOptions{Note: "accept input"},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,7 +415,13 @@ func TestIntegrationBindingQueriesGlobalSingleton(t *testing.T) {
 	}
 
 	command := testCommand(t, "display-message", "only binding")
-	if err := server.Bind(ctx, "root", "Enter", testSequence(t, command), tmux.BindOptions{Note: "only note"}); err != nil {
+	if err := server.Bind(
+		ctx,
+		"root",
+		"Enter",
+		testSequence(t, command),
+		tmux.BindOptions{Note: "only note"},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -357,7 +441,13 @@ func TestIntegrationBindingQueriesGlobalSingleton(t *testing.T) {
 	}
 }
 
-func assertSingleBindingQuery(t *testing.T, ctx context.Context, server *tmux.Server, options tmux.BindingsOptions, key tmux.Key) {
+func assertSingleBindingQuery(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	options tmux.BindingsOptions,
+	key tmux.Key,
+) {
 	t.Helper()
 
 	got, err := server.FindBindings(ctx, options)
@@ -366,7 +456,12 @@ func assertSingleBindingQuery(t *testing.T, ctx context.Context, server *tmux.Se
 	}
 }
 
-func assertBinding(t *testing.T, binding tmux.BindingInfo, table tmux.KeyTable, command tmux.Command) {
+func assertBinding(
+	t *testing.T,
+	binding tmux.BindingInfo,
+	table tmux.KeyTable,
+	command tmux.Command,
+) {
 	t.Helper()
 
 	if binding.Table != table || !binding.Repeat || !binding.Parsed {
@@ -383,7 +478,13 @@ func TestMultiCommandBinding(t *testing.T) {
 	c2 := testCommand(t, "set-option", "-t", string(session.ID()), "@e2", "2")
 
 	key := tmux.Key("F12")
-	if err := server.Bind(ctx, "root", key, testSequence(t, c1, c2), tmux.BindOptions{Note: "multicmd"}); err != nil {
+	if err := server.Bind(
+		ctx,
+		"root",
+		key,
+		testSequence(t, c1, c2),
+		tmux.BindOptions{Note: "multicmd"},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -395,7 +496,11 @@ func TestMultiCommandBinding(t *testing.T) {
 	}
 
 	if len(commands) != 2 {
-		t.Fatalf("expected 2 commands in binding sequence, got %d (commands=%+v)", len(commands), commands)
+		t.Fatalf(
+			"expected 2 commands in binding sequence, got %d (commands=%+v)",
+			len(commands),
+			commands,
+		)
 	}
 
 	if commands[0].Name() != "set-option" || commands[1].Name() != "set-option" {
@@ -403,7 +508,13 @@ func TestMultiCommandBinding(t *testing.T) {
 	}
 }
 
-func findBinding(t *testing.T, ctx context.Context, server *tmux.Server, table tmux.KeyTable, key tmux.Key) tmux.BindingInfo {
+func findBinding(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	table tmux.KeyTable,
+	key tmux.Key,
+) tmux.BindingInfo {
 	t.Helper()
 
 	bindings, err := server.Bindings(ctx, table)
@@ -425,7 +536,13 @@ func findBinding(t *testing.T, ctx context.Context, server *tmux.Server, table t
 func TestUnindexedHookList(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	cmd, err := tmux.NewCommand("set-hook", "-t", string(session.ID()), "after-new-window", "display-message hello")
+	cmd, err := tmux.NewCommand(
+		"set-hook",
+		"-t",
+		string(session.ID()),
+		"after-new-window",
+		"display-message hello",
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +601,9 @@ func TestIntegrationHookScopeExtensions(t *testing.T) {
 		t.Fatalf("List failed: %v", err)
 	}
 
-	if count := len(slices.DeleteFunc(hooks, func(h tmux.HookInfo) bool { return h.Name != hook })); count != 2 {
+	if count := len(
+		slices.DeleteFunc(hooks, func(h tmux.HookInfo) bool { return h.Name != hook }),
+	); count != 2 {
 		t.Fatalf("expected 2 hooks for %s after append, got %d", hook, count)
 	}
 
@@ -507,7 +626,13 @@ func TestIntegrationHookScopeExtensions(t *testing.T) {
 	assertFilteredHooks(t, ctx, session, hook, 0)
 }
 
-func assertFilteredHooks(t *testing.T, ctx context.Context, session tmux.Session, name string, want int) {
+func assertFilteredHooks(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	name string,
+	want int,
+) {
 	t.Helper()
 
 	filtered, err := session.Hooks().ListFiltered(ctx, name)
@@ -592,7 +717,13 @@ func assertCommandlessEdit(t *testing.T, ctx context.Context, server *tmux.Serve
 	}
 }
 
-func assertUnbindAll(t *testing.T, ctx context.Context, server *tmux.Server, table tmux.KeyTable, commands tmux.CommandSequence) {
+func assertUnbindAll(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	table tmux.KeyTable,
+	commands tmux.CommandSequence,
+) {
 	t.Helper()
 
 	bindKeys(t, ctx, server, table, commands, "F1", "F2")
@@ -602,7 +733,12 @@ func assertUnbindAll(t *testing.T, ctx context.Context, server *tmux.Server, tab
 		t.Fatalf("expected 2 bindings in %s, got %d, err=%v", table, len(bindings), err)
 	}
 
-	if err := server.UnbindWith(ctx, table, "", tmux.UnbindOptions{All: true, Quiet: true}); err != nil {
+	if err := server.UnbindWith(
+		ctx,
+		table,
+		"",
+		tmux.UnbindOptions{All: true, Quiet: true},
+	); err != nil {
 		t.Fatalf("UnbindWith all failed: %v", err)
 	}
 
@@ -612,18 +748,35 @@ func assertUnbindAll(t *testing.T, ctx context.Context, server *tmux.Server, tab
 	}
 }
 
-func soleBinding(t *testing.T, ctx context.Context, server *tmux.Server, key tmux.Key) tmux.BindingInfo {
+func soleBinding(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	key tmux.Key,
+) tmux.BindingInfo {
 	t.Helper()
 
 	bindings, err := server.FindBindings(ctx, tmux.BindingsOptions{Table: "root", Key: key})
 	if err != nil || len(bindings) != 1 || bindings[0].Key != key {
-		t.Fatalf("FindBindings(root, %s) = %+v, %v; want one binding for the key", key, bindings, err)
+		t.Fatalf(
+			"FindBindings(root, %s) = %+v, %v; want one binding for the key",
+			key,
+			bindings,
+			err,
+		)
 	}
 
 	return bindings[0]
 }
 
-func bindKeys(t *testing.T, ctx context.Context, server *tmux.Server, table tmux.KeyTable, commands tmux.CommandSequence, keys ...tmux.Key) {
+func bindKeys(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	table tmux.KeyTable,
+	commands tmux.CommandSequence,
+	keys ...tmux.Key,
+) {
 	t.Helper()
 
 	for _, key := range keys {

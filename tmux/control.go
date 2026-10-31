@@ -34,6 +34,8 @@ var (
 )
 
 // ControlOptions configures limits and startup settings for an interactive control mode connection.
+//
+//exhaustruct:optional
 type ControlOptions struct {
 	// PaneOutput enables terminal output events for all panes (%output). Defaults to false.
 	// Individual panes may be enabled with [Connection.SetPaneOutput].
@@ -74,6 +76,8 @@ type ControlOptions struct {
 
 // ControlNewSessionOptions configures starting a new tmux session attached directly
 // to a new control mode client connection.
+//
+//exhaustruct:optional
 type ControlNewSessionOptions struct {
 	// Control configures the control connection limits, flags, and framing.
 	Control ControlOptions
@@ -108,35 +112,45 @@ type ControlNewSessionOptions struct {
 // Requests are dispatched sequentially over the wire. Handles created from this
 // connection carry a unique [ServerIdentity.Generation] token to prevent reuse across restarts.
 type Connection struct {
-	server          *Server
-	original        *Server
-	identity        ServerIdentity
-	info            ServerInfo
-	generation      uint64
-	opts            ControlOptions
-	cancel          context.CancelCauseFunc
-	stopCh          chan struct{}
-	mu              sync.Mutex
-	closed          bool
-	terminal        error
-	normal          bool
-	streams         map[*EventStream]struct{}
-	eventReserved   int64
-	count           *semaphore.Weighted
-	bytes           *semaphore.Weighted
-	requests        chan *controlRequest
-	frames          chan controlFrame
-	ready           chan error
-	done            chan struct{}
-	work            sync.WaitGroup
-	cmd             *exec.Cmd
-	stdin           *os.File
-	stdout          *os.File
-	stderr          *os.File
-	diagnostics     *buffer
-	stopOnce        sync.Once
-	clientMu        sync.Mutex
-	cachedClient    Client
+	server     *Server
+	original   *Server
+	identity   ServerIdentity
+	info       ServerInfo
+	generation uint64
+	opts       ControlOptions
+	cancel     context.CancelCauseFunc
+	stopCh     chan struct{}
+	//exhaustruct:optional
+	mu sync.Mutex
+	//exhaustruct:optional
+	closed bool
+	//exhaustruct:optional
+	terminal error
+	//exhaustruct:optional
+	normal  bool
+	streams map[*EventStream]struct{}
+	//exhaustruct:optional
+	eventReserved int64
+	count         *semaphore.Weighted
+	bytes         *semaphore.Weighted
+	requests      chan *controlRequest
+	frames        chan controlFrame
+	ready         chan error
+	done          chan struct{}
+	//exhaustruct:optional
+	work        sync.WaitGroup
+	cmd         *exec.Cmd
+	stdin       *os.File
+	stdout      *os.File
+	stderr      *os.File
+	diagnostics *buffer
+	//exhaustruct:optional
+	stopOnce sync.Once
+	//exhaustruct:optional
+	clientMu sync.Mutex
+	//exhaustruct:optional
+	cachedClient Client
+	//exhaustruct:optional
 	hasClient       bool
 	outputCapacity  *semaphore.Weighted
 	noOutput        bool
@@ -149,7 +163,11 @@ type Connection struct {
 // returns [ErrNotFound] when the session does not exist. It does not create a scratch
 // session, detach any other client, or reconnect. ctx owns the entire lifetime. The
 // original Server continues to use subprocess execution.
-func (s *Server) OpenControl(ctx context.Context, id SessionID, opts ControlOptions) (*Connection, error) {
+func (s *Server) OpenControl(
+	ctx context.Context,
+	id SessionID,
+	opts ControlOptions,
+) (*Connection, error) {
 	if err := s.validateOpenControl(ctx, id); err != nil {
 		return nil, opError("Server.OpenControl", err)
 	}
@@ -209,13 +227,19 @@ func validateControlNewSessionStrings(opts ControlNewSessionOptions) error {
 	return nil
 }
 
-func (s *Server) validateOpenControlNewSession(ctx context.Context, opts ControlNewSessionOptions) error {
+func (s *Server) validateOpenControlNewSession(
+	ctx context.Context,
+	opts ControlNewSessionOptions,
+) error {
 	if s == nil || s.runner == nil {
 		return ErrInvalidHandle
 	}
 
 	if s.conn != nil || s.bound != nil {
-		return unsupportedControl("open control connection on control-bound server", ErrTransportUnsupported)
+		return unsupportedControl(
+			"open control connection on control-bound server",
+			ErrTransportUnsupported,
+		)
 	}
 
 	if ctx == nil || ctx.Err() != nil {
@@ -236,7 +260,10 @@ func (s *Server) validateOpenControlNewSession(ctx context.Context, opts Control
 // OpenControlNewSession starts one owned control client by creating and attaching to a new session.
 // It does not create a scratch session, and ctx owns the entire lifetime.
 // The newly created [Session] is returned alongside the active [*Connection].
-func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessionOptions) (*Connection, Session, error) {
+func (s *Server) OpenControlNewSession(
+	ctx context.Context,
+	opts ControlNewSessionOptions,
+) (*Connection, Session, error) {
 	if err := s.validateOpenControlNewSession(ctx, opts); err != nil {
 		return nil, Session{}, opError("Server.OpenControlNewSession", err)
 	}
@@ -268,7 +295,11 @@ func (s *Server) OpenControlNewSession(ctx context.Context, opts ControlNewSessi
 	c.startWorkers(connCtx, nonce)
 
 	if err = c.awaitReady(ctx); err != nil {
-		return nil, Session{}, &OperationError{Operation: "Server.OpenControlNewSession", Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Err: err}
+		return nil, Session{}, &OperationError{
+			Operation: "Server.OpenControlNewSession",
+			Outcome:   Outcome{Effect: EffectUnknown, Steps: nil, Created: nil},
+			Err:       err,
+		}
 	}
 
 	session, err := c.resolveCreatedSession(ctx)
@@ -307,8 +338,7 @@ func (c *Connection) Client(ctx context.Context) (Client, error) {
 	pid := c.cmd.Process.Pid
 
 	clients, err := c.Server().ClientsWith(ctx, QueryOptions{
-		Filter:      Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
-		ExtraFields: nil,
+		Filter: Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
 	})
 	if err != nil {
 		return Client{}, opError("Connection.Client", err)
@@ -418,8 +448,7 @@ func (c *Connection) resolveCreatedSession(ctx context.Context) (Session, error)
 	pid := c.cmd.Process.Pid
 
 	clients, err := c.Server().ClientsWith(ctx, QueryOptions{
-		Filter:      Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
-		ExtraFields: nil,
+		Filter: Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
 	})
 	if err != nil {
 		_ = c.Close()
@@ -500,11 +529,14 @@ func (c *Connection) stop(err error, normal bool) {
 }
 
 func validateControlLimits(opts ControlOptions) bool {
-	if opts.QueueDepth < 0 || opts.QueuedBytes < 0 || opts.FrameBytes < 0 || opts.EventBytes < 0 || opts.MaxStreams < 0 {
+	if opts.QueueDepth < 0 || opts.QueuedBytes < 0 || opts.FrameBytes < 0 || opts.EventBytes < 0 ||
+		opts.MaxStreams < 0 {
 		return false
 	}
 
-	if opts.QueueDepth > 1<<20 || opts.QueuedBytes > 1<<40 || opts.FrameBytes > 1<<40 || opts.EventBytes > 1<<40 || opts.MaxStreams > 1<<16 {
+	if opts.QueueDepth > 1<<20 || opts.QueuedBytes > 1<<40 || opts.FrameBytes > 1<<40 ||
+		opts.EventBytes > 1<<40 ||
+		opts.MaxStreams > 1<<16 {
 		return false
 	}
 
@@ -571,36 +603,49 @@ func newConnection(s *Server, opts ControlOptions, cancel context.CancelCauseFun
 	}
 
 	c := &Connection{
-		server:          nil,
-		original:        s,
-		identity:        ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen},
-		info:            ServerInfo{rawRecord: rawRecord{raw: nil}, Identity: ServerIdentity{Endpoint: s.endpoint, ReportedSocket: "", PID: 0, Started: time.Time{}, Generation: gen}, Version: Version{Raw: "", Major: 0, Minor: 0, Patch: "", Suffix: "", Recognized: false}},
+		server:   nil,
+		original: s,
+		identity: ServerIdentity{
+			Endpoint:       s.endpoint,
+			ReportedSocket: "",
+			PID:            0,
+			Started:        time.Time{},
+			Generation:     gen,
+		},
+		info: ServerInfo{
+			rawRecord: rawRecord{raw: nil},
+			Identity: ServerIdentity{
+				Endpoint:       s.endpoint,
+				ReportedSocket: "",
+				PID:            0,
+				Started:        time.Time{},
+				Generation:     gen,
+			},
+			Version: Version{
+				Raw:        "",
+				Major:      0,
+				Minor:      0,
+				Patch:      "",
+				Suffix:     "",
+				Recognized: false,
+			},
+		},
 		generation:      gen,
 		opts:            opts,
 		cancel:          cancel,
 		stopCh:          make(chan struct{}),
-		mu:              sync.Mutex{},
-		closed:          false,
-		terminal:        nil,
-		normal:          false,
 		streams:         map[*EventStream]struct{}{},
-		eventReserved:   0,
 		count:           semaphore.NewWeighted(int64(opts.QueueDepth)),
 		bytes:           semaphore.NewWeighted(opts.QueuedBytes),
 		requests:        make(chan *controlRequest, opts.QueueDepth),
 		frames:          make(chan controlFrame, 1),
 		ready:           make(chan error, 1),
 		done:            make(chan struct{}),
-		work:            sync.WaitGroup{},
 		cmd:             nil,
 		stdin:           nil,
 		stdout:          nil,
 		stderr:          nil,
 		diagnostics:     nil,
-		stopOnce:        sync.Once{},
-		clientMu:        sync.Mutex{},
-		cachedClient:    Client{}, //nolint:exhaustruct_v5 // initial connection state sets uninitialized client
-		hasClient:       false,
 		outputCapacity:  semaphore.NewWeighted(1),
 		noOutput:        noOutput,
 		selectiveOutput: noOutput,
@@ -658,7 +703,11 @@ func (s *Server) controlFlags(opts ControlOptions) (string, error) {
 	return formatClientFlags(flags), nil
 }
 
-func (s *Server) controlAttachArgs(id SessionID, opts ControlOptions, nonce string) ([]string, error) {
+func (s *Server) controlAttachArgs(
+	id SessionID,
+	opts ControlOptions,
+	nonce string,
+) ([]string, error) {
 	flags, err := s.controlFlags(opts)
 	if err != nil {
 		return nil, err
@@ -708,7 +757,10 @@ func newSessionFlags(opts ControlNewSessionOptions) []string {
 	return args
 }
 
-func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce string) ([]string, error) {
+func (s *Server) controlNewSessionArgs(
+	opts ControlNewSessionOptions,
+	nonce string,
+) ([]string, error) {
 	flags, err := s.controlFlags(opts.Control)
 	if err != nil {
 		return nil, err
@@ -744,7 +796,12 @@ func (s *Server) controlNewSessionArgs(opts ControlNewSessionOptions, nonce stri
 	return append(s.controlRootArgs(opts.Control), args...), nil
 }
 
-func (s *Server) setupControlProcess(connCtx context.Context, c *Connection, args []string, cancel context.CancelCauseFunc) error {
+func (s *Server) setupControlProcess(
+	connCtx context.Context,
+	c *Connection,
+	args []string,
+	cancel context.CancelCauseFunc,
+) error {
 	c.cmd = s.runner.command(connCtx, args)
 
 	if c.opts.NoEcho {
@@ -771,7 +828,10 @@ func (s *Server) setupControlProcess(connCtx context.Context, c *Connection, arg
 		c.cmd.Stdin = slave
 		c.cmd.Stdout = slave
 		c.cmd.Stderr = errChild
-		c.diagnostics = newBuffer(s.config.Limits.OutputBytes, func() { c.stop(ErrOutputLimit, false) })
+		c.diagnostics = newBuffer(
+			s.config.Limits.OutputBytes,
+			func() { c.stop(ErrOutputLimit, false) },
+		)
 
 		if err = c.cmd.Start(); err != nil {
 			_ = master.Close()
@@ -861,7 +921,10 @@ func (s *Server) validateOpenControl(ctx context.Context, id SessionID) error {
 	}
 
 	if s.conn != nil || s.bound != nil {
-		return unsupportedControl("open control connection on control-bound server", ErrTransportUnsupported)
+		return unsupportedControl(
+			"open control connection on control-bound server",
+			ErrTransportUnsupported,
+		)
 	}
 
 	if !id.Valid() {

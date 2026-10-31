@@ -24,7 +24,8 @@ const (
 )
 
 const (
-	// CommandLineActionDefault represents tmux invoked without a command or root action flag (runs default client action).
+	// CommandLineActionDefault represents tmux invoked without a command or root action flag (runs default client
+	// action).
 	CommandLineActionDefault CommandLineAction = iota
 
 	// CommandLineActionCommand represents tmux invoked with one or more subcommands.
@@ -72,11 +73,14 @@ type (
 	}
 
 	// RunOptions configures raw command execution against a tmux server endpoint.
+	//
+	//exhaustruct:optional
 	RunOptions struct {
 		// Start controls whether tmux is permitted to spawn a new server daemon if none is listening.
 		// When [StartPolicyAllowStart], the -N flag is omitted, allowing tmux to auto-spawn a daemon.
 		// When [StartPolicyExistingOnly], the -N flag is emitted to prevent daemon auto-spawn.
-		// Subprocess servers from a connection ([Connection.SubprocessServer]) always forbid daemon auto-spawn regardless of this setting.
+		// Subprocess servers from a connection ([Connection.SubprocessServer]) always forbid daemon auto-spawn
+		// regardless of this setting.
 		Start StartPolicy
 
 		// Input supplies standard input bytes for execution. A nil slice leaves stdin detached;
@@ -91,13 +95,15 @@ type (
 	// ParsedCommandLine captures faithfully parsed root configuration settings,
 	// action kind, and command sequence from native tmux command-line arguments.
 	ParsedCommandLine struct {
-		// Config contains the parsed root configuration (socket, config file, UTF-8, colors, features, logging, login shell).
+		// Config contains the parsed root configuration (socket, config file, UTF-8, colors, features, logging, login
+		// shell).
 		Config Config
 
 		// Action indicates the kind of root action requested.
 		Action CommandLineAction
 
-		// Commands contains the parsed command sequence when Action is CommandLineActionCommand or CommandLineActionControl.
+		// Commands contains the parsed command sequence when Action is CommandLineActionCommand or
+		// CommandLineActionControl.
 		Commands CommandSequence
 
 		// ShellCommand contains the shell script when Action is CommandLineActionShell (-c flag).
@@ -106,7 +112,8 @@ type (
 		// ControlNoEcho indicates whether -CC (control mode with echo disabled) was specified.
 		ControlNoEcho bool
 
-		// StartPolicy reflects whether -N was specified on the command line ([StartPolicyExistingOnly]) or omitted ([StartPolicyAllowStart]).
+		// StartPolicy reflects whether -N was specified on the command line ([StartPolicyExistingOnly]) or omitted
+		// ([StartPolicyAllowStart]).
 		StartPolicy StartPolicy
 	}
 
@@ -234,18 +241,9 @@ func ParseSequence(text string) (CommandSequence, error) {
 func ParseCommandLine(args []string) (ParsedCommandLine, error) {
 	s := rawParseState{
 		cfg: Config{
-			Binary:           "",
-			SocketPath:       "",
-			SocketName:       "",
-			ConfigFile:       "",
-			Env:              nil,
-			Dir:              "",
-			Limits:           DefaultLimits(),
-			UTF8:             UTF8Default,
-			Colors256:        false,
-			TerminalFeatures: nil,
-			LogLevel:         LogLevelNone,
-			LoginShell:       false,
+			Limits:   DefaultLimits(),
+			UTF8:     UTF8Default,
+			LogLevel: LogLevelNone,
 		},
 		action:       CommandLineActionDefault,
 		shellCmd:     "",
@@ -370,7 +368,13 @@ func extractFlagVal(ch rune, remaining string, args []string, i int) (string, in
 	return val, nextI, nil
 }
 
-func applyValuedFlag(ch rune, remaining string, args []string, i int, s *rawParseState) (int, error) {
+func applyValuedFlag(
+	ch rune,
+	remaining string,
+	args []string,
+	i int,
+	s *rawParseState,
+) (int, error) {
 	val, nextI, err := extractFlagVal(ch, remaining, args, i)
 	if err != nil {
 		return i, err
@@ -423,7 +427,8 @@ func applyVerbosityAndPolicy(s *rawParseState) {
 		s.cfg.LogLevel = LogLevelNone
 	}
 
-	if s.controlCount > 0 && s.action != CommandLineActionHelp && s.action != CommandLineActionVersion {
+	if s.controlCount > 0 && s.action != CommandLineActionHelp &&
+		s.action != CommandLineActionVersion {
 		s.action = CommandLineActionControl
 	}
 }
@@ -656,7 +661,9 @@ func writeNodes(w io.Writer, nodes []wireNode) error {
 	for i, n := range nodes {
 		if i > 0 {
 			if _, err := io.WriteString(w, " ; "); err != nil {
-				return err //nolint:wrapcheck // writeNodes writes directly to io.Writer and propagates underlying writer errors
+				// writeNodes writes directly to io.Writer and propagates underlying writer errors
+				//nolint:wrapcheck // Underlying writer errors are propagated.
+				return err
 			}
 		}
 
@@ -725,21 +732,48 @@ func (p plan) argv() ([]string, error) {
 // Over control mode, use [Connection.SubprocessServer] instead (returns [ErrTransportUnsupported]).
 func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 	if s == nil || s.runner == nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: ErrInvalidHandle}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     ErrInvalidHandle,
+		}
 	}
 
 	if s.conn != nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err: unsupportedControl(
+				"raw execution over control transport",
+				ErrTransportUnsupported,
+			),
+		}
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 	defer op.close()
 
 	if !c.Valid() {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: invalid("command")}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     invalid("command"),
+		}
 	}
 
 	return s.execute(opCtx, op, plainPlan(c), nil, nil)
@@ -752,16 +786,37 @@ func (s *Server) Run(ctx context.Context, c Command) (Result, error) {
 // Stdout and Stderr contain the combined output of all executed commands.
 func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Result, error) {
 	if s == nil || s.runner == nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: ErrInvalidHandle}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     ErrInvalidHandle,
+		}
 	}
 
 	if s.conn != nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err: unsupportedControl(
+				"raw execution over control transport",
+				ErrTransportUnsupported,
+			),
+		}
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 	defer op.close()
 
@@ -774,7 +829,13 @@ func (s *Server) RunSequence(ctx context.Context, sequence CommandSequence) (Res
 
 	for _, c := range commands {
 		if !c.Valid() {
-			return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: invalid("command")}
+			return failedResult(), &CommandError{
+				Command: "sequence",
+				Result:  failedResult(),
+				Outcome: notSentOutcome(),
+				Timeout: TimeoutSourceNone,
+				Err:     invalid("command"),
+			}
 		}
 
 		if commandStartsServer(c.name) {
@@ -805,26 +866,59 @@ func (s *Server) rawAllowStart(start StartPolicy) (bool, error) {
 // Fails with [ErrTransportUnsupported] over control mode.
 func (s *Server) RunWith(ctx context.Context, c Command, opts RunOptions) (Result, error) {
 	if s == nil || s.runner == nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: ErrInvalidHandle}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     ErrInvalidHandle,
+		}
 	}
 
 	if s.conn != nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err: unsupportedControl(
+				"raw execution over control transport",
+				ErrTransportUnsupported,
+			),
+		}
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 	defer op.close()
 
 	if !c.Valid() {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: invalid("command")}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     invalid("command"),
+		}
 	}
 
 	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
-		return failedResult(), &CommandError{Command: c.name, Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: c.name,
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 
 	p := plan{nodes: []wireNode{leaf(c)}, mode: replyRaw, allowStart: allowStart}
@@ -836,18 +930,43 @@ func (s *Server) RunWith(ctx context.Context, c Command, opts RunOptions) (Resul
 //
 // Start policy is controlled explicitly by o.Start rather than inferred from command names.
 // Fails with [ErrTransportUnsupported] over control mode.
-func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, opts RunOptions) (Result, error) {
+func (s *Server) RunSequenceWith(
+	ctx context.Context,
+	sequence CommandSequence,
+	opts RunOptions,
+) (Result, error) {
 	if s == nil || s.runner == nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: ErrInvalidHandle}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     ErrInvalidHandle,
+		}
 	}
 
 	if s.conn != nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: unsupportedControl("raw execution over control transport", ErrTransportUnsupported)}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err: unsupportedControl(
+				"raw execution over control transport",
+				ErrTransportUnsupported,
+			),
+		}
 	}
 
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 	defer op.close()
 
@@ -858,14 +977,26 @@ func (s *Server) RunSequenceWith(ctx context.Context, sequence CommandSequence, 
 
 	allowStart, err := s.rawAllowStart(opts.Start)
 	if err != nil {
-		return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: err}
+		return failedResult(), &CommandError{
+			Command: "sequence",
+			Result:  failedResult(),
+			Outcome: notSentOutcome(),
+			Timeout: TimeoutSourceNone,
+			Err:     err,
+		}
 	}
 
 	p := plan{nodes: nil, mode: replyRaw, allowStart: allowStart}
 
 	for _, c := range commands {
 		if !c.Valid() {
-			return failedResult(), &CommandError{Command: "sequence", Result: failedResult(), Outcome: notSentOutcome(), Timeout: TimeoutSourceNone, Err: invalid("command")}
+			return failedResult(), &CommandError{
+				Command: "sequence",
+				Result:  failedResult(),
+				Outcome: notSentOutcome(),
+				Timeout: TimeoutSourceNone,
+				Err:     invalid("command"),
+			}
 		}
 
 		p.nodes = append(p.nodes, leaf(c))

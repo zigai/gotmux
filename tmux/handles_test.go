@@ -41,14 +41,31 @@ func encodeTestPaneRecord(s *Server, id string) []byte {
 		m[f] = "0"
 	}
 
-	for _, f := range []string{"pane_title", "pane_current_path", "pane_current_command", "pane_tty", "pane_dead_status", "pane_mode", "selection_present"} {
+	for _, f := range []string{
+		"pane_title",
+		"pane_current_path",
+		"pane_current_command",
+		"pane_tty",
+		"pane_dead_status",
+		"pane_mode",
+		"selection_present",
+	} {
 		m[f] = ""
 	}
 
 	maps.Copy(m, map[string]string{
-		"pid": "42", "start_time": "100", "socket_path": s.endpoint.String(), "version": "3.6",
-		"pane_id": id, "window_id": "@2", "session_id": "$0", "session_name": "test", "window_name": "win",
-		"pane_active": "1", "pane_width": "80", "pane_height": "24",
+		"pid":          "42",
+		"start_time":   "100",
+		"socket_path":  s.endpoint.String(),
+		"version":      "3.6",
+		"pane_id":      id,
+		"window_id":    "@2",
+		"session_id":   "$0",
+		"session_name": "test",
+		"window_name":  "win",
+		"pane_active":  "1",
+		"pane_width":   "80",
+		"pane_height":  "24",
 	})
 
 	values := make([]string, len(fields))
@@ -76,7 +93,11 @@ func TestUnprobedHandleInfo(t *testing.T) {
 	writeMockResponse(t, response, encodeTestPaneRecord(s, "%7"))
 
 	if _, err = p.Info(context.Background()); err != nil {
-		t.Fatalf("valid unprobed handle Info failed: %v (ErrServerChanged=%t)", err, errors.Is(err, ErrServerChanged))
+		t.Fatalf(
+			"valid unprobed handle Info failed: %v (ErrServerChanged=%t)",
+			err,
+			errors.Is(err, ErrServerChanged),
+		)
 	}
 }
 
@@ -164,7 +185,11 @@ func TestUnprobedHandleSplit(t *testing.T) {
 	}
 
 	if err != nil {
-		t.Fatalf("split dispatched and valid creation reply supplied, but returned error: %v (ErrServerChanged=%t)", err, errors.Is(err, ErrServerChanged))
+		t.Fatalf(
+			"split dispatched and valid creation reply supplied, but returned error: %v (ErrServerChanged=%t)",
+			err,
+			errors.Is(err, ErrServerChanged),
+		)
 	}
 
 	if child.ID() != "%8" {
@@ -212,7 +237,18 @@ func TestWindowSelect(t *testing.T) {
 		t.Fatalf("Window.Select failed: %v", err)
 	}
 
-	if got, want := dispatchedCommand(t, s, log), []string{"select-window", "-t", "@1"}; !slices.Equal(got, want) {
+	if got, want := dispatchedCommand(
+		t,
+		s,
+		log,
+	), []string{
+		"select-window",
+		"-t",
+		"@1",
+	}; !slices.Equal(
+		got,
+		want,
+	) {
 		t.Fatalf("dispatched %q, want %q", got, want)
 	}
 }
@@ -239,7 +275,18 @@ func TestBufferHelpers(t *testing.T) {
 		t.Fatalf("Pane.Paste failed: %v", err)
 	}
 
-	if got, want := dispatchedCommand(t, s, log), []string{"paste-buffer", "-t", "%1"}; !slices.Equal(got, want) {
+	if got, want := dispatchedCommand(
+		t,
+		s,
+		log,
+	), []string{
+		"paste-buffer",
+		"-t",
+		"%1",
+	}; !slices.Equal(
+		got,
+		want,
+	) {
 		t.Fatalf("dispatched %q, want %q", got, want)
 	}
 }
@@ -256,12 +303,32 @@ func TestEqualRequiresEveryIdentityField(t *testing.T) {
 		equal  bool
 	}{
 		{"identical", func(i ServerIdentity) ServerIdentity { return i }, true},
-		{"same start instant in another location", func(i ServerIdentity) ServerIdentity { i.Started = i.Started.In(time.FixedZone("x", 3600)); return i }, true},
-		{"endpoint", func(i ServerIdentity) ServerIdentity { i.Endpoint = other.Endpoint; return i }, false},
-		{"reported socket", func(i ServerIdentity) ServerIdentity { i.ReportedSocket += "-other"; return i }, false},
+		{
+			"same start instant in another location",
+			func(i ServerIdentity) ServerIdentity { i.Started = i.Started.In(time.FixedZone("x", 3600)); return i },
+			true,
+		},
+		{
+			"endpoint",
+			func(i ServerIdentity) ServerIdentity { i.Endpoint = other.Endpoint; return i },
+			false,
+		},
+		{
+			"reported socket",
+			func(i ServerIdentity) ServerIdentity { i.ReportedSocket += "-other"; return i },
+			false,
+		},
 		{"pid", func(i ServerIdentity) ServerIdentity { i.PID++; return i }, false},
-		{"start time", func(i ServerIdentity) ServerIdentity { i.Started = i.Started.Add(time.Second); return i }, false},
-		{"control generation", func(i ServerIdentity) ServerIdentity { i.Generation++; return i }, false},
+		{
+			"start time",
+			func(i ServerIdentity) ServerIdentity { i.Started = i.Started.Add(time.Second); return i },
+			false,
+		},
+		{
+			"control generation",
+			func(i ServerIdentity) ServerIdentity { i.Generation++; return i },
+			false,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -271,7 +338,9 @@ func TestEqualRequiresEveryIdentityField(t *testing.T) {
 			}
 
 			a := Pane{h: s.newHandle("%7", ObjectKindPane, base)}
-			if got := a.Equal(Pane{h: s.newHandle("%7", ObjectKindPane, changed)}); got != tc.equal {
+			if got := a.Equal(
+				Pane{h: s.newHandle("%7", ObjectKindPane, changed)},
+			); got != tc.equal {
 				t.Fatalf("Pane.Equal = %v, want %v", got, tc.equal)
 			}
 		})
@@ -346,9 +415,18 @@ func TestOperationErrorNamesCalledMethod(t *testing.T) {
 		{"Session.Rename", func() error { return session.Rename(ctx, "renamed") }},
 		{"Pane.Info", func() error { _, err := pane.InfoWith(ctx, noQuery); return err }},
 		{"Client.Info", func() error { _, err := client.Info(ctx); return err }},
-		{"SessionOptions.SetBaseIndex", func() error { return session.Options().SetBaseIndex(ctx, 1) }},
-		{"SessionOptions.SetHistoryLimit", func() error { return session.Options().SetHistoryLimit(ctx, -1) }},
-		{"EnvironmentScope.Unset", func() error { return session.Environment().Unset(ctx, "invalid=name") }},
+		{
+			"SessionOptions.SetBaseIndex",
+			func() error { return session.Options().SetBaseIndex(ctx, 1) },
+		},
+		{
+			"SessionOptions.SetHistoryLimit",
+			func() error { return session.Options().SetHistoryLimit(ctx, -1) },
+		},
+		{
+			"EnvironmentScope.Unset",
+			func() error { return session.Environment().Unset(ctx, "invalid=name") },
+		},
 	}
 
 	for _, tt := range tests {

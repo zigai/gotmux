@@ -8,7 +8,9 @@ import (
 )
 
 func TestParseShellEnvironmentDecodesEscapedMultilineValues(t *testing.T) {
-	data := []byte("A=\"one\ntwo=2\n-B\"; export A;\nunset C;\nD=\"q\\\" d\\$ t\\` s\\\\\"; export D;\nE=\"\"; export E;\n")
+	data := []byte(
+		"A=\"one\ntwo=2\n-B\"; export A;\nunset C;\nD=\"q\\\" d\\$ t\\` s\\\\\"; export D;\nE=\"\"; export E;\n",
+	)
 
 	got, err := parseShellEnvironment(data, true)
 	if err != nil {
@@ -16,9 +18,26 @@ func TestParseShellEnvironmentDecodesEscapedMultilineValues(t *testing.T) {
 	}
 
 	want := []EnvironmentEntry{
-		{Name: "A", Value: EnvironmentValue{Value: PresentValue("one\ntwo=2\n-B"), Unset: false, Hidden: true}},
-		{Name: "C", Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: true}},
-		{Name: "D", Value: EnvironmentValue{Value: PresentValue("q\" d$ t` s\\"), Unset: false, Hidden: true}},
+		{
+			Name: "A",
+			Value: EnvironmentValue{
+				Value:  PresentValue("one\ntwo=2\n-B"),
+				Unset:  false,
+				Hidden: true,
+			},
+		},
+		{
+			Name:  "C",
+			Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: true},
+		},
+		{
+			Name: "D",
+			Value: EnvironmentValue{
+				Value:  PresentValue("q\" d$ t` s\\"),
+				Unset:  false,
+				Hidden: true,
+			},
+		},
 		{Name: "E", Value: EnvironmentValue{Value: PresentValue(""), Unset: false, Hidden: true}},
 	}
 
@@ -28,7 +47,9 @@ func TestParseShellEnvironmentDecodesEscapedMultilineValues(t *testing.T) {
 }
 
 func TestParseShellEnvironmentAcceptsInheritedNames(t *testing.T) {
-	data := []byte("BASH_FUNC_x%%=\"() { :; }\"; export BASH_FUNC_x%%;\nunset A-B;\n1A=\"v\"; export 1A;\n")
+	data := []byte(
+		"BASH_FUNC_x%%=\"() { :; }\"; export BASH_FUNC_x%%;\nunset A-B;\n1A=\"v\"; export 1A;\n",
+	)
 
 	got, err := parseShellEnvironment(data, false)
 	if err != nil {
@@ -36,9 +57,18 @@ func TestParseShellEnvironmentAcceptsInheritedNames(t *testing.T) {
 	}
 
 	want := []EnvironmentEntry{
-		{Name: "BASH_FUNC_x%%", Value: EnvironmentValue{Value: PresentValue("() { :; }"), Unset: false, Hidden: false}},
-		{Name: "A-B", Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: false}},
-		{Name: "1A", Value: EnvironmentValue{Value: PresentValue("v"), Unset: false, Hidden: false}},
+		{
+			Name:  "BASH_FUNC_x%%",
+			Value: EnvironmentValue{Value: PresentValue("() { :; }"), Unset: false, Hidden: false},
+		},
+		{
+			Name:  "A-B",
+			Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: false},
+		},
+		{
+			Name:  "1A",
+			Value: EnvironmentValue{Value: PresentValue("v"), Unset: false, Hidden: false},
+		},
 	}
 
 	if diff := cmp.Diff(want, got, cmp.AllowUnexported(PresentValue(""))); diff != "" {

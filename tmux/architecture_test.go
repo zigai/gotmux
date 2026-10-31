@@ -18,7 +18,10 @@ func TestPackageArchitectureEnforcement(t *testing.T) {
 
 	t.Run("Rule1_NoTmuxtestInProduction", func(t *testing.T) { checkProductionImports(t, root) })
 	t.Run("Rule2_NoCircularInternalImports", func(t *testing.T) { checkCircularImports(t, root) })
-	t.Run("Rule4_NoIntegrationTestsInTmuxPackage", func(t *testing.T) { checkNoIntegrationInTmux(t, root) })
+	t.Run(
+		"Rule4_NoIntegrationTestsInTmuxPackage",
+		func(t *testing.T) { checkNoIntegrationInTmux(t, root) },
+	)
 }
 
 func checkProductionImports(t *testing.T, root string) {
@@ -93,7 +96,8 @@ func collectProductionImports(t *testing.T, dir string) []string {
 	var imports []string
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
+			strings.HasSuffix(entry.Name(), "_test.go") {
 			continue
 		}
 

@@ -78,21 +78,20 @@ func NewServer(tb testing.TB) *tmux.Server {
 		locale = "en_US.UTF-8"
 	}
 
-	env := []string{"PATH=" + os.Getenv("PATH"), "HOME=" + dir, "SHELL=/bin/sh", "TERM=xterm-256color", "LC_ALL=" + locale}
+	env := []string{
+		"PATH=" + os.Getenv("PATH"),
+		"HOME=" + dir,
+		"SHELL=/bin/sh",
+		"TERM=xterm-256color",
+		"LC_ALL=" + locale,
+	}
 
 	server, err = tmux.New(tmux.Config{
-		Binary:           binary,
-		SocketPath:       filepath.Join(dir, "s"),
-		SocketName:       "",
-		ConfigFile:       config,
-		Env:              env,
-		Dir:              dir,
-		Limits:           tmux.Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
-		UTF8:             tmux.UTF8Default,
-		Colors256:        false,
-		TerminalFeatures: nil,
-		LogLevel:         tmux.LogLevelNone,
-		LoginShell:       false,
+		Binary:     binary,
+		SocketPath: filepath.Join(dir, "s"),
+		ConfigFile: config,
+		Env:        env,
+		Dir:        dir,
 	})
 	if err != nil {
 		tb.Fatal(err)
@@ -103,14 +102,8 @@ func NewServer(tb testing.TB) *tmux.Server {
 
 	session, err := server.NewSession(ctx, tmux.NewSessionOptions{
 		Name:    "fixture",
-		Dir:     "",
-		Window:  "",
 		Program: tmux.Exec("/bin/sh"),
-		Env:     nil,
-		TmuxEnv: nil,
 		Size:    tmux.Size{Width: defaultWidth, Height: defaultHeight},
-		Start:   tmux.StartPolicyAllowStart,
-		Group:   "",
 	})
 	if session.Valid() {
 		identity = tmux.PresentValue(session.ServerIdentity())
@@ -127,7 +120,12 @@ func NewServer(tb testing.TB) *tmux.Server {
 	return server
 }
 
-func cleanupDaemon(tb testing.TB, server *tmux.Server, identity tmux.Value[tmux.ServerIdentity], dir string) {
+func cleanupDaemon(
+	tb testing.TB,
+	server *tmux.Server,
+	identity tmux.Value[tmux.ServerIdentity],
+	dir string,
+) {
 	tb.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), cleanupTimeout)
@@ -159,7 +157,9 @@ func cleanupDaemon(tb testing.TB, server *tmux.Server, identity tmux.Value[tmux.
 func fixtureDirectory(tb testing.TB) string {
 	tb.Helper()
 	// A caller's TMPDIR and test name can exceed the Unix socket path limit.
-	dir, err := os.MkdirTemp("/tmp", "tg-") //nolint:usetesting // Unix sockets require a short path independent of TMPDIR; Cleanup removes it; tested on the Go 1.26 baseline.
+	// Unix sockets require a short path independent of TMPDIR; Cleanup removes it; tested on the Go 1.26 baseline.
+	//nolint:usetesting // See evidence above.
+	dir, err := os.MkdirTemp("/tmp", "tg-")
 	if err != nil {
 		tb.Fatal(err)
 	}

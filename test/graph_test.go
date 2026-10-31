@@ -50,7 +50,11 @@ func assertGraph(t *testing.T, ctx context.Context, server *tmux.Server, want ma
 	}
 }
 
-func graphWindow(t *testing.T, ctx context.Context, session tmux.Session) (tmux.WindowLink, tmux.Pane) {
+func graphWindow(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+) (tmux.WindowLink, tmux.Pane) {
 	t.Helper()
 
 	var options tmux.NewWindowOptions
@@ -91,7 +95,8 @@ func TestIntegrationUnprobedHandleLists(t *testing.T) {
 	}
 
 	zero := 0
-	if _, err := second.Window().Link(ctx, other, tmux.LinkOptions{Index: &zero, Replace: true}); err != nil {
+	if _, err := second.Window().
+		Link(ctx, other, tmux.LinkOptions{Index: &zero, Replace: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -109,11 +114,31 @@ func TestIntegrationUnprobedHandleLists(t *testing.T) {
 		name          string
 		probed, found func() ([]string, error)
 	}{
-		{"Session.Windows", func() ([]string, error) { return linkKeys(session.Windows(ctx)) }, func() ([]string, error) { return linkKeys(unprobedSession.Windows(ctx)) }},
-		{"Session.WindowInfos", func() ([]string, error) { return windowInfoKeys(session.WindowInfos(ctx)) }, func() ([]string, error) { return windowInfoKeys(unprobedSession.WindowInfos(ctx)) }},
-		{"Session.Panes", func() ([]string, error) { return paneKeys(session.Panes(ctx)) }, func() ([]string, error) { return paneKeys(unprobedSession.Panes(ctx)) }},
-		{"Window.Links", func() ([]string, error) { return linkKeys(second.Window().Links(ctx)) }, func() ([]string, error) { return linkKeys(unprobedWindow.Links(ctx)) }},
-		{"Window.Panes", func() ([]string, error) { return paneKeys(second.Window().Panes(ctx)) }, func() ([]string, error) { return paneKeys(unprobedWindow.Panes(ctx)) }},
+		{
+			"Session.Windows",
+			func() ([]string, error) { return linkKeys(session.Windows(ctx)) },
+			func() ([]string, error) { return linkKeys(unprobedSession.Windows(ctx)) },
+		},
+		{
+			"Session.WindowInfos",
+			func() ([]string, error) { return windowInfoKeys(session.WindowInfos(ctx)) },
+			func() ([]string, error) { return windowInfoKeys(unprobedSession.WindowInfos(ctx)) },
+		},
+		{
+			"Session.Panes",
+			func() ([]string, error) { return paneKeys(session.Panes(ctx)) },
+			func() ([]string, error) { return paneKeys(unprobedSession.Panes(ctx)) },
+		},
+		{
+			"Window.Links",
+			func() ([]string, error) { return linkKeys(second.Window().Links(ctx)) },
+			func() ([]string, error) { return linkKeys(unprobedWindow.Links(ctx)) },
+		},
+		{
+			"Window.Panes",
+			func() ([]string, error) { return paneKeys(second.Window().Panes(ctx)) },
+			func() ([]string, error) { return paneKeys(unprobedWindow.Panes(ctx)) },
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assertSameListing(t, tc.probed, tc.found)
@@ -125,7 +150,11 @@ func TestIntegrationUnprobedHandleLists(t *testing.T) {
 	}
 }
 
-func assertSameListing(t *testing.T, probed, unprobed func() ([]string, error)) {
+func assertSameListing(
+	t *testing.T,
+	probed func() ([]string, error),
+	unprobed func() ([]string, error),
+) {
 	t.Helper()
 
 	want, err := probed()
@@ -146,13 +175,20 @@ func assertSameListing(t *testing.T, probed, unprobed func() ([]string, error)) 
 func linkKeys(links []tmux.WindowLink, err error) ([]string, error) {
 	keys := make([]string, 0, len(links))
 	for _, l := range links {
-		keys = append(keys, string(l.Session().ID())+":"+strconv.Itoa(l.Index())+"="+string(l.Window().ID()))
+		keys = append(
+			keys,
+			string(l.Session().ID())+":"+strconv.Itoa(l.Index())+"="+string(l.Window().ID()),
+		)
 	}
 
 	return keys, err
 }
 
-func windowInfoKeys(windows []tmux.WindowInfo, links []tmux.WindowLinkInfo, err error) ([]string, error) {
+func windowInfoKeys(
+	windows []tmux.WindowInfo,
+	links []tmux.WindowLinkInfo,
+	err error,
+) ([]string, error) {
 	keys := make([]string, 0, len(windows)+len(links))
 	for _, w := range windows {
 		keys = append(keys, string(w.ID))
@@ -224,7 +260,13 @@ func TestIntegrationNewSessionGroupUsesExactName(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "joined", Group: "dev"}); !errors.Is(err, tmux.ErrNotFound) {
+	if _, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "joined", Group: "dev"},
+	); !errors.Is(
+		err,
+		tmux.ErrNotFound,
+	) {
 		t.Fatalf("Group dev matched development: %v", err)
 	}
 
@@ -301,7 +343,8 @@ func TestIntegrationGraphUnlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !shared.ServerIdentity().Equal(other.ServerIdentity()) || !shared.Window().Equal(original.Window()) {
+	if !shared.ServerIdentity().Equal(other.ServerIdentity()) ||
+		!shared.Window().Equal(original.Window()) {
 		t.Fatalf("returned link lost window provenance: %+v", shared)
 	}
 
@@ -463,7 +506,8 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 			otherBefore := graphState(t, ctx, other)
 			// The foreign ID must name a pane in a different source window,
 			// so an incorrectly routed mutation changes the graph.
-			if collision, ok := before[string(target.ID())]; !ok || collision == before[string(source.ID())] {
+			if collision, ok := before[string(target.ID())]; !ok ||
+				collision == before[string(source.ID())] {
 				t.Fatal("fixture lacks a cross-window pane ID collision")
 			}
 
@@ -476,7 +520,9 @@ func TestIntegrationGraphCrossServer(t *testing.T) {
 				name string
 				run  func() error
 			}{
-				{name: "swap", run: func() error { return source.Swap(ctx, target, tmux.SwapPaneOptions{Select: false}) }},
+				{name: "swap", run: func() error {
+					return source.Swap(ctx, target, tmux.SwapPaneOptions{Select: false})
+				}},
 				{name: "join", run: func() error { return source.Join(ctx, target, options) }},
 			} {
 				t.Run(action.name, func(t *testing.T) {
@@ -504,14 +550,17 @@ func paneHandleFor(t *testing.T, server *tmux.Server, pane tmux.Pane, unprobed b
 	return handle
 }
 
-func assertRejectedBeforeSend(t *testing.T, err, want error) {
+func assertRejectedBeforeSend(t *testing.T, err error, want error) {
 	t.Helper()
 
 	if !errors.Is(err, want) {
 		t.Errorf("mutation error: %v, want %v", err, want)
 	}
 
-	if op, ok := errors.AsType[*tmux.OperationError](err); !ok || op.Outcome.Effect != tmux.EffectNotSent {
+	if op, ok := errors.AsType[*tmux.OperationError](
+		err,
+	); !ok ||
+		op.Outcome.Effect != tmux.EffectNotSent {
 		t.Errorf("mutation was not rejected before send: %v", err)
 	}
 }
@@ -562,7 +611,14 @@ func TestIntegrationGraphHandleLifetimes(t *testing.T) {
 	}
 }
 
-func lifetimeTarget(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session, connection *tmux.Connection, name string) *tmux.Server {
+func lifetimeTarget(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+	connection *tmux.Connection,
+	name string,
+) *tmux.Server {
 	t.Helper()
 
 	switch name {
@@ -673,7 +729,13 @@ func TestIntegrationResolveProvenanceAndMutations(t *testing.T) {
 	assertDetachedClientGone(t, ctx, server, conn, resClient)
 }
 
-func assertForeignTargetsRefused(t *testing.T, ctx context.Context, client tmux.Client, window tmux.Window, foreignSession tmux.Session) {
+func assertForeignTargetsRefused(
+	t *testing.T,
+	ctx context.Context,
+	client tmux.Client,
+	window tmux.Window,
+	foreignSession tmux.Session,
+) {
 	t.Helper()
 
 	var swOpts tmux.SwitchOptions
@@ -682,12 +744,25 @@ func assertForeignTargetsRefused(t *testing.T, ctx context.Context, client tmux.
 	}
 
 	var linkOpts tmux.LinkOptions
-	if _, err := window.Link(ctx, foreignSession, linkOpts); !errors.Is(err, tmux.ErrInvalidHandle) {
+	if _, err := window.Link(
+		ctx,
+		foreignSession,
+		linkOpts,
+	); !errors.Is(
+		err,
+		tmux.ErrInvalidHandle,
+	) {
 		t.Fatalf("cross-server link expected ErrInvalidHandle, got: %v", err)
 	}
 }
 
-func assertDetachedClientGone(t *testing.T, ctx context.Context, server *tmux.Server, conn *tmux.Connection, client tmux.Client) {
+func assertDetachedClientGone(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	conn *tmux.Connection,
+	client tmux.Client,
+) {
 	t.Helper()
 
 	if err := client.Detach(ctx); err != nil {
@@ -742,7 +817,14 @@ type resolvedHandle[H any] interface {
 	ServerIdentity() tmux.ServerIdentity
 }
 
-func assertResolved[H resolvedHandle[H]](t *testing.T, kind string, got H, ok bool, want H, identity tmux.ServerIdentity) {
+func assertResolved[H resolvedHandle[H]](
+	t *testing.T,
+	kind string,
+	got H,
+	ok bool,
+	want H,
+	identity tmux.ServerIdentity,
+) {
 	t.Helper()
 
 	if !ok || !got.Valid() || !got.Equal(want) || !got.ServerIdentity().Equal(identity) {
@@ -783,10 +865,14 @@ func readFixture(t *testing.T) (*tmux.Server, tmux.Session, context.Context, tmu
 	}
 
 	return server, session, ctx, tmux.ReadRequest{
-		Sessions: tmux.PresentValue(tmux.QueryOptions{ExtraFields: []string{"session_last_attached"}}),
-		Windows:  tmux.PresentValue(tmux.QueryOptions{Filter: "#{==:#{window_name},absent-window}"}),
-		Panes:    tmux.PresentValue(tmux.QueryOptions{Filter: "#{==:#{session_name},other}"}),
-		Clients:  tmux.PresentValue(tmux.QueryOptions{}),
+		Sessions: tmux.PresentValue(
+			tmux.QueryOptions{ExtraFields: []string{"session_last_attached"}},
+		),
+		Windows: tmux.PresentValue(
+			tmux.QueryOptions{Filter: "#{==:#{window_name},absent-window}"},
+		),
+		Panes:   tmux.PresentValue(tmux.QueryOptions{Filter: "#{==:#{session_name},other}"}),
+		Clients: tmux.PresentValue(tmux.QueryOptions{}),
 	}
 }
 
@@ -800,12 +886,27 @@ func TestIntegrationReadMatchesSeparateQueries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertSameListing(t, func() ([]string, error) { return sessionKeys(server.SessionsWith(ctx, sessionsOpts)) }, func() ([]string, error) { return sessionKeys(got.Sessions, nil) })
-	assertSameListing(t, func() ([]string, error) { return paneKeys(server.PanesWith(ctx, panesOpts)) }, func() ([]string, error) { return paneKeys(got.Panes, nil) })
+	assertSameListing(
+		t,
+		func() ([]string, error) { return sessionKeys(server.SessionsWith(ctx, sessionsOpts)) },
+		func() ([]string, error) { return sessionKeys(got.Sessions, nil) },
+	)
+	assertSameListing(
+		t,
+		func() ([]string, error) { return paneKeys(server.PanesWith(ctx, panesOpts)) },
+		func() ([]string, error) { return paneKeys(got.Panes, nil) },
+	)
 	assertRawField(t, got.Sessions, "session_last_attached")
 
-	if len(got.Panes) != 2 || len(got.Windows) != 0 || len(got.Links) != 0 || len(got.Clients) != 0 {
-		t.Fatalf("panes=%d windows=%d links=%d clients=%d, want the other session's 2 panes and empty lists", len(got.Panes), len(got.Windows), len(got.Links), len(got.Clients))
+	if len(got.Panes) != 2 || len(got.Windows) != 0 || len(got.Links) != 0 ||
+		len(got.Clients) != 0 {
+		t.Fatalf(
+			"panes=%d windows=%d links=%d clients=%d, want the other session's 2 panes and empty lists",
+			len(got.Panes),
+			len(got.Windows),
+			len(got.Links),
+			len(got.Clients),
+		)
 	}
 
 	probe, err := server.Probe(ctx)
@@ -833,8 +934,16 @@ func TestIntegrationReadOverControlMatchesSubprocess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	assertSameListing(t, func() ([]string, error) { return sessionKeys(viaSubprocess.Sessions, nil) }, func() ([]string, error) { return sessionKeys(viaControl.Sessions, nil) })
-	assertSameListing(t, func() ([]string, error) { return paneKeys(viaSubprocess.Panes, nil) }, func() ([]string, error) { return paneKeys(viaControl.Panes, nil) })
+	assertSameListing(
+		t,
+		func() ([]string, error) { return sessionKeys(viaSubprocess.Sessions, nil) },
+		func() ([]string, error) { return sessionKeys(viaControl.Sessions, nil) },
+	)
+	assertSameListing(
+		t,
+		func() ([]string, error) { return paneKeys(viaSubprocess.Panes, nil) },
+		func() ([]string, error) { return paneKeys(viaControl.Panes, nil) },
+	)
 
 	if len(viaControl.Clients) != 1 {
 		t.Fatalf("control read clients = %d, want the control client", len(viaControl.Clients))
@@ -906,7 +1015,10 @@ func TestIntegrationSessionPanesWithStaysInSession(t *testing.T) {
 		t.Fatalf("pane outside session = %v %v, want none", outside, err)
 	}
 
-	withExtra, err := session.PanesWith(ctx, tmux.QueryOptions{ExtraFields: []string{"window_active"}})
+	withExtra, err := session.PanesWith(
+		ctx,
+		tmux.QueryOptions{ExtraFields: []string{"window_active"}},
+	)
 	if err != nil || len(withExtra) == 0 {
 		t.Fatal("session panes with extra field", err)
 	}

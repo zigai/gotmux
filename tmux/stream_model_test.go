@@ -53,14 +53,36 @@ type rapidEventStreamModel struct {
 
 func newRapidEventStreamModel(rt *rapid.T) *rapidEventStreamModel {
 	_, cancel := context.WithCancelCause(context.Background())
-	opts, _ := normalizeControlOptions(ControlOptions{PaneOutput: false, NoEcho: false, Flags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, QueueDepth: 0, QueuedBytes: 0, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
+	opts, _ := normalizeControlOptions(
+		ControlOptions{
+			PaneOutput:       false,
+			NoEcho:           false,
+			Flags:            nil,
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			QueueDepth:       0,
+			QueuedBytes:      0,
+			FrameBytes:       0,
+			EventBytes:       0,
+			MaxStreams:       0,
+		},
+	)
 
-	//nolint:exhaustruct_v5 // mock Connection test fixture intentionally omits unneeded fields
-	c := &Connection{cancel: cancel, stopCh: make(chan struct{}), opts: opts, streams: map[*EventStream]struct{}{}, done: make(chan struct{})}
+	c := &Connection{
+		cancel:  cancel,
+		stopCh:  make(chan struct{}),
+		opts:    opts,
+		streams: map[*EventStream]struct{}{},
+		done:    make(chan struct{}),
+	}
 
 	life, end := context.WithCancel(context.Background())
 
-	s, err := c.Events(life, EventOptions{MaxBytes: 4096, MaxCount: 4, Overflow: OverflowPolicyFail})
+	s, err := c.Events(
+		life,
+		EventOptions{MaxBytes: 4096, MaxCount: 4, Overflow: OverflowPolicyFail},
+	)
 	if err != nil {
 		rt.Fatal(err)
 	}
@@ -83,8 +105,15 @@ func (m *rapidEventStreamModel) cleanup() {
 }
 
 func (m *rapidEventStreamModel) stepPush(step int) {
-	payload := []byte(strings.Repeat("x", rapid.IntRange(0, 32).Draw(m.rt, fmt.Sprintf("size-%d", step))))
-	event := PaneOutputEvent{eventBase: eventBase{name: "output", received: time.Now()}, PaneID: "%1", Age: UnavailableValue[time.Duration](), data: payload}
+	payload := []byte(
+		strings.Repeat("x", rapid.IntRange(0, 32).Draw(m.rt, fmt.Sprintf("size-%d", step))),
+	)
+	event := PaneOutputEvent{
+		eventBase: eventBase{name: "output", received: time.Now()},
+		PaneID:    "%1",
+		Age:       UnavailableValue[time.Duration](),
+		data:      payload,
+	}
 	m.s.push(event)
 
 	if m.terminal != nil {
@@ -225,7 +254,6 @@ func TestCmpSnapshotCloneSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//nolint:exhaustruct_v5 // testing snapshot field projection on partial test fixture
 	snapshot := Snapshot{panes: []PaneInfo{record}}
 
 	type view struct {
@@ -242,7 +270,15 @@ func TestCmpSnapshotCloneSemantics(t *testing.T) {
 		raw, _ := p.Raw("pane_title")
 		mode, _ := p.Mode.Get()
 
-		return view{p.ID, p.WindowID, p.Title, raw, mode, p.Mode.State(), p.Handle().ServerIdentity()}
+		return view{
+			p.ID,
+			p.WindowID,
+			p.Title,
+			raw,
+			mode,
+			p.Mode.State(),
+			p.Handle().ServerIdentity(),
+		}
 	}
 	want := project(record)
 

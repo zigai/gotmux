@@ -38,14 +38,26 @@ func TestDecodeReadAssignsRowsAcrossEmptyMiddleList(t *testing.T) {
 	s := localServer(t)
 	requests := readFixtureRequests(t, ObjectKindSession, ObjectKindClient, ObjectKindPane)
 
-	data := readFixtureOutput(s, readFixtureRow(requests[0]), readFixtureBoundary, readFixtureBoundary, readFixtureRow(requests[2]), readFixtureRow(requests[2]))
+	data := readFixtureOutput(
+		s,
+		readFixtureRow(requests[0]),
+		readFixtureBoundary,
+		readFixtureBoundary,
+		readFixtureRow(requests[2]),
+		readFixtureRow(requests[2]),
+	)
 
 	info, rows, err := s.decodeRead(data, true, requests)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if got := []int{len(rows[0]), len(rows[1]), len(rows[2])}; got[0] != 1 || got[1] != 0 || got[2] != 2 {
+	if got := []int{
+		len(rows[0]),
+		len(rows[1]),
+		len(rows[2]),
+	}; got[0] != 1 || got[1] != 0 ||
+		got[2] != 2 {
 		t.Fatalf("rows per request = %v, want [1 0 2]", got)
 	}
 
@@ -63,7 +75,9 @@ func TestDecodeReadRejectsMalformedOutput(t *testing.T) {
 		data []byte
 	}{
 		{"truncated before boundary", readFixtureOutput(s, readFixtureRow(requests[0]))},
-		{"extra boundary", readFixtureOutput(s, readFixtureRow(requests[0]), readFixtureBoundary, readFixtureRow(requests[1]), readFixtureBoundary)},
+		{"extra boundary", readFixtureOutput(
+			s, readFixtureRow(requests[0]), readFixtureBoundary, readFixtureRow(requests[1]), readFixtureBoundary,
+		)},
 		{"row shaped for another request", readFixtureOutput(s, readFixtureRow(requests[1]), readFixtureBoundary)},
 		{"missing identity record", []byte(readFixtureRow(requests[0]) + readFixtureBoundary)},
 	} {

@@ -87,7 +87,9 @@ func (p Program) argv() ([]string, error) {
 		// launcher forces tmux's execvp path without adding an argument to the user's
 		// executable. Shell builtins are deliberately excluded from this path below.
 		if strings.HasPrefix(p.name, "-") && !strings.Contains(p.name, "/") {
-			return nil, unsupported("zero-argument executable beginning with dash; use an explicit path")
+			return nil, unsupported(
+				"zero-argument executable beginning with dash; use an explicit path",
+			)
 		}
 		// exec with a pathname never selects a shell builtin. A bare executable name
 		// is searched by exec using PATH, not evaluated as shell text.
@@ -146,7 +148,8 @@ func envName(name string) bool {
 	}
 
 	for i, c := range []byte(name) {
-		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '_' && (i <= 0 || c < '0' || c > '9') {
+		if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && c != '_' &&
+			(i <= 0 || c < '0' || c > '9') {
 			return false
 		}
 	}
@@ -211,7 +214,9 @@ func wrapProgramEnv(program Program, env map[string]string, keys []string) ([]st
 
 	if program.kind == 1 {
 		if strings.HasPrefix(program.name, "-") && !strings.Contains(program.name, "/") {
-			return nil, unsupported("environment launcher requires an explicit path for a leading-dash executable")
+			return nil, unsupported(
+				"environment launcher requires an explicit path for a leading-dash executable",
+			)
 		}
 
 		tail := append([]string{program.name}, program.args...)

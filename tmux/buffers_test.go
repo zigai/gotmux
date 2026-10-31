@@ -38,12 +38,7 @@ func TestBufferNamesRejectLineBreaks(t *testing.T) {
 
 func TestPasteOptions(t *testing.T) {
 	flags, err := pasteFlags(PasteOptions{
-		Buffer:         "",
-		Delete:         false,
-		BracketedPaste: false,
-		ReplaceEscapes: false,
-		StripNewlines:  true,
-		Separator:      "",
+		StripNewlines: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -58,8 +53,6 @@ func TestPasteOptions(t *testing.T) {
 		Delete:         true,
 		BracketedPaste: true,
 		ReplaceEscapes: true,
-		StripNewlines:  false,
-		Separator:      "",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -94,7 +87,12 @@ func TestEmptySetBufferRejected(t *testing.T) {
 	writeMockResponse(t, response, probe)
 	marker := filepath.Join(filepath.Dir(response), "probed")
 
-	script := fmt.Sprintf("#!/bin/sh\nif [ ! -f '%s' ]; then : > '%s'; exec /bin/cat '%s'; fi\nprintf 'TGO-GUARD-1:ok\\n'\n", marker, marker, response)
+	script := fmt.Sprintf(
+		"#!/bin/sh\nif [ ! -f '%s' ]; then : > '%s'; exec /bin/cat '%s'; fi\nprintf 'TGO-GUARD-1:ok\\n'\n",
+		marker,
+		marker,
+		response,
+	)
 	if err := os.WriteFile(s.config.Binary, []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +101,14 @@ func TestEmptySetBufferRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.SetBufferWith(context.Background(), "named", nil, SetBufferOptions{Append: false}); err == nil {
-		t.Fatal("empty set-buffer accepted and acknowledged as success, although tmux leaves the old buffer unchanged")
+	if err := s.SetBufferWith(
+		context.Background(),
+		"named",
+		nil,
+		SetBufferOptions{Append: false},
+	); err == nil {
+		t.Fatal(
+			"empty set-buffer accepted and acknowledged as success, although tmux leaves the old buffer unchanged",
+		)
 	}
 }

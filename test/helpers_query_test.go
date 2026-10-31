@@ -10,7 +10,11 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-func firstWindowPane(t *testing.T, ctx context.Context, session tmux.Session) (tmux.Window, tmux.Pane) {
+func firstWindowPane(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+) (tmux.Window, tmux.Pane) {
 	t.Helper()
 
 	links, err := session.Windows(ctx)

@@ -46,6 +46,8 @@ type (
 	ArrayUpdateResult struct{ Applied []int }
 
 	// SetOptionOptions configures scalar option mutation behavior.
+	//
+	//exhaustruct:optional
 	SetOptionOptions struct {
 		// Value specifies the optional value to assign.
 		// When Value is absent ([ValueStateUnavailable]), tmux toggles flag options or sets the default.
@@ -63,6 +65,8 @@ type (
 	}
 
 	// UnsetOptionOptions configures option removal behavior.
+	//
+	//exhaustruct:optional
 	UnsetOptionOptions struct {
 		// Cascade unsets the option locally and also unsets it on any panes in the window (-U flag).
 		// In tmux, -U only applies to window/pane options.
@@ -75,7 +79,8 @@ type (
 		Name string
 
 		// Value is the string representation of the option's value.
-		// If the option has no value set (such as an empty hook definition in -H listings), Value is [ValueStateUnavailable].
+		// If the option has no value set (such as an empty hook definition in -H listings), Value is
+		// [ValueStateUnavailable].
 		Value Value[string]
 
 		// Inherited is true when the option was inherited from a parent scope (marked with '*' when -A is used).
@@ -83,6 +88,8 @@ type (
 	}
 
 	// ListOptionOptions configures option listing behavior.
+	//
+	//exhaustruct:optional
 	ListOptionOptions struct {
 		// Inherited includes inherited options from parent scopes (-A flag).
 		Inherited bool
@@ -213,7 +220,14 @@ func userOptionName(name string) bool {
 
 // Named output distinguishes scalars from arrays and rejects abbreviated names.
 // Tmux quotes string values; ParseWords preserves their bytes without evaluation.
-func (t optionTarget) readScalar(ctx context.Context, label string, op *operation, g *guard, name string, inherited bool) (Value[string], error) {
+func (t optionTarget) readScalar(
+	ctx context.Context,
+	label string,
+	op *operation,
+	g *guard,
+	name string,
+	inherited bool,
+) (Value[string], error) {
 	args := append(t.args(), "-q")
 	if inherited {
 		args = append(args, "-A")
@@ -251,7 +265,11 @@ func (t optionTarget) readScalar(ctx context.Context, label string, op *operatio
 	return PresentValue(words[1]), nil
 }
 
-func (t optionTarget) read(ctx context.Context, label string, name string) (OptionValue[string], error) {
+func (t optionTarget) read(
+	ctx context.Context,
+	label string,
+	name string,
+) (OptionValue[string], error) {
 	if !validOptionName(name) {
 		return OptionValue[string]{}, opError(label, invalid("option name"))
 	}
@@ -272,7 +290,11 @@ func (t optionTarget) read(ctx context.Context, label string, name string) (Opti
 		return OptionValue[string]{}, opError(label, err)
 	}
 
-	result := OptionValue[string]{Local: local, Effective: effective, Origin: UnavailableValue[Scope]()}
+	result := OptionValue[string]{
+		Local:     local,
+		Effective: effective,
+		Origin:    UnavailableValue[Scope](),
+	}
 	if a, ok := local.Get(); ok {
 		if b, found := effective.Get(); !found || a != b {
 			return OptionValue[string]{}, afterError(label, ErrInconsistent)
@@ -315,7 +337,12 @@ func (t optionTarget) localOrigin(name string) Value[Scope] {
 	return PresentValue(scope)
 }
 
-func (t optionTarget) setWith(ctx context.Context, label string, name string, opts SetOptionOptions) error {
+func (t optionTarget) setWith(
+	ctx context.Context,
+	label string,
+	name string,
+	opts SetOptionOptions,
+) error {
 	if !validOptionName(name) {
 		return opError(label, invalid("option name"))
 	}
@@ -355,7 +382,12 @@ func (t optionTarget) setWith(ctx context.Context, label string, name string, op
 	return opError(label, err)
 }
 
-func (t optionTarget) unsetWith(ctx context.Context, label string, name string, opts UnsetOptionOptions) error {
+func (t optionTarget) unsetWith(
+	ctx context.Context,
+	label string,
+	name string,
+	opts UnsetOptionOptions,
+) error {
 	if !validOptionName(name) {
 		return opError(label, invalid("option name"))
 	}
@@ -380,20 +412,25 @@ func (t optionTarget) unsetWith(ctx context.Context, label string, name string, 
 	return opError(label, err)
 }
 
-func (t optionTarget) set(ctx context.Context, label string, name, value string, unset bool) error {
+func (t optionTarget) set(
+	ctx context.Context,
+	label string,
+	name string,
+	value string,
+	unset bool,
+) error {
 	if unset {
-		return t.unsetWith(ctx, label, name, UnsetOptionOptions{Cascade: false})
+		return t.unsetWith(ctx, label, name, UnsetOptionOptions{})
 	}
 
-	return t.setWith(ctx, label, name, SetOptionOptions{
-		Value:        PresentValue(value),
-		Append:       false,
-		ExpandFormat: false,
-		OnlyIfUnset:  false,
-	})
+	return t.setWith(ctx, label, name, SetOptionOptions{Value: PresentValue(value)})
 }
 
-func (t optionTarget) list(ctx context.Context, label string, opts ListOptionOptions) ([]OptionEntry, error) {
+func (t optionTarget) list(
+	ctx context.Context,
+	label string,
+	opts ListOptionOptions,
+) ([]OptionEntry, error) {
 	opCtx, op, g, err := t.prepare(ctx)
 	if err != nil {
 		return nil, opError(label, err)
@@ -450,7 +487,13 @@ func (t optionTarget) list(ctx context.Context, label string, opts ListOptionOpt
 	return out, nil
 }
 
-func userSetWith(ctx context.Context, label string, t optionTarget, name string, opts SetOptionOptions) error {
+func userSetWith(
+	ctx context.Context,
+	label string,
+	t optionTarget,
+	name string,
+	opts SetOptionOptions,
+) error {
 	if !userOptionName(name) {
 		return opError(label, invalid("user option name"))
 	}
@@ -458,7 +501,13 @@ func userSetWith(ctx context.Context, label string, t optionTarget, name string,
 	return t.setWith(ctx, label, name, opts)
 }
 
-func userUnsetWith(ctx context.Context, label string, t optionTarget, name string, opts UnsetOptionOptions) error {
+func userUnsetWith(
+	ctx context.Context,
+	label string,
+	t optionTarget,
+	name string,
+	opts UnsetOptionOptions,
+) error {
 	if !userOptionName(name) {
 		return opError(label, invalid("user option name"))
 	}
@@ -466,7 +515,12 @@ func userUnsetWith(ctx context.Context, label string, t optionTarget, name strin
 	return t.unsetWith(ctx, label, name, opts)
 }
 
-func userGet(ctx context.Context, label string, t optionTarget, name string) (OptionValue[string], error) {
+func userGet(
+	ctx context.Context,
+	label string,
+	t optionTarget,
+	name string,
+) (OptionValue[string], error) {
 	if !userOptionName(name) {
 		return OptionValue[string]{}, opError(label, invalid("user option name"))
 	}
@@ -474,7 +528,14 @@ func userGet(ctx context.Context, label string, t optionTarget, name string) (Op
 	return t.read(ctx, label, name)
 }
 
-func userSet(ctx context.Context, label string, t optionTarget, name, value string, unset bool) error {
+func userSet(
+	ctx context.Context,
+	label string,
+	t optionTarget,
+	name string,
+	value string,
+	unset bool,
+) error {
 	if !userOptionName(name) {
 		return opError(label, invalid("user option name"))
 	}
@@ -482,7 +543,10 @@ func userSet(ctx context.Context, label string, t optionTarget, name, value stri
 	return t.set(ctx, label, name, value, unset)
 }
 
-func convertOption[T any](v OptionValue[string], parse func(string) (T, error)) (OptionValue[T], error) {
+func convertOption[T any](
+	v OptionValue[string],
+	parse func(string) (T, error),
+) (OptionValue[T], error) {
 	cv := func(value Value[string]) (Value[T], error) {
 		s, ok := value.Get()
 		if !ok {
@@ -604,7 +668,7 @@ func parseArrayLine(label string, line []byte, base string) (ArrayEntry, error) 
 	return ArrayEntry{Index: index, Value: words[0]}, nil
 }
 
-func arrayIndex(key, name string) (int, error) {
+func arrayIndex(key string, name string) (int, error) {
 	if !strings.HasPrefix(key, name+"[") || !strings.HasSuffix(key, "]") {
 		return 0, ErrProtocol
 	}
@@ -617,7 +681,12 @@ func arrayIndex(key, name string) (int, error) {
 	return n, nil
 }
 
-func (t optionTarget) updateArray(ctx context.Context, label string, name string, updates []ArrayUpdate) (ArrayUpdateResult, error) {
+func (t optionTarget) updateArray(
+	ctx context.Context,
+	label string,
+	name string,
+	updates []ArrayUpdate,
+) (ArrayUpdateResult, error) {
 	result := ArrayUpdateResult{Applied: []int{}}
 
 	base, _, indexed, err := parseOptionName(name)

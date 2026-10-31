@@ -50,7 +50,12 @@ IFS= read -r hold`
 	}
 
 	for _, path := range []string{dir, sentinelDir} {
-		awaitObservation(t, ctx, "receiver readiness", func() bool { _, err := os.Stat(filepath.Join(path, "ready")); return err == nil })
+		awaitObservation(
+			t,
+			ctx,
+			"receiver readiness",
+			func() bool { _, err := os.Stat(filepath.Join(path, "ready")); return err == nil },
+		)
 	}
 
 	payload := " space ' \" ; $(touch " + filepath.Join(dir, "executed") + ") #{pane_id} \\ ž "
@@ -58,14 +63,22 @@ IFS= read -r hold`
 
 	result := filepath.Join(dir, "result")
 
-	awaitObservation(t, ctx, "literal receiver completion", func() bool { _, err := os.Stat(result); return err == nil })
+	awaitObservation(
+		t,
+		ctx,
+		"literal receiver completion",
+		func() bool { _, err := os.Stat(result); return err == nil },
+	)
 
 	got, err := os.ReadFile(result)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	want := strings.Join([]string{payload, "barrier", "", "barrier", "Enter", "barrier", payload, "", "final"}, "\x00") + "\x00"
+	want := strings.Join(
+		[]string{payload, "barrier", "", "barrier", "Enter", "barrier", payload, "", "final"},
+		"\x00",
+	) + "\x00"
 	if !bytes.Equal(got, []byte(want)) {
 		t.Fatalf("pane %s received %q, want %q", pane.ID(), got, want)
 	}

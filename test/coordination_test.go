@@ -16,7 +16,13 @@ import (
 
 func TestIntegrationCoordinationWait(t *testing.T) {
 	server, _, ctx := apiFixture(t)
-	if err := server.WaitFor(context.Background(), "channel"); !errors.Is(err, tmux.ErrInvalidArgument) {
+	if err := server.WaitFor(
+		context.Background(),
+		"channel",
+	); !errors.Is(
+		err,
+		tmux.ErrInvalidArgument,
+	) {
 		t.Fatalf("deadline-free wait: %v", err)
 	}
 	// tmux retains a signal sent before a waiter, eliminating a timing race.
@@ -79,13 +85,18 @@ func TestIntegrationCoordinationCallerDeadlineBoundsWaits(t *testing.T) {
 	release := 3 * commandTimeout
 
 	short, err := tmux.New(tmux.Config{
-		Binary:           os.Getenv("TMUX_TEST_BINARY"),
-		SocketPath:       server.Endpoint().SocketPath,
-		SocketName:       "",
-		ConfigFile:       "",
-		Env:              nil,
-		Dir:              "",
-		Limits:           tmux.Limits{CommandTimeout: commandTimeout, OutputBytes: 0, InputBytes: 0, Concurrent: 0},
+		Binary:     os.Getenv("TMUX_TEST_BINARY"),
+		SocketPath: server.Endpoint().SocketPath,
+		SocketName: "",
+		ConfigFile: "",
+		Env:        nil,
+		Dir:        "",
+		Limits: tmux.Limits{
+			CommandTimeout: commandTimeout,
+			OutputBytes:    0,
+			InputBytes:     0,
+			Concurrent:     0,
+		},
 		UTF8:             tmux.UTF8Default,
 		Colors256:        false,
 		TerminalFeatures: nil,
@@ -138,7 +149,8 @@ func TestIntegrationCoordinationWaitsRefuseControlTransport(t *testing.T) {
 			err := tc.call()
 
 			var op *tmux.OperationError
-			if !errors.Is(err, tmux.ErrTransportUnsupported) || !errors.As(err, &op) || op.Outcome.Effect != tmux.EffectNotSent {
+			if !errors.Is(err, tmux.ErrTransportUnsupported) || !errors.As(err, &op) ||
+				op.Outcome.Effect != tmux.EffectNotSent {
 				t.Fatalf("got %v, want ErrTransportUnsupported with effect EffectNotSent", err)
 			}
 		})
@@ -215,7 +227,11 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	updates := []tmux.ArrayUpdate{{Index: 2, Value: "first", Unset: false}, {Index: 7, Value: "second", Unset: false}, {Index: 8, Value: "third", Unset: false}}
+	updates := []tmux.ArrayUpdate{
+		{Index: 2, Value: "first", Unset: false},
+		{Index: 7, Value: "second", Unset: false},
+		{Index: 8, Value: "third", Unset: false},
+	}
 
 	result, err := session.Options().UpdateArray(ctx, "update-environment", updates)
 	if err == nil {
@@ -232,7 +248,8 @@ func TestIntegrationArrayInterruption(t *testing.T) {
 	}
 
 	steps := failure.Outcome.Steps
-	if steps[0].Effect != tmux.EffectConfirmed || steps[1].Effect == tmux.EffectConfirmed || steps[2].Effect != tmux.EffectNotSent {
+	if steps[0].Effect != tmux.EffectConfirmed || steps[1].Effect == tmux.EffectConfirmed ||
+		steps[2].Effect != tmux.EffectNotSent {
 		t.Fatalf("partial effects: %+v", steps)
 	}
 
@@ -287,7 +304,11 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	assertUserOption(t, ctx, session, "@escaped_literal", "literal;with#{special}")
 
 	parseOnlyConfig := `set-option -t ` + string(session.ID()) + ` @parse_only "should_not_be_set"`
-	if _, err := server.SourceText(ctx, parseOnlyConfig, tmux.SourceOptions{ParseOnly: true}); err != nil {
+	if _, err := server.SourceText(
+		ctx,
+		parseOnlyConfig,
+		tmux.SourceOptions{ParseOnly: true},
+	); err != nil {
 		t.Fatalf("SourceText with ParseOnly failed: %v", err)
 	}
 
@@ -306,7 +327,11 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 	assertUserOption(t, ctx, session, "@verbose_opt", "is_set")
 
 	if len(verboseRes.Stdout) == 0 && len(verboseRes.Stderr) == 0 {
-		t.Fatalf("expected verbose output, got stdout=%q stderr=%q", verboseRes.Stdout, verboseRes.Stderr)
+		t.Fatalf(
+			"expected verbose output, got stdout=%q stderr=%q",
+			verboseRes.Stdout,
+			verboseRes.Stderr,
+		)
 	}
 
 	rawCmd, err := tmux.NewCommand("source-file", "-")
@@ -314,7 +339,9 @@ set-option -t ` + string(session.ID()) + ` @escaped_literal "literal;with#{speci
 		t.Fatalf("NewCommand failed: %v", err)
 	}
 
-	rawConfig := []byte("set-option -t " + string(session.ID()) + " @raw_source \"from_raw_runwith\"\n")
+	rawConfig := []byte(
+		"set-option -t " + string(session.ID()) + " @raw_source \"from_raw_runwith\"\n",
+	)
 	if _, err := server.RunWith(ctx, rawCmd, tmux.RunOptions{Input: rawConfig}); err != nil {
 		t.Fatalf("RunWith source-file - failed: %v", err)
 	}
@@ -342,14 +369,31 @@ func TestIntegrationCoordinationShellAndLock(t *testing.T) {
 
 	cmdTrue := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "true_branch")
 
-	cmdFalse := testCommand(t, "set-option", "-t", string(session.ID()), "@if_shell", "false_branch")
-	if err := server.IfShell(ctx, "true", testSequence(t, cmdTrue), testSequence(t, cmdFalse)); err != nil {
+	cmdFalse := testCommand(
+		t,
+		"set-option",
+		"-t",
+		string(session.ID()),
+		"@if_shell",
+		"false_branch",
+	)
+	if err := server.IfShell(
+		ctx,
+		"true",
+		testSequence(t, cmdTrue),
+		testSequence(t, cmdFalse),
+	); err != nil {
 		t.Fatalf("IfShell true branch failed: %v", err)
 	}
 
 	assertUserOption(t, ctx, session, "@if_shell", "true_branch")
 
-	if err := server.IfShell(ctx, "false", testSequence(t, cmdTrue), testSequence(t, cmdFalse)); err != nil {
+	if err := server.IfShell(
+		ctx,
+		"false",
+		testSequence(t, cmdTrue),
+		testSequence(t, cmdFalse),
+	); err != nil {
 		t.Fatalf("IfShell false branch failed: %v", err)
 	}
 

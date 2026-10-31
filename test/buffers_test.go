@@ -50,9 +50,13 @@ func TestIntegrationBufferNamesCannotInjectNotifications(t *testing.T) {
 	awaitBufferNotification(t, ctx, stream, name)
 
 	for _, invalidName := range []string{"buffer\nbroken", "buffer\rbroken", "buffer\n%exit"} {
-		for _, err := range []error{server.SetBuffer(ctx, invalidName, []byte("changed")), server.RenameBuffer(ctx, name, invalidName)} {
+		for _, err := range []error{
+			server.SetBuffer(ctx, invalidName, []byte("changed")),
+			server.RenameBuffer(ctx, name, invalidName),
+		} {
 			operationErr, ok := errors.AsType[*tmux.OperationError](err)
-			if !errors.Is(err, tmux.ErrInvalidArgument) || !ok || operationErr.Outcome.Effect != tmux.EffectNotSent {
+			if !errors.Is(err, tmux.ErrInvalidArgument) || !ok ||
+				operationErr.Outcome.Effect != tmux.EffectNotSent {
 				t.Fatalf("invalid buffer name %q: %v", invalidName, err)
 			}
 		}
@@ -73,7 +77,12 @@ func TestIntegrationBufferNamesCannotInjectNotifications(t *testing.T) {
 	}
 }
 
-func awaitBufferNotification(t *testing.T, ctx context.Context, stream *tmux.EventStream, name string) {
+func awaitBufferNotification(
+	t *testing.T,
+	ctx context.Context,
+	stream *tmux.EventStream,
+	name string,
+) {
 	t.Helper()
 
 	for {
@@ -280,7 +289,9 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	token := "TGO_PIPE_INPUT_TOKEN_12345" //nolint:gosec // G101 false positive: a marker the piped script echoes, not a credential.
+	// G101 false positive: a marker the piped script echoes, not a credential.
+	//nolint:gosec // See evidence above.
+	token := "TGO_PIPE_INPUT_TOKEN_12345"
 
 	script := "echo " + token
 	if err := pane.Pipe(ctx, script, tmux.PipeOptions{Input: true}); err != nil {
@@ -369,7 +380,14 @@ func TestIntegrationLoadBufferStdinAndFlags(t *testing.T) {
 	}
 }
 
-func assertStdinLoad(t *testing.T, ctx context.Context, server *tmux.Server, name string, data []byte, flags ...string) {
+func assertStdinLoad(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	name string,
+	data []byte,
+	flags ...string,
+) {
 	t.Helper()
 
 	args := append(append([]string{}, flags...), "-b", name, "-")
@@ -398,7 +416,12 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 
 	pane := panes[0]
 
-	if err := server.SetBufferWith(ctx, "test-buf-original", []byte("rename test content"), tmux.SetBufferOptions{Append: false}); err != nil {
+	if err := server.SetBufferWith(
+		ctx,
+		"test-buf-original",
+		[]byte("rename test content"),
+		tmux.SetBufferOptions{Append: false},
+	); err != nil {
 		t.Fatalf("SetBufferWith failed: %v", err)
 	}
 
@@ -406,18 +429,35 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 		t.Fatalf("RenameBuffer failed: %v", err)
 	}
 
-	if data := bufferContent(t, ctx, server, "test-buf-renamed"); string(data) != "rename test content" {
+	if data := bufferContent(
+		t,
+		ctx,
+		server,
+		"test-buf-renamed",
+	); string(
+		data,
+	) != "rename test content" {
 		t.Fatalf("unexpected content after RenameBuffer: %q", data)
 	}
 
 	assertBufferAbsent(t, ctx, server, "test-buf-original")
 
 	bufAppend := "test-buf-append"
-	if err := server.SetBufferWith(ctx, bufAppend, []byte("part1"), tmux.SetBufferOptions{Append: false}); err != nil {
+	if err := server.SetBufferWith(
+		ctx,
+		bufAppend,
+		[]byte("part1"),
+		tmux.SetBufferOptions{Append: false},
+	); err != nil {
 		t.Fatalf("SetBufferWith initial failed: %v", err)
 	}
 
-	if err := server.SetBufferWith(ctx, bufAppend, []byte("part2"), tmux.SetBufferOptions{Append: true}); err != nil {
+	if err := server.SetBufferWith(
+		ctx,
+		bufAppend,
+		[]byte("part2"),
+		tmux.SetBufferOptions{Append: true},
+	); err != nil {
 		t.Fatalf("SetBufferWith append failed: %v", err)
 	}
 
@@ -426,7 +466,12 @@ func TestIntegrationBufferRenameAndPaste(t *testing.T) {
 	}
 
 	bufPaste := "test-buf-paste"
-	if err := server.SetBufferWith(ctx, bufPaste, []byte("echo paste_success\n"), tmux.SetBufferOptions{Append: false}); err != nil {
+	if err := server.SetBufferWith(
+		ctx,
+		bufPaste,
+		[]byte("echo paste_success\n"),
+		tmux.SetBufferOptions{Append: false},
+	); err != nil {
 		t.Fatalf("SetBufferWith for paste failed: %v", err)
 	}
 

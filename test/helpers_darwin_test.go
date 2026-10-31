@@ -27,7 +27,8 @@ func openPTY(t *testing.T) (*os.File, *os.File) {
 	ptyIoctl(t, fd, syscall.TIOCPTYUNLK, nil)
 
 	var name [ptyNameBytes]byte
-	ptyIoctl(t, fd, syscall.TIOCPTYGNAME, unsafe.Pointer(&name[0])) //nolint:gosec // G103: Darwin ioctl writes its fixed 128-byte name ABI into this owned array on amd64/arm64; KeepAlive retains it; cross-build coverage, native execution still required.
+	//nolint:gosec // G103: Darwin ioctl writes its fixed 128-byte name ABI into this owned array on amd64/arm64; KeepAlive retains it; cross-build coverage, native execution still required.
+	ptyIoctl(t, fd, syscall.TIOCPTYGNAME, unsafe.Pointer(&name[0]))
 
 	end := bytes.IndexByte(name[:], 0)
 	if end <= 0 {

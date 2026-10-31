@@ -20,8 +20,13 @@ func ptyIoctl(fd int, request uintptr, arg unsafe.Pointer) error {
 	return nil
 }
 
-func setTerminalDimensions(slave *os.File, cols, rows uint16) {
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: rows, Columns: cols, Xpixel: 0, Ypixel: 0}
+func setTerminalDimensions(slave *os.File, cols uint16, rows uint16) {
+	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+		Rows:    rows,
+		Columns: cols,
+		Xpixel:  0,
+		Ypixel:  0,
+	}
 	//nolint:gosec // ioctl reads eight-byte winsize synchronously on Linux and Darwin
 	_ = ptyIoctl(int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size))
 }

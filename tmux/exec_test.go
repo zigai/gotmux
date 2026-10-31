@@ -115,12 +115,22 @@ func testRunner(t *testing.T, concurrent int) *runner {
 		t.Fatal(err)
 	}
 
-	return newRunner(exe, []string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()}, dir, concurrent)
+	return newRunner(
+		exe,
+		[]string{"TMUX_GO_PROCESS_FIXTURE=1", "ONLY_THIS=hello", "GOCOVERDIR=" + t.TempDir()},
+		dir,
+		concurrent,
+	)
 }
 
 func TestRunnerStreamsAndStatus(t *testing.T) {
-	r, started, err := testRunner(t, 2).run(context.Background(), []string{"streams"}, nil, 100, 100)
-	if !started || r.ExitCode != 7 || err == nil || !bytes.Equal(r.Stdout, []byte("stdout\x00\xff\n")) || string(r.Stderr) != "stderr\n" {
+	r, started, err := testRunner(
+		t,
+		2,
+	).run(context.Background(), []string{"streams"}, nil, 100, 100)
+	if !started || r.ExitCode != 7 || err == nil ||
+		!bytes.Equal(r.Stdout, []byte("stdout\x00\xff\n")) ||
+		string(r.Stderr) != "stderr\n" {
 		t.Fatalf("%#v started=%v err=%v", r, started, err)
 	}
 }
@@ -165,7 +175,8 @@ func TestRunnerReturnsWhenCanceledWhileAnotherProcessHoldsItsOutput(t *testing.T
 	begin := time.Now()
 
 	_, started, err := testRunner(t, 1).run(ctx, []string{"handoff-wait"}, nil, 1<<20, 100)
-	if !started || !errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrShutdownIncomplete) {
+	if !started || !errors.Is(err, context.DeadlineExceeded) ||
+		errors.Is(err, ErrShutdownIncomplete) {
 		t.Fatalf("started=%v err=%v", started, err)
 	}
 
@@ -178,7 +189,8 @@ func TestRunnerBoundsTheWaitForOutputHeldAfterExit(t *testing.T) {
 	begin := time.Now()
 
 	out, _, err := testRunner(t, 1).run(context.Background(), []string{"handoff"}, nil, 1<<20, 100)
-	if !errors.Is(err, ErrShutdownIncomplete) || !bytes.HasPrefix(out.Stdout, []byte("ok")) || out.ExitCode != 0 {
+	if !errors.Is(err, ErrShutdownIncomplete) || !bytes.HasPrefix(out.Stdout, []byte("ok")) ||
+		out.ExitCode != 0 {
 		t.Fatalf("%#v err=%v", out, err)
 	}
 

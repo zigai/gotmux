@@ -38,12 +38,16 @@ type (
 	}
 
 	// ListEnvironmentOptions configures environment variable listing behavior.
+	//
+	//exhaustruct:optional
 	ListEnvironmentOptions struct {
 		// Hidden includes variables from the hidden environment table (-h flag).
 		Hidden bool
 	}
 
 	// GetEnvironmentOptions configures [EnvironmentScope.GetWith].
+	//
+	//exhaustruct:optional
 	GetEnvironmentOptions struct {
 		// Hidden reads the variable from the hidden environment table (-h flag).
 		Hidden bool
@@ -65,12 +69,16 @@ func (s Session) Environment() EnvironmentScope {
 
 // Get retrieves one variable by name, preserving embedded newlines and empty values.
 func (scope EnvironmentScope) Get(ctx context.Context, name string) (EnvironmentValue, error) {
-	return scope.GetWith(ctx, name, GetEnvironmentOptions{Hidden: false})
+	return scope.GetWith(ctx, name, GetEnvironmentOptions{})
 }
 
 // GetWith retrieves one variable by name with custom options, such as reading
 // the hidden environment table.
-func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts GetEnvironmentOptions) (EnvironmentValue, error) {
+func (scope EnvironmentScope) GetWith(
+	ctx context.Context,
+	name string,
+	opts GetEnvironmentOptions,
+) (EnvironmentValue, error) {
 	hidden := opts.Hidden
 
 	if !storedEnvName(name) {
@@ -91,10 +99,20 @@ func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts Get
 
 	args = append(args, "--", name)
 
-	r, err := scope.target.server.execute(opCtx, op, plainPlan(command("show-environment", args...)), g, nil)
+	r, err := scope.target.server.execute(
+		opCtx,
+		op,
+		plainPlan(command("show-environment", args...)),
+		g,
+		nil,
+	)
 	if err != nil {
 		if string(r.Stderr) == "unknown variable: "+name+"\n" {
-			return EnvironmentValue{Value: UnavailableValue[string](), Unset: false, Hidden: hidden}, nil
+			return EnvironmentValue{
+				Value:  UnavailableValue[string](),
+				Unset:  false,
+				Hidden: hidden,
+			}, nil
 		}
 
 		return EnvironmentValue{}, opError("EnvironmentScope.Get", err)
@@ -102,7 +120,11 @@ func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts Get
 
 	data := bytes.TrimSuffix(r.Stdout, []byte{'\n'})
 	if len(r.Stdout) == 0 {
-		return EnvironmentValue{Value: UnavailableValue[string](), Unset: false, Hidden: hidden}, nil
+		return EnvironmentValue{
+			Value:  UnavailableValue[string](),
+			Unset:  false,
+			Hidden: hidden,
+		}, nil
 	}
 
 	if bytes.Equal(data, []byte("-"+name)) {
@@ -114,16 +136,23 @@ func (scope EnvironmentScope) GetWith(ctx context.Context, name string, opts Get
 		return EnvironmentValue{}, afterError("EnvironmentScope.Get", ErrProtocol)
 	}
 
-	return EnvironmentValue{Value: PresentValue(string(data[len(prefix):])), Unset: false, Hidden: hidden}, nil
+	return EnvironmentValue{
+		Value:  PresentValue(string(data[len(prefix):])),
+		Unset:  false,
+		Hidden: hidden,
+	}, nil
 }
 
 // List returns all environment variables registered in this scope.
 func (scope EnvironmentScope) List(ctx context.Context) ([]EnvironmentEntry, error) {
-	return scope.ListWith(ctx, ListEnvironmentOptions{Hidden: false})
+	return scope.ListWith(ctx, ListEnvironmentOptions{})
 }
 
 // ListWith returns environment variables registered in this scope matching the given listing options.
-func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironmentOptions) ([]EnvironmentEntry, error) {
+func (scope EnvironmentScope) ListWith(
+	ctx context.Context,
+	opts ListEnvironmentOptions,
+) ([]EnvironmentEntry, error) {
 	opCtx, op, g, err := scope.target.prepare(ctx)
 	if err != nil {
 		return nil, opError("EnvironmentScope.List", err)
@@ -138,7 +167,13 @@ func (scope EnvironmentScope) ListWith(ctx context.Context, opts ListEnvironment
 	// Plain output cannot distinguish embedded newlines from entries; -s quotes values unambiguously.
 	args = append(args, "-s")
 
-	r, err := scope.target.server.execute(opCtx, op, plainPlan(command("show-environment", args...)), g, nil)
+	r, err := scope.target.server.execute(
+		opCtx,
+		op,
+		plainPlan(command("show-environment", args...)),
+		g,
+		nil,
+	)
 	if err != nil {
 		return nil, opError("EnvironmentScope.List", err)
 	}
@@ -181,8 +216,12 @@ func parseShellEnvironment(data []byte, hidden bool) ([]EnvironmentEntry, error)
 			}
 
 			out = append(out, EnvironmentEntry{
-				Name:  name,
-				Value: EnvironmentValue{Value: UnavailableValue[string](), Unset: true, Hidden: hidden},
+				Name: name,
+				Value: EnvironmentValue{
+					Value:  UnavailableValue[string](),
+					Unset:  true,
+					Hidden: hidden,
+				},
 			})
 			rest = tail
 
@@ -236,13 +275,13 @@ func unescapeShellValue(s string) (string, string, error) {
 }
 
 // Set assigns a value to an environment variable in this scope.
-func (scope EnvironmentScope) Set(ctx context.Context, name, value string) error {
+func (scope EnvironmentScope) Set(ctx context.Context, name string, value string) error {
 	return scope.change(ctx, name, value, "", "EnvironmentScope.Set")
 }
 
 // SetHidden assigns a value to a hidden environment variable (-h flag).
 // Hidden variables are stored in tmux but are not automatically exported to child processes.
-func (scope EnvironmentScope) SetHidden(ctx context.Context, name, value string) error {
+func (scope EnvironmentScope) SetHidden(ctx context.Context, name string, value string) error {
 	return scope.change(ctx, name, value, "-h", "EnvironmentScope.SetHidden")
 }
 
@@ -258,7 +297,13 @@ func (scope EnvironmentScope) Remove(ctx context.Context, name string) error {
 	return scope.change(ctx, name, "", "-r", "EnvironmentScope.Remove")
 }
 
-func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opName string) error {
+func (scope EnvironmentScope) change(
+	ctx context.Context,
+	name string,
+	value string,
+	flag string,
+	opName string,
+) error {
 	if !storedEnvName(name) || !wire.ValidString(value) {
 		return opError(opName, invalid("environment entry"))
 	}
@@ -280,7 +325,13 @@ func (scope EnvironmentScope) change(ctx context.Context, name, value, flag, opN
 		args = append(args, value)
 	}
 
-	_, err = scope.target.server.execute(opCtx, op, emptyPlan(command("set-environment", args...)), g, nil)
+	_, err = scope.target.server.execute(
+		opCtx,
+		op,
+		emptyPlan(command("set-environment", args...)),
+		g,
+		nil,
+	)
 
 	return opError(opName, err)
 }

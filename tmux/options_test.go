@@ -10,8 +10,16 @@ import (
 func TestArrayUpdateOutcome(t *testing.T) {
 	for _, effect := range []Effect{EffectNotSent, EffectUnknown, EffectConfirmed} {
 		t.Run(effect.String(), func(t *testing.T) {
-			cause := &OperationError{Operation: "set-option", Outcome: Outcome{Effect: effect, Steps: nil, Created: nil}, Err: ErrProtocol}
-			steps := []StepOutcome{{Index: 0, Effect: EffectConfirmed}, {Index: 1, Effect: EffectNotSent}, {Index: 2, Effect: EffectNotSent}}
+			cause := &OperationError{
+				Operation: "set-option",
+				Outcome:   Outcome{Effect: effect, Steps: nil, Created: nil},
+				Err:       ErrProtocol,
+			}
+			steps := []StepOutcome{
+				{Index: 0, Effect: EffectConfirmed},
+				{Index: 1, Effect: EffectNotSent},
+				{Index: 2, Effect: EffectNotSent},
+			}
 
 			err := arrayUpdateError(cause, 1, steps)
 			if !errors.Is(err, ErrProtocol) {
@@ -23,7 +31,11 @@ func TestArrayUpdateOutcome(t *testing.T) {
 				t.Fatalf("expected OperationError: %v", err)
 			}
 
-			want := []StepOutcome{{Index: 0, Effect: EffectConfirmed}, {Index: 1, Effect: effect}, {Index: 2, Effect: EffectNotSent}}
+			want := []StepOutcome{
+				{Index: 0, Effect: EffectConfirmed},
+				{Index: 1, Effect: effect},
+				{Index: 2, Effect: EffectNotSent},
+			}
 			if diff := cmp.Diff(want, got.Outcome.Steps); diff != "" {
 				t.Fatal(diff)
 			}
@@ -48,11 +60,26 @@ func TestTypedOptionValidation(t *testing.T) {
 		name string
 		call func() error
 	}{
-		{name: "negative escape time", call: func() error { return server.Options().SetEscapeTime(ctx, -1) }},
-		{name: "buffer lower bound", call: func() error { return server.Options().SetBufferLimit(ctx, 0) }},
-		{name: "invalid enum", call: func() error { return server.Options().SetClipboard(ctx, ClipboardMode("invalid")) }},
-		{name: "invalid key", call: func() error { return server.GlobalSessionOptions().SetPrefix(ctx, Key("not-a-key")) }},
-		{name: "NUL string", call: func() error { return server.GlobalSessionOptions().SetStatusLeft(ctx, "\x00") }},
+		{
+			name: "negative escape time",
+			call: func() error { return server.Options().SetEscapeTime(ctx, -1) },
+		},
+		{
+			name: "buffer lower bound",
+			call: func() error { return server.Options().SetBufferLimit(ctx, 0) },
+		},
+		{
+			name: "invalid enum",
+			call: func() error { return server.Options().SetClipboard(ctx, ClipboardMode("invalid")) },
+		},
+		{
+			name: "invalid key",
+			call: func() error { return server.GlobalSessionOptions().SetPrefix(ctx, Key("not-a-key")) },
+		},
+		{
+			name: "NUL string",
+			call: func() error { return server.GlobalSessionOptions().SetStatusLeft(ctx, "\x00") },
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -71,10 +98,34 @@ func TestParseOptionName(t *testing.T) {
 		wantIndexed bool
 		wantErr     bool
 	}{
-		{input: "escape-time", wantBase: "escape-time", wantIndex: 0, wantIndexed: false, wantErr: false},
-		{input: "status-format[0]", wantBase: "status-format", wantIndex: 0, wantIndexed: true, wantErr: false},
-		{input: "codepoint-widths[500]", wantBase: "codepoint-widths", wantIndex: 500, wantIndexed: true, wantErr: false},
-		{input: "@my_opt[42]", wantBase: "@my_opt", wantIndex: 42, wantIndexed: true, wantErr: false},
+		{
+			input:       "escape-time",
+			wantBase:    "escape-time",
+			wantIndex:   0,
+			wantIndexed: false,
+			wantErr:     false,
+		},
+		{
+			input:       "status-format[0]",
+			wantBase:    "status-format",
+			wantIndex:   0,
+			wantIndexed: true,
+			wantErr:     false,
+		},
+		{
+			input:       "codepoint-widths[500]",
+			wantBase:    "codepoint-widths",
+			wantIndex:   500,
+			wantIndexed: true,
+			wantErr:     false,
+		},
+		{
+			input:       "@my_opt[42]",
+			wantBase:    "@my_opt",
+			wantIndex:   42,
+			wantIndexed: true,
+			wantErr:     false,
+		},
 		{input: "@user", wantBase: "@user", wantIndex: 0, wantIndexed: false, wantErr: false},
 		{input: "", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
 		{input: "@", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
@@ -85,9 +136,27 @@ func TestParseOptionName(t *testing.T) {
 		{input: "opt[abc]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
 		{input: "opt[0x10]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
 		{input: "opt[ 1 ]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
-		{input: "opt[1073741824]", wantBase: "opt", wantIndex: 1073741824, wantIndexed: true, wantErr: false}, // 1<<30 max bound
-		{input: "opt[1073741825]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},             // > 1<<30
-		{input: "opt[99999999999999999999999]", wantBase: "", wantIndex: 0, wantIndexed: false, wantErr: true},
+		{
+			input:       "opt[1073741824]",
+			wantBase:    "opt",
+			wantIndex:   1073741824,
+			wantIndexed: true,
+			wantErr:     false,
+		}, // 1<<30 max bound
+		{
+			input:       "opt[1073741825]",
+			wantBase:    "",
+			wantIndex:   0,
+			wantIndexed: false,
+			wantErr:     true,
+		}, // > 1<<30
+		{
+			input:       "opt[99999999999999999999999]",
+			wantBase:    "",
+			wantIndex:   0,
+			wantIndexed: false,
+			wantErr:     true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -129,7 +198,11 @@ func TestOptionMutationOptionsValidation(t *testing.T) {
 		t.Fatalf("expected ErrInvalidArgument for NUL byte in value, got %v", err)
 	}
 
-	if err := server.Options().UnsetWith(ctx, "invalid name", UnsetOptionOptions{Cascade: true}); !errors.Is(err, ErrInvalidArgument) {
+	if err := server.Options().
+		UnsetWith(ctx, "invalid name", UnsetOptionOptions{Cascade: true}); !errors.Is(
+		err,
+		ErrInvalidArgument,
+	) {
 		t.Fatalf("expected ErrInvalidArgument for invalid option name in UnsetWith, got %v", err)
 	}
 }

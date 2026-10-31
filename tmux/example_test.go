@@ -11,7 +11,7 @@ import (
 func Example_inspectCapture() {
 	ctx := context.Background()
 
-	server, err := tmux.New(tmux.Config{SocketName: "work"}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	server, err := tmux.New(tmux.Config{SocketName: "work"})
 	if err != nil {
 		return
 	}
@@ -22,7 +22,7 @@ func Example_inspectCapture() {
 	}
 
 	for _, info := range panes {
-		data, err := info.Handle().Capture(ctx, tmux.CaptureOptions{EntireHistory: true}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+		data, err := info.Handle().Capture(ctx, tmux.CaptureOptions{EntireHistory: true})
 		if err != nil {
 			return
 		}
@@ -49,7 +49,7 @@ func ExampleValue() {
 func ExampleSession_NewWindow() {
 	ctx := context.Background()
 
-	server, err := tmux.New(tmux.Config{SocketName: "work"}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	server, err := tmux.New(tmux.Config{SocketName: "work"})
 	if err != nil {
 		return
 	}
@@ -59,7 +59,10 @@ func ExampleSession_NewWindow() {
 		return
 	}
 
-	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "logs", Program: tmux.Exec("tail", "-f", "/var/log/app.log")}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	link, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowOptions{Name: "logs", Program: tmux.Exec("tail", "-f", "/var/log/app.log")},
+	)
 	if err != nil {
 		return
 	}
@@ -69,14 +72,14 @@ func ExampleSession_NewWindow() {
 		return
 	}
 	// Capture observes what is available now; it does not await program completion.
-	_, _ = pane.Capture(ctx, tmux.CaptureOptions{JoinWrapped: true}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	_, _ = pane.Capture(ctx, tmux.CaptureOptions{JoinWrapped: true})
 }
 
 //nolint:testableexamples // compile-only example requires live tmux server socket; covered by integration_test.go
 func ExamplePaneOptions_SetUser() {
 	ctx := context.Background()
 
-	server, err := tmux.New(tmux.Config{SocketName: "work"}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	server, err := tmux.New(tmux.Config{SocketName: "work"})
 	if err != nil {
 		return
 	}
@@ -104,7 +107,7 @@ func ExampleConnection_Events() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	server, err := tmux.New(tmux.Config{SocketName: "work"}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	server, err := tmux.New(tmux.Config{SocketName: "work"})
 	if err != nil {
 		return
 	}
@@ -114,13 +117,13 @@ func ExampleConnection_Events() {
 		return
 	}
 
-	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: true}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: true})
 	if err != nil {
 		return
 	}
 	defer func() { _ = conn.Close() }()
 
-	events, err := conn.Events(ctx, tmux.EventOptions{}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	events, err := conn.Events(ctx, tmux.EventOptions{})
 	if err != nil {
 		return
 	}
@@ -140,7 +143,7 @@ func ExampleConnection_Events() {
 func ExampleServer_Run() {
 	ctx := context.Background()
 
-	server, err := tmux.New(tmux.Config{SocketName: "anno-fork"}) //nolint:exhaustruct_v5 // example demonstrates minimal caller options
+	server, err := tmux.New(tmux.Config{SocketName: "anno-fork"})
 	if err != nil {
 		return
 	}

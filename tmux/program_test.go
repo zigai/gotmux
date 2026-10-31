@@ -16,7 +16,8 @@ func executableFixture(t *testing.T, name string) string {
 	path := filepath.Join(t.TempDir(), name)
 
 	script := "#!/bin/sh\nprintf '%s\\000' \"$#\" \"$@\"\n"
-	if e := os.WriteFile(path, []byte(script), 0o700); e != nil { //nolint:gosec // test script requires executable permissions
+	//nolint:gosec // test script requires executable permissions
+	if e := os.WriteFile(path, []byte(script), 0o700); e != nil {
 		t.Fatal(e)
 	}
 
@@ -80,7 +81,11 @@ func TestProgramCopiesArgs(t *testing.T) {
 func TestEnvironmentLauncher(t *testing.T) {
 	value := "\"'$() ; #{pane_id}\nline"
 
-	flags, argv, e := programArgs("", map[string]string{"DATA": value, "PATH": "/different", "EMPTY": ""}, Exec("/bin/sh", "-c", `printf '%s\000%s\000%s' "$DATA" "$PATH" "$EMPTY"`))
+	flags, argv, e := programArgs(
+		"",
+		map[string]string{"DATA": value, "PATH": "/different", "EMPTY": ""},
+		Exec("/bin/sh", "-c", `printf '%s\000%s\000%s' "$DATA" "$PATH" "$EMPTY"`),
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -99,7 +104,11 @@ func TestEnvironmentLauncher(t *testing.T) {
 }
 
 func TestShellEnvironmentLauncher(t *testing.T) {
-	_, argv, e := programArgs("", map[string]string{"SHELL": "/not-the-executable", "DATA": "literal"}, Shell(`printf '%s %s' "$SHELL" "$DATA"`))
+	_, argv, e := programArgs(
+		"",
+		map[string]string{"SHELL": "/not-the-executable", "DATA": "literal"},
+		Shell(`printf '%s %s' "$SHELL" "$DATA"`),
+	)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -114,7 +123,6 @@ func TestShellEnvironmentLauncher(t *testing.T) {
 }
 
 func TestUnsupportedDefaultProgramEnvironment(t *testing.T) {
-	//nolint:exhaustruct_v5 // testing uninitialized default Program
 	_, _, e := programArgs("", map[string]string{"A": "b"}, Program{})
 	if !errors.Is(e, ErrUnsupported) {
 		t.Fatal(e)
@@ -141,8 +149,18 @@ func TestEnvironmentOverrides(t *testing.T) {
 		want string
 	}{
 		{"ordinary", map[string]string{"X": "value"}, Exec("/usr/bin/printf", "ok"), "ok"},
-		{"loop_variable", map[string]string{"n": "0", "z": "value"}, Exec("/usr/bin/printf", "ok"), "ok"},
-		{"saved_shell_variable", map[string]string{"tmux_go_shell": "/definitely/not/a/shell"}, Shell("printf ok"), "ok"},
+		{
+			"loop_variable",
+			map[string]string{"n": "0", "z": "value"},
+			Exec("/usr/bin/printf", "ok"),
+			"ok",
+		},
+		{
+			"saved_shell_variable",
+			map[string]string{"tmux_go_shell": "/definitely/not/a/shell"},
+			Shell("printf ok"),
+			"ok",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

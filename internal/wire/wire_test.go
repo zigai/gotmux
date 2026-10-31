@@ -9,7 +9,14 @@ import (
 )
 
 func TestRecordRoundTrip(t *testing.T) {
-	values := []string{"", "a\tb\r\nc", "\\\"'$;#{pane_id}", "\x00\xff\xfe", "%end 1 9 1\n%begin 1 10 1\n", strings.Repeat("x", 10000)}
+	values := []string{
+		"",
+		"a\tb\r\nc",
+		"\\\"'$;#{pane_id}",
+		"\x00\xff\xfe",
+		"%end 1 9 1\n%begin 1 10 1\n",
+		strings.Repeat("x", 10000),
+	}
 	wire := EncodeRecord(values)
 
 	gotWire, got, err := ReadRecord(bytes.NewReader(wire), int64(len(wire)))
@@ -42,9 +49,24 @@ func TestRecordRoundTrip(t *testing.T) {
 }
 
 func TestMalformedRecords(t *testing.T) {
-	for _, data := range []string{"", "TGO2:0:\n", "TGO1:01:0:,\n", "TGO1:1:00:,\n", "TGO1:1:9999999999999999999999999:", "TGO1:1025:\n", "TGO1:1:3:ab,\n", "TGO1:1:0:;\n", "TGO1:0:\r\n", "TGO1:-1:\n", "TGO1:1:1:a,"} {
+	for _, data := range []string{
+		"",
+		"TGO2:0:\n",
+		"TGO1:01:0:,\n",
+		"TGO1:1:00:,\n",
+		"TGO1:1:9999999999999999999999999:",
+		"TGO1:1025:\n",
+		"TGO1:1:3:ab,\n",
+		"TGO1:1:0:;\n",
+		"TGO1:0:\r\n",
+		"TGO1:-1:\n",
+		"TGO1:1:1:a,",
+	} {
 		t.Run(data, func(t *testing.T) {
-			if _, _, err := ReadRecord(bytes.NewReader([]byte(data)), int64(len(data))); err == nil {
+			if _, _, err := ReadRecord(
+				bytes.NewReader([]byte(data)),
+				int64(len(data)),
+			); err == nil {
 				t.Fatal("accepted malformed record")
 			}
 		})
@@ -61,7 +83,21 @@ func TestMalformedRecords(t *testing.T) {
 }
 
 func TestQuotedWords(t *testing.T) {
-	for _, text := range []string{"", "a b", "a\tb\n", `;'"\$#{}[]`, "\\;", "--", "\xff\xfe", "${HOME}", "$(touch never)", "`date`", "~", "~/file", "~root"} {
+	for _, text := range []string{
+		"",
+		"a b",
+		"a\tb\n",
+		`;'"\$#{}[]`,
+		"\\;",
+		"--",
+		"\xff\xfe",
+		"${HOME}",
+		"$(touch never)",
+		"`date`",
+		"~",
+		"~/file",
+		"~root",
+	} {
 		var b strings.Builder
 		if err := WriteQuoted(&b, text); err != nil {
 			t.Fatal(err)
@@ -100,7 +136,20 @@ func TestParseWordsEscapesAndComments(t *testing.T) {
 
 // A "$" not followed by a name, such as the session ID "$0" in hooks, stays literal.
 func TestParseWordsRefusesSyntaxTmuxEvaluates(t *testing.T) {
-	for _, input := range []string{`$HOME`, `a$HOME`, `${HOME}`, `"$HOME"`, `"a $_x"`, `~`, `~/x`, `"~/x"`, `a"~"`, `a#{pane_id}`, `{ a }`, `a;b`} {
+	for _, input := range []string{
+		`$HOME`,
+		`a$HOME`,
+		`${HOME}`,
+		`"$HOME"`,
+		`"a $_x"`,
+		`~`,
+		`~/x`,
+		`"~/x"`,
+		`a"~"`,
+		`a#{pane_id}`,
+		`{ a }`,
+		`a;b`,
+	} {
 		if got, err := ParseWords(input); !errors.Is(err, ErrCommandText) {
 			t.Errorf("ParseWords(%q) = %#v, %v; want ErrCommandText", input, got, err)
 		}

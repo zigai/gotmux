@@ -20,9 +20,10 @@ import (
 // protocol codec and dispatcher are tested independently and the real suite
 // exercises their composition against an actual tmux executable.
 type dispatcherPeer struct {
-	c           *Connection
-	writes      chan string
-	release     chan struct{}
+	c       *Connection
+	writes  chan string
+	release chan struct{}
+	//exhaustruct:optional
 	releaseOnce sync.Once
 }
 
@@ -30,21 +31,52 @@ func dispatcherFixture(t *testing.T, depth int) *dispatcherPeer {
 	t.Helper()
 	s := localServer(t)
 	ctx, cancel := context.WithCancelCause(context.Background())
-	o, _ := normalizeControlOptions(ControlOptions{QueueDepth: depth, QueuedBytes: 65536, PaneOutput: false, NoEcho: false, Flags: nil, UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, FrameBytes: 0, EventBytes: 0, MaxStreams: 0})
+	o, _ := normalizeControlOptions(
+		ControlOptions{
+			QueueDepth:       depth,
+			QueuedBytes:      65536,
+			PaneOutput:       false,
+			NoEcho:           false,
+			Flags:            nil,
+			UTF8:             UTF8Default,
+			Colors256:        false,
+			TerminalFeatures: nil,
+			FrameBytes:       0,
+			EventBytes:       0,
+			MaxStreams:       0,
+		},
+	)
 
 	rd, wr, e := os.Pipe()
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	//nolint:exhaustruct_v5 // mock Connection test fixture intentionally omits unneeded subprocess and buffer fields
-	c := &Connection{original: s, identity: fixtureIdentity(s), opts: o, cancel: cancel, stopCh: make(chan struct{}), streams: map[*EventStream]struct{}{}, count: semaphore.NewWeighted(int64(depth)), bytes: semaphore.NewWeighted(o.QueuedBytes), requests: make(chan *controlRequest, depth), frames: make(chan controlFrame, 1), ready: make(chan error, 1), done: make(chan struct{}), stdin: wr}
+	c := &Connection{
+		original: s,
+		identity: fixtureIdentity(s),
+		opts:     o,
+		cancel:   cancel,
+		stopCh:   make(chan struct{}),
+		streams:  map[*EventStream]struct{}{},
+		count:    semaphore.NewWeighted(int64(depth)),
+		bytes:    semaphore.NewWeighted(o.QueuedBytes),
+		requests: make(chan *controlRequest, depth),
+		frames:   make(chan controlFrame, 1),
+		ready:    make(chan error, 1),
+		done:     make(chan struct{}),
+		stdin:    wr,
+	}
 	cp := *s
 	cp.conn = c
 	cp.bound = &c.identity
 	cp.lifetime = c
 	c.server = &cp
-	p := &dispatcherPeer{c: c, writes: make(chan string, 16), release: make(chan struct{}), releaseOnce: sync.Once{}}
+	p := &dispatcherPeer{
+		c:       c,
+		writes:  make(chan string, 16),
+		release: make(chan struct{}),
+	}
 
 	const ready = "TGO-READY:fixture\n"
 
@@ -53,7 +85,11 @@ func dispatcherFixture(t *testing.T, depth int) *dispatcherPeer {
 	c.work.Go(func() { p.mockTmuxLoop(rd, c) })
 	go func() { c.work.Wait(); close(c.done) }()
 
-	c.frames <- controlFrame{id: frameID{time: 1, number: 42, flags: 0}, data: []byte(fixtureIdentityRecord(s)), failed: false}
+	c.frames <- controlFrame{
+		id:     frameID{time: 1, number: 42, flags: 0},
+		data:   []byte(fixtureIdentityRecord(s)),
+		failed: false,
+	}
 
 	c.frames <- controlFrame{id: frameID{time: 1, number: 51, flags: 0}, data: []byte(ready), failed: false}
 
@@ -299,7 +335,9 @@ func TestDispatcherAdmissionDeadlineIsCallerTimeout(t *testing.T) {
 	_, err := peerCall(ctx, peer.c, "second")
 
 	commandErr, ok := errors.AsType[*CommandError](err)
-	if !ok || !errors.Is(err, context.DeadlineExceeded) || commandErr.Timeout != TimeoutSourceCaller || commandErr.Outcome.Effect != EffectNotSent {
+	if !ok || !errors.Is(err, context.DeadlineExceeded) ||
+		commandErr.Timeout != TimeoutSourceCaller ||
+		commandErr.Outcome.Effect != EffectNotSent {
 		t.Errorf("capacity admission deadline: %v, command error %#v", err, commandErr)
 	}
 
@@ -331,9 +369,17 @@ func TestDispatcherCanceledLifetimeRejectsAdmissionAfterDrain(t *testing.T) {
 
 	go func() { connection.dispatch(ctx, "TGO-READY:fixture\n"); close(finished) }()
 
-	connection.frames <- controlFrame{id: frameID{time: 1, number: 42, flags: 0}, data: []byte(fixtureIdentityRecord(server)), failed: false}
+	connection.frames <- controlFrame{
+		id:     frameID{time: 1, number: 42, flags: 0},
+		data:   []byte(fixtureIdentityRecord(server)),
+		failed: false,
+	}
 
-	connection.frames <- controlFrame{id: frameID{time: 1, number: 51, flags: 0}, data: []byte("TGO-READY:fixture\n"), failed: false}
+	connection.frames <- controlFrame{
+		id:     frameID{time: 1, number: 51, flags: 0},
+		data:   []byte("TGO-READY:fixture\n"),
+		failed: false,
+	}
 
 	if err := <-connection.ready; err != nil {
 		t.Fatal(err)
@@ -427,7 +473,8 @@ func TestDispatcherRawRejectedBeforeWrite(t *testing.T) {
 	defer op.close()
 
 	r, e := p.c.run(opCtx, op, plainPlan(command("capture-pane", "-p")), 100)
-	if !errors.Is(e, ErrTransportUnsupported) || outcomeOf(e).Effect != EffectNotSent || r.ExitCode != -1 {
+	if !errors.Is(e, ErrTransportUnsupported) || outcomeOf(e).Effect != EffectNotSent ||
+		r.ExitCode != -1 {
 		t.Fatal(r, e)
 	}
 

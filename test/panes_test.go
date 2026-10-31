@@ -103,7 +103,13 @@ func assertSplitReplacesPane(t *testing.T, control bool) {
 
 	replacement, err := pane.Split(ctx, tmux.SplitOptions{
 		KillTarget: true,
-		Program:    tmux.Exec("/bin/sh", "-c", `printf ready > "$1"; exec sleep 60`, "replacement", marker),
+		Program: tmux.Exec(
+			"/bin/sh",
+			"-c",
+			`printf ready > "$1"; exec sleep 60`,
+			"replacement",
+			marker,
+		),
 	})
 	if err != nil {
 		fatalCommand(t, "Split(KillTarget)", err)
@@ -174,7 +180,10 @@ func TestIntegrationCreationTitlesAreLiteral(t *testing.T) {
 
 	assertPaneTitle(t, ctx, split, title)
 
-	floating, err := split.NewPane(ctx, tmux.NewPaneOptions{Title: title, Program: tmux.Exec("/bin/sh")})
+	floating, err := split.NewPane(
+		ctx,
+		tmux.NewPaneOptions{Title: title, Program: tmux.Exec("/bin/sh")},
+	)
 	if err != nil {
 		fatalCommand(t, "NewPane", err)
 	}
@@ -311,7 +320,10 @@ func assertPreservedRespawnRejected(t *testing.T, target string) {
 	t.Helper()
 	_, session, ctx := apiFixture(t)
 
-	link, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "respawn-win", Program: tmux.Exec("/bin/sleep", "60")})
+	link, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowOptions{Name: "respawn-win", Program: tmux.Exec("/bin/sleep", "60")},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +338,11 @@ func assertPreservedRespawnRejected(t *testing.T, target string) {
 		t.Fatal(err)
 	}
 
-	options := tmux.RespawnOptions{KillRunning: true, PreserveEnvironment: true, Program: tmux.Exec("/bin/sleep", "120")}
+	options := tmux.RespawnOptions{
+		KillRunning:         true,
+		PreserveEnvironment: true,
+		Program:             tmux.Exec("/bin/sleep", "120"),
+	}
 	if target == "pane" {
 		err = pane.Respawn(ctx, options)
 	} else {
@@ -334,7 +350,8 @@ func assertPreservedRespawnRejected(t *testing.T, target string) {
 	}
 
 	var operation *tmux.OperationError
-	if !errors.Is(err, tmux.ErrUnsupported) || !errors.As(err, &operation) || operation.Outcome.Effect != tmux.EffectNotSent {
+	if !errors.Is(err, tmux.ErrUnsupported) || !errors.As(err, &operation) ||
+		operation.Outcome.Effect != tmux.EffectNotSent {
 		t.Fatalf("Respawn error = %v, want ErrUnsupported with EffectNotSent", err)
 	}
 
@@ -344,7 +361,12 @@ func assertPreservedRespawnRejected(t *testing.T, target string) {
 	}
 
 	if after.PID != before.PID || after.Dead {
-		t.Fatalf("rejected respawn changed the running process: before PID %d, after PID %d, dead %v", before.PID, after.PID, after.Dead)
+		t.Fatalf(
+			"rejected respawn changed the running process: before PID %d, after PID %d, dead %v",
+			before.PID,
+			after.PID,
+			after.Dead,
+		)
 	}
 }
 
@@ -361,7 +383,10 @@ func TestIntegrationCaptureEscapeOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := pane.Submit(ctx, "printf 'Testing escape sequences: \\033[31mred\\033[0m \\001\\002\\n'"); err != nil {
+	if err := pane.Submit(
+		ctx,
+		"printf 'Testing escape sequences: \\033[31mred\\033[0m \\001\\002\\n'",
+	); err != nil {
 		t.Fatal(err)
 	}
 

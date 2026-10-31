@@ -14,7 +14,13 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-func nextSubscription(t *testing.T, ctx context.Context, stream *tmux.EventStream, name, value string) tmux.SubscriptionEvent {
+func nextSubscription(
+	t *testing.T,
+	ctx context.Context,
+	stream *tmux.EventStream,
+	name string,
+	value string,
+) tmux.SubscriptionEvent {
 	t.Helper()
 
 	for {
@@ -23,7 +29,8 @@ func nextSubscription(t *testing.T, ctx context.Context, stream *tmux.EventStrea
 			t.Fatalf("waiting for %s=%q: %v", name, value, err)
 		}
 
-		if got, ok := event.(tmux.SubscriptionEvent); ok && got.Name == name && bytes.Equal(got.Data(), []byte(value)) {
+		if got, ok := event.(tmux.SubscriptionEvent); ok && got.Name == name &&
+			bytes.Equal(got.Data(), []byte(value)) {
 			return got
 		}
 	}
@@ -83,7 +90,12 @@ func subscriptionValuesRemainData(t *testing.T, noEcho bool) {
 	}
 }
 
-func assertSubscriptionValueRemainsData(t *testing.T, ctx context.Context, stream *tmux.EventStream, value string) {
+func assertSubscriptionValueRemainsData(
+	t *testing.T,
+	ctx context.Context,
+	stream *tmux.EventStream,
+	value string,
+) {
 	t.Helper()
 
 	for {
@@ -96,7 +108,8 @@ func assertSubscriptionValueRemainsData(t *testing.T, ctx context.Context, strea
 			t.Fatalf("subscription injected pane output: %q", output.Data())
 		}
 
-		if got, ok := event.(tmux.SubscriptionEvent); ok && got.Name == "dynamic" && string(got.Data()) == value {
+		if got, ok := event.(tmux.SubscriptionEvent); ok && got.Name == "dynamic" &&
+			string(got.Data()) == value {
 			return
 		}
 	}
@@ -207,7 +220,12 @@ func defaultConnectionEnablesOnlySelectedPane(t *testing.T, method string) {
 		t.Fatal(err)
 	}
 
-	if err := connection.WatchFormat(ctx, "future_barrier", boundFuture, "#{pane_title}"); err != nil {
+	if err := connection.WatchFormat(
+		ctx,
+		"future_barrier",
+		boundFuture,
+		"#{pane_title}",
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -239,16 +257,29 @@ func defaultConnectionEnablesOnlySelectedPane(t *testing.T, method string) {
 	assertOnlySelectedPaneOutput(t, ctx, stream, target.ID())
 }
 
-func enableSelectedPaneOutput(ctx context.Context, connection *tmux.Connection, pane tmux.Pane, method string) error {
+func enableSelectedPaneOutput(
+	ctx context.Context,
+	connection *tmux.Connection,
+	pane tmux.Pane,
+	method string,
+) error {
 	var err error
 
 	switch method {
 	case "single":
 		err = connection.SetPaneOutput(ctx, pane, true)
 	case "batch":
-		err = connection.SetPaneOutputActions(ctx, tmux.PaneOutputSetting{Pane: pane, Action: tmux.PaneOutputOn})
+		err = connection.SetPaneOutputActions(
+			ctx,
+			tmux.PaneOutputSetting{Pane: pane, Action: tmux.PaneOutputOn},
+		)
 	case "refresh":
-		err = connection.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}}})
+		err = connection.Refresh(
+			ctx,
+			tmux.RefreshOptions{
+				PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}},
+			},
+		)
 	case "subprocess":
 		client, clientErr := connection.Client(ctx)
 		if clientErr != nil {
@@ -260,7 +291,12 @@ func enableSelectedPaneOutput(ctx context.Context, connection *tmux.Connection, 
 			return fmt.Errorf("find subprocess client: %w", clientErr)
 		}
 
-		err = client.Refresh(ctx, tmux.RefreshOptions{PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}}})
+		err = client.Refresh(
+			ctx,
+			tmux.RefreshOptions{
+				PaneActions: []tmux.PaneOutputSetting{{Pane: pane, Action: tmux.PaneOutputOn}},
+			},
+		)
 	}
 
 	if err != nil {
@@ -270,7 +306,12 @@ func enableSelectedPaneOutput(ctx context.Context, connection *tmux.Connection, 
 	return nil
 }
 
-func assertOnlySelectedPaneOutput(t *testing.T, ctx context.Context, stream *tmux.EventStream, target tmux.PaneID) {
+func assertOnlySelectedPaneOutput(
+	t *testing.T,
+	ctx context.Context,
+	stream *tmux.EventStream,
+	target tmux.PaneID,
+) {
 	t.Helper()
 
 	waitCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
@@ -322,7 +363,10 @@ func TestIntegrationRefreshOutputFlagResetsPaneSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := connection.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}}); err != nil {
+	if err := connection.Refresh(
+		ctx,
+		tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -353,7 +397,10 @@ func TestIntegrationSubprocessRefreshEnablesOutput(t *testing.T) {
 	}
 
 	stream := controlEvents(t, ctx, connection)
-	if err := client.Refresh(ctx, tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}}); err != nil {
+	if err := client.Refresh(
+		ctx,
+		tmux.RefreshOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagNoOutput.Negate()}},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -373,7 +420,12 @@ func TestIntegrationMixedRefreshPreservesOutputPolicy(t *testing.T) {
 		options tmux.RefreshOptions
 	}{
 		{name: "cursor", options: tmux.RefreshOptions{ResetCursorTracking: true}},
-		{name: "scroll", options: tmux.RefreshOptions{Scroll: tmux.ScrollAdjustment{Direction: tmux.ScrollDirectionUp}}},
+		{
+			name: "scroll",
+			options: tmux.RefreshOptions{
+				Scroll: tmux.ScrollAdjustment{Direction: tmux.ScrollDirectionUp},
+			},
+		},
 		{name: "clipboard", options: tmux.RefreshOptions{Clipboard: true}},
 	}
 
@@ -388,14 +440,22 @@ func TestIntegrationMixedRefreshPreservesOutputPolicy(t *testing.T) {
 	}
 }
 
-func mixedRefreshPreservesOutputPolicy(t *testing.T, options tmux.RefreshOptions, outputEnabled bool) {
+func mixedRefreshPreservesOutputPolicy(
+	t *testing.T,
+	options tmux.RefreshOptions,
+	outputEnabled bool,
+) {
 	t.Helper()
 
 	server, session, ctx := apiFixture(t)
 	_, pane := outputProducer(t, ctx, session)
 	outputControl(t, ctx, server, session)
 
-	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: outputEnabled})
+	connection, err := server.OpenControl(
+		ctx,
+		session.ID(),
+		tmux.ControlOptions{PaneOutput: outputEnabled},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -468,7 +528,12 @@ func TestIntegrationSubscriptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Re-registering the same name proves replacement after the acknowledged removal.
-	if err := connection.WatchFormat(ctx, "watched", bound, "#{pane_id}:#{pane_title}"); err != nil {
+	if err := connection.WatchFormat(
+		ctx,
+		"watched",
+		bound,
+		"#{pane_id}:#{pane_title}",
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -525,7 +590,12 @@ func TestIntegrationPaneOutputControl(t *testing.T) {
 	assertPaneOutput(t, ctx, stream, pane.ID())
 }
 
-func assertPaneOutput(t *testing.T, ctx context.Context, stream *tmux.EventStream, pane tmux.PaneID) {
+func assertPaneOutput(
+	t *testing.T,
+	ctx context.Context,
+	stream *tmux.EventStream,
+	pane tmux.PaneID,
+) {
 	t.Helper()
 
 	var output []byte
@@ -552,7 +622,12 @@ func assertPaneOutput(t *testing.T, ctx context.Context, stream *tmux.EventStrea
 	}
 }
 
-func outputControl(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session) *tmux.Connection {
+func outputControl(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+) *tmux.Connection {
 	t.Helper()
 
 	var options tmux.ControlOptions
@@ -573,7 +648,13 @@ func outputControl(t *testing.T, ctx context.Context, server *tmux.Server, sessi
 	return connection
 }
 
-func assertUnwatched(t *testing.T, ctx context.Context, connection *tmux.Connection, stream *tmux.EventStream, pane tmux.Pane) {
+func assertUnwatched(
+	t *testing.T,
+	ctx context.Context,
+	connection *tmux.Connection,
+	stream *tmux.EventStream,
+	pane tmux.Pane,
+) {
 	t.Helper()
 
 	if err := connection.WatchFormat(ctx, "barrier", pane, "#{pane_title}"); err != nil {
@@ -614,7 +695,11 @@ func waitWatchBarrier(t *testing.T, ctx context.Context, stream *tmux.EventStrea
 	}
 }
 
-func controlEvents(t *testing.T, ctx context.Context, connection *tmux.Connection) *tmux.EventStream {
+func controlEvents(
+	t *testing.T,
+	ctx context.Context,
+	connection *tmux.Connection,
+) *tmux.EventStream {
 	t.Helper()
 
 	var options tmux.EventOptions
@@ -640,7 +725,12 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 
 	stream := controlEvents(t, ctx, connection)
 
-	if err := connection.WatchFormat(ctx, "all_panes", tmux.TargetAllPanes(), "#{pane_title}"); err != nil {
+	if err := connection.WatchFormat(
+		ctx,
+		"all_panes",
+		tmux.TargetAllPanes(),
+		"#{pane_title}",
+	); err != nil {
 		t.Fatalf("WatchFormat TargetAllPanes failed: %v", err)
 	}
 
@@ -651,7 +741,12 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	event := nextSubscription(t, ctx, stream, "all_panes", "sub-all-panes-val")
 	assertPresent(t, "all_panes subscription pane", event.PaneID, pane.ID())
 
-	if err := connection.WatchFormat(ctx, "session_sub", tmux.TargetSession(), "#{session_name}"); err != nil {
+	if err := connection.WatchFormat(
+		ctx,
+		"session_sub",
+		tmux.TargetSession(),
+		"#{session_name}",
+	); err != nil {
 		t.Fatalf("WatchFormat TargetSession failed: %v", err)
 	}
 
@@ -682,7 +777,12 @@ func TestIntegrationSubscriptionsWithTargets(t *testing.T) {
 	assertPresent(t, "window subscription window", winEvent.WindowID, window.ID())
 	assertPresent(t, "window subscription index", winEvent.WindowIndex, 0)
 
-	if err := connection.WatchFormat(ctx, "all_windows", tmux.TargetAllWindows(), "#{window_name}"); err != nil {
+	if err := connection.WatchFormat(
+		ctx,
+		"all_windows",
+		tmux.TargetAllWindows(),
+		"#{window_name}",
+	); err != nil {
 		t.Fatalf("WatchFormat TargetAllWindows failed: %v", err)
 	}
 

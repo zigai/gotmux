@@ -18,9 +18,18 @@ import (
 	"github.com/zigai/gotmux/tmux"
 )
 
-func currentVars(identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID) tmux.TmuxVars {
+func currentVars(
+	identity tmux.ServerIdentity,
+	session tmux.SessionID,
+	pane tmux.PaneID,
+) tmux.TmuxVars {
 	return tmux.TmuxVars{
-		TMUX:     fmt.Sprintf("%s,%d,%s", identity.ReportedSocket, identity.PID, strings.TrimPrefix(string(session), "$")),
+		TMUX: fmt.Sprintf(
+			"%s,%d,%s",
+			identity.ReportedSocket,
+			identity.PID,
+			strings.TrimPrefix(string(session), "$"),
+		),
 		TMUXPane: string(pane),
 	}
 }
@@ -32,7 +41,9 @@ func assertNoCurrentContext(t *testing.T, info tmux.CurrentInfo) {
 	_, hasLink := info.Link.Get()
 
 	_, hasClient := info.Client.Get()
-	if info.Identity.PID != 0 || info.Pane.ID.Valid() || info.Window.ID.Valid() || hasSession || hasLink || hasClient {
+	if info.Identity.PID != 0 || info.Pane.ID.Valid() || info.Window.ID.Valid() || hasSession ||
+		hasLink ||
+		hasClient {
 		t.Fatalf("failed discovery returned a current context: %+v", info)
 	}
 }
@@ -75,18 +86,29 @@ func TestIntegrationSocketDiscoveryVerifiesDaemons(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !slices.ContainsFunc(servers, func(found *tmux.Server) bool { return found.Endpoint() == server.Endpoint() }) {
+	if !slices.ContainsFunc(
+		servers,
+		func(found *tmux.Server) bool { return found.Endpoint() == server.Endpoint() },
+	) {
 		t.Error("live daemon not returned by DiscoverServers")
 	}
 
 	for _, found := range servers {
-		if socket := found.Endpoint().SocketPath; slices.Contains([]string{stalePath, otherPath}, socket) {
+		if socket := found.Endpoint().SocketPath; slices.Contains(
+			[]string{stalePath, otherPath},
+			socket,
+		) {
 			t.Errorf("non-daemon server returned: %q", socket)
 		}
 	}
 }
 
-func discoveryFixture(t *testing.T, ctx context.Context, directory, socket string) *tmux.Server {
+func discoveryFixture(
+	t *testing.T,
+	ctx context.Context,
+	directory string,
+	socket string,
+) *tmux.Server {
 	t.Helper()
 
 	server, err := tmux.New(tmux.Config{
@@ -97,12 +119,19 @@ func discoveryFixture(t *testing.T, ctx context.Context, directory, socket strin
 		t.Fatal(err)
 	}
 
-	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "discovered", Start: tmux.StartPolicyAllowStart})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "discovered", Start: tmux.StartPolicyAllowStart},
+	)
 	if session.Valid() {
 		identity := session.ServerIdentity()
 
 		t.Cleanup(func() {
-			if err := server.KillMatching(ctx, identity); err != nil && !errors.Is(err, tmux.ErrNoServer) {
+			if err := server.KillMatching(
+				ctx,
+				identity,
+			); err != nil &&
+				!errors.Is(err, tmux.ErrNoServer) {
 				t.Error(err)
 			}
 		})
@@ -232,7 +261,10 @@ func TestIntegrationRepeatedDiscoveryStartsOneClientPerDaemon(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if !slices.ContainsFunc(servers, func(found *tmux.Server) bool { return found.Endpoint().SocketPath == path }) {
+		if !slices.ContainsFunc(
+			servers,
+			func(found *tmux.Server) bool { return found.Endpoint().SocketPath == path },
+		) {
 			t.Fatalf("live daemon not discovered: %v", servers)
 		}
 	}
@@ -320,7 +352,10 @@ func TestIntegrationCurrentFromDiscovery(t *testing.T) {
 		{name: "active-pane", pane: activePane.ID(), link: activeLink},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			info, err := server.CurrentFrom(ctx, currentVars(identity.Identity, session.ID(), test.hint))
+			info, err := server.CurrentFrom(
+				ctx,
+				currentVars(identity.Identity, session.ID(), test.hint),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -330,11 +365,19 @@ func TestIntegrationCurrentFromDiscovery(t *testing.T) {
 	}
 }
 
-func assertCurrentContext(t *testing.T, info tmux.CurrentInfo, identity tmux.ServerIdentity, session tmux.SessionID, pane tmux.PaneID, link tmux.WindowLink) {
+func assertCurrentContext(
+	t *testing.T,
+	info tmux.CurrentInfo,
+	identity tmux.ServerIdentity,
+	session tmux.SessionID,
+	pane tmux.PaneID,
+	link tmux.WindowLink,
+) {
 	t.Helper()
 
 	window := link.Window().ID()
-	if !info.Identity.Equal(identity) || info.Pane.ID != pane || info.Window.ID != window || info.Pane.WindowID != window {
+	if !info.Identity.Equal(identity) || info.Pane.ID != pane || info.Window.ID != window ||
+		info.Pane.WindowID != window {
 		t.Fatalf("wrong daemon/pane/window context: %+v", info)
 	}
 
@@ -342,7 +385,8 @@ func assertCurrentContext(t *testing.T, info tmux.CurrentInfo, identity tmux.Ser
 		t.Fatalf("session: %+v, available=%v", got, ok)
 	}
 
-	if got, ok := info.Link.Get(); !ok || got.SessionID != session || got.WindowID != window || got.Index != link.Index() {
+	if got, ok := info.Link.Get(); !ok || got.SessionID != session || got.WindowID != window ||
+		got.Index != link.Index() {
 		t.Fatalf("link: %+v, available=%v", got, ok)
 	}
 }

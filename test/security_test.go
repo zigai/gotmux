@@ -53,7 +53,10 @@ func guardedSocketFixture(t *testing.T, ctx context.Context, suffix string) tmux
 		t.Fatal(err)
 	}
 
-	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "guarded", Start: tmux.StartPolicyAllowStart})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "guarded", Start: tmux.StartPolicyAllowStart},
+	)
 	if session.Valid() {
 		t.Cleanup(func() {
 			command, err := tmux.NewCommand("kill-server")
@@ -127,7 +130,13 @@ func TestSecurityFormatInjection(t *testing.T) {
 	assertNotCreated(t, vulnOptMarker, "option value")
 
 	// 4. A buffer with formats in its name and content keeps both literal.
-	assertLiteralBuffer(t, ctx, server, "buf-#{pane_id}", []byte("#{pane_id}:literal-content-#{run-shell:echo evil}"))
+	assertLiteralBuffer(
+		t,
+		ctx,
+		server,
+		"buf-#{pane_id}",
+		[]byte("#{pane_id}:literal-content-#{run-shell:echo evil}"),
+	)
 
 	// 5. Guarded mutations and queries keep working on objects with '#' in their names.
 	assertHashNamedWindowUsable(t, ctx, session, link)
@@ -137,7 +146,13 @@ func TestSecurityFormatInjection(t *testing.T) {
 	}
 }
 
-func assertLiteralBuffer(t *testing.T, ctx context.Context, server *tmux.Server, name string, content []byte) {
+func assertLiteralBuffer(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	name string,
+	content []byte,
+) {
 	t.Helper()
 
 	bufRef, err := tmux.NamedBuffer(name)
@@ -158,12 +173,23 @@ func assertLiteralBuffer(t *testing.T, ctx context.Context, server *tmux.Server,
 	}
 
 	buffers, err := server.Buffers(ctx)
-	if err != nil || !slices.ContainsFunc(buffers, func(b tmux.BufferInfo) bool { return b.Name == name }) {
-		t.Fatalf("buffer %q was not found by its literal name in server.Buffers (got %+v, %v)", name, buffers, err)
+	if err != nil ||
+		!slices.ContainsFunc(buffers, func(b tmux.BufferInfo) bool { return b.Name == name }) {
+		t.Fatalf(
+			"buffer %q was not found by its literal name in server.Buffers (got %+v, %v)",
+			name,
+			buffers,
+			err,
+		)
 	}
 }
 
-func assertHashNamedWindowUsable(t *testing.T, ctx context.Context, session tmux.Session, link tmux.WindowLink) {
+func assertHashNamedWindowUsable(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	link tmux.WindowLink,
+) {
 	t.Helper()
 
 	renamedName := "win-#{pane_id}-renamed"
@@ -221,7 +247,7 @@ func windowName(t *testing.T, ctx context.Context, window tmux.Window) string {
 	return info.Name
 }
 
-func assertNotCreated(t *testing.T, marker, where string) {
+func assertNotCreated(t *testing.T, marker string, where string) {
 	t.Helper()
 
 	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
@@ -293,7 +319,10 @@ func TestSecurityShellProgramReachesTheShellUnchanged(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "out")
 	script := `V='a "b" $c'; printf '%s' "$V;#{pane_id};$((1+1))" > '` + out + `'`
 
-	if _, err := session.NewWindow(ctx, tmux.NewWindowOptions{Name: "shell", Program: tmux.Shell(script)}); err != nil {
+	if _, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowOptions{Name: "shell", Program: tmux.Shell(script)},
+	); err != nil {
 		t.Fatal(err)
 	}
 

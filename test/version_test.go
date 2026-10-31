@@ -70,17 +70,43 @@ func TestParseVersionForms(t *testing.T) {
 		atLeast37     bool
 		wantRendering string
 	}{
-		{"tmux 3.6a", tmux.Version{Raw: "tmux 3.6a", Major: 3, Minor: 6, Patch: "a", Suffix: "", Recognized: true}, true, false, "tmux 3.6a"},
-		{"3.6", tmux.Version{Raw: "3.6", Major: 3, Minor: 6, Patch: "", Suffix: "", Recognized: true}, true, false, "3.6"},
-		{"3.6-rc1", tmux.Version{Raw: "3.6-rc1", Major: 3, Minor: 6, Patch: "", Suffix: "-rc1", Recognized: false}, true, false, "3.6-rc1"},
+		{
+			"tmux 3.6a",
+			tmux.Version{Raw: "tmux 3.6a", Major: 3, Minor: 6, Patch: "a", Suffix: "", Recognized: true},
+			true, false, "tmux 3.6a",
+		},
+		{
+			"3.6",
+			tmux.Version{Raw: "3.6", Major: 3, Minor: 6, Patch: "", Suffix: "", Recognized: true},
+			true, false, "3.6",
+		},
+		{
+			"3.6-rc1",
+			tmux.Version{Raw: "3.6-rc1", Major: 3, Minor: 6, Patch: "", Suffix: "-rc1", Recognized: false},
+			true, false, "3.6-rc1",
+		},
 	} {
 		got := tmux.ParseVersion(tc.raw)
 		if got != tc.want || got.String() != tc.wantRendering {
-			t.Errorf("ParseVersion(%q) = %+v (String %q), want %+v (String %q)", tc.raw, got, got.String(), tc.want, tc.wantRendering)
+			t.Errorf(
+				"ParseVersion(%q) = %+v (String %q), want %+v (String %q)",
+				tc.raw,
+				got,
+				got.String(),
+				tc.want,
+				tc.wantRendering,
+			)
 		}
 
 		if got.AtLeast(3, 6) != tc.atLeast36 || got.AtLeast(3, 7) != tc.atLeast37 {
-			t.Errorf("ParseVersion(%q): AtLeast(3, 6) = %v, AtLeast(3, 7) = %v; want %v, %v", tc.raw, got.AtLeast(3, 6), got.AtLeast(3, 7), tc.atLeast36, tc.atLeast37)
+			t.Errorf(
+				"ParseVersion(%q): AtLeast(3, 6) = %v, AtLeast(3, 7) = %v; want %v, %v",
+				tc.raw,
+				got.AtLeast(3, 6),
+				got.AtLeast(3, 7),
+				tc.atLeast36,
+				tc.atLeast37,
+			)
 		}
 	}
 }

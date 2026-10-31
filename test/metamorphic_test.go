@@ -63,7 +63,11 @@ var metamorphicValuePartitions = []string{
 	"àáâãäå",
 }
 
-func drawCommandPair(rt *rapid.T, sessA, sessB tmux.Session) (tmux.Command, tmux.Command) {
+func drawCommandPair(
+	rt *rapid.T,
+	sessA tmux.Session,
+	sessB tmux.Session,
+) (tmux.Command, tmux.Command) {
 	key := rapid.SampledFrom(metamorphicCandidateKeys).Draw(rt, "key")
 	action := rapid.SampledFrom([]string{"set", "set", "set", "unset"}).Draw(rt, "action")
 
@@ -99,7 +103,13 @@ func drawCommandPair(rt *rapid.T, sessA, sessB tmux.Session) (tmux.Command, tmux
 	return cmdA, cmdB
 }
 
-func assertMetamorphicEquivalence(ctx context.Context, rt *rapid.T, server *tmux.Server, sessA, sessB tmux.Session) {
+func assertMetamorphicEquivalence(
+	ctx context.Context,
+	rt *rapid.T,
+	server *tmux.Server,
+	sessA tmux.Session,
+	sessB tmux.Session,
+) {
 	for _, key := range metamorphicCandidateKeys {
 		optA, errA := sessA.Options().User(ctx, key)
 
@@ -137,11 +147,20 @@ func assertMetamorphicEquivalence(ctx context.Context, rt *rapid.T, server *tmux
 		}
 
 		if resA.ExitCode != resB.ExitCode {
-			rt.Fatalf("raw option exit code mismatch for %s: A=%d, B=%d", key, resA.ExitCode, resB.ExitCode)
+			rt.Fatalf(
+				"raw option exit code mismatch for %s: A=%d, B=%d",
+				key,
+				resA.ExitCode,
+				resB.ExitCode,
+			)
 		}
 
 		if !bytes.Equal(resA.Stdout, resB.Stdout) {
-			rt.Fatalf("raw option stdout mismatch for %s:\n%s", key, cmp.Diff(string(resA.Stdout), string(resB.Stdout)))
+			rt.Fatalf(
+				"raw option stdout mismatch for %s:\n%s",
+				key,
+				cmp.Diff(string(resA.Stdout), string(resB.Stdout)),
+			)
 		}
 	}
 
@@ -221,7 +240,13 @@ func TestMetamorphicSequenceEquivalence(t *testing.T) {
 		for idx, cmd := range cmdsB {
 			resSeq, err := server.Run(trialCtx, cmd)
 			if err != nil {
-				rt.Fatalf("server.Run command %d (%v) failed: %v, stderr: %s", idx, cmd, err, resSeq.Stderr)
+				rt.Fatalf(
+					"server.Run command %d (%v) failed: %v, stderr: %s",
+					idx,
+					cmd,
+					err,
+					resSeq.Stderr,
+				)
 			}
 		}
 
@@ -305,7 +330,11 @@ func TestMetamorphicSequenceAssociativity(t *testing.T) {
 
 		resCombinedA, err := server.RunSequence(trialCtx, seqCombinedA)
 		if err != nil {
-			rt.Fatalf("server.RunSequence combined A failed: %v, stderr: %s", err, resCombinedA.Stderr)
+			rt.Fatalf(
+				"server.RunSequence combined A failed: %v, stderr: %s",
+				err,
+				resCombinedA.Stderr,
+			)
 		}
 
 		seq1B, err := tmux.Sequence(cmds1B...)

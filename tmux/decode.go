@@ -12,7 +12,8 @@ import (
 type recordDecoder struct {
 	kind string
 	raw  map[string]string
-	err  error
+	//exhaustruct:optional
+	err error
 }
 
 type paneContext struct {
@@ -108,7 +109,13 @@ func parseRaw(data []byte, fields []string, kind string) ([]map[string]string, e
 }
 
 func (s *Server) decodeIdentity(d *recordDecoder) ServerIdentity {
-	id := ServerIdentity{Endpoint: s.endpoint, PID: d.nonnegative("pid"), Started: d.timestamp("start_time"), ReportedSocket: d.str("socket_path"), Generation: 0}
+	id := ServerIdentity{
+		Endpoint:       s.endpoint,
+		PID:            d.nonnegative("pid"),
+		Started:        d.timestamp("start_time"),
+		ReportedSocket: d.str("socket_path"),
+		Generation:     0,
+	}
 	if s.conn != nil {
 		id.Generation = s.conn.generation
 	} else if s.bound != nil {
@@ -122,8 +129,12 @@ func (s *Server) decodeIdentity(d *recordDecoder) ServerIdentity {
 	return id
 }
 
-func (s *Server) decoder(m map[string]string, kind string, expected *ServerIdentity) (*recordDecoder, ServerIdentity) {
-	d := &recordDecoder{kind: kind, raw: m, err: nil}
+func (s *Server) decoder(
+	m map[string]string,
+	kind string,
+	expected *ServerIdentity,
+) (*recordDecoder, ServerIdentity) {
+	d := &recordDecoder{kind: kind, raw: m}
 
 	id := s.decodeIdentity(d)
 	if expected != nil && expected.valid() && !id.sameDaemon(*expected) {
@@ -139,7 +150,13 @@ func (s *Server) decoder(m map[string]string, kind string, expected *ServerIdent
 }
 
 func (s *Server) newHandle(id string, kind ObjectKind, origin ServerIdentity) handle {
-	return handle{server: s, origin: origin, id: id, kind: kind, client: clientCheck{name: "", pid: 0, created: 0}}
+	return handle{
+		server: s,
+		origin: origin,
+		id:     id,
+		kind:   kind,
+		client: clientCheck{name: "", pid: 0, created: 0},
+	}
 }
 
 func (s *Server) decodeSession(m map[string]string, expected *ServerIdentity) (SessionInfo, error) {
@@ -175,7 +192,10 @@ func (s *Server) decodeSession(m map[string]string, expected *ServerIdentity) (S
 	return v, nil
 }
 
-func (s *Server) decodeWindow(m map[string]string, expected *ServerIdentity) (WindowInfo, WindowLinkInfo, error) {
+func (s *Server) decodeWindow(
+	m map[string]string,
+	expected *ServerIdentity,
+) (WindowInfo, WindowLinkInfo, error) {
 	d, id := s.decoder(m, "window", expected)
 
 	wid := WindowID(d.str("window_id"))

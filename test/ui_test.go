@@ -48,7 +48,12 @@ func (log *terminalLog) contains(text string) bool {
 	return bytes.Contains(log.data, []byte(text))
 }
 
-func uiClient(t *testing.T, ctx context.Context, server *tmux.Server, session tmux.Session) (tmux.Client, *os.File, *terminalLog) {
+func uiClient(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	session tmux.Session,
+) (tmux.Client, *os.File, *terminalLog) {
 	t.Helper()
 	master, slave := openPTY(t)
 	output := &terminalLog{mu: sync.Mutex{}, data: nil}
@@ -94,7 +99,13 @@ func waitUIResult(t *testing.T, ctx context.Context, result <-chan error) {
 	}
 }
 
-func awaitUserOption(t *testing.T, ctx context.Context, session tmux.Session, name, value string) {
+func awaitUserOption(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	name string,
+	value string,
+) {
 	t.Helper()
 	awaitObservation(t, ctx, "user option "+name, func() bool {
 		got, err := session.Options().User(ctx, name)
@@ -112,7 +123,15 @@ func TestIntegrationClientMenu(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 	command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-effect", "selected")
-	items := []tmux.MenuItem{{Label: "TGO_MENU_READY", Key: "x", Commands: testSequence(t, command), IsSeparator: false, Disabled: false}}
+	items := []tmux.MenuItem{
+		{
+			Label:       "TGO_MENU_READY",
+			Key:         "x",
+			Commands:    testSequence(t, command),
+			IsSeparator: false,
+			Disabled:    false,
+		},
+	}
 	result := make(chan error, 1)
 
 	go func() {
@@ -120,7 +139,12 @@ func TestIntegrationClientMenu(t *testing.T) {
 		result <- client.Menu(ctx, items, options)
 	}()
 
-	awaitObservation(t, ctx, "menu rendered", func() bool { return output.contains("TGO_MENU_READY") })
+	awaitObservation(
+		t,
+		ctx,
+		"menu rendered",
+		func() bool { return output.contains("TGO_MENU_READY") },
+	)
 
 	if _, err := terminal.WriteString("x"); err != nil {
 		t.Fatal(err)
@@ -135,9 +159,22 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 	client, terminal, output := uiClient(t, ctx, server, session)
 
 	t.Run("MouseFalseDismissal", func(t *testing.T) {
-		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-not-selected", "ran")
+		command := testCommand(
+			t,
+			"set-option",
+			"-t",
+			string(session.ID()),
+			"@menu-not-selected",
+			"ran",
+		)
 		items := []tmux.MenuItem{
-			{Label: "TGO_MENU_ITEM_1", Key: "1", Commands: testSequence(t, command), IsSeparator: false, Disabled: false},
+			{
+				Label:       "TGO_MENU_ITEM_1",
+				Key:         "1",
+				Commands:    testSequence(t, command),
+				IsSeparator: false,
+				Disabled:    false,
+			},
 		}
 
 		result := make(chan error, 1)
@@ -167,9 +204,22 @@ func TestIntegrationClientMenuMouseAndDismissal(t *testing.T) {
 	})
 
 	t.Run("MouseTrueSelection", func(t *testing.T) {
-		command := testCommand(t, "set-option", "-t", string(session.ID()), "@menu-mouse-effect", "selected")
+		command := testCommand(
+			t,
+			"set-option",
+			"-t",
+			string(session.ID()),
+			"@menu-mouse-effect",
+			"selected",
+		)
 		items := []tmux.MenuItem{
-			{Label: "TGO_MENU_ITEM_M", Key: "m", Commands: testSequence(t, command), IsSeparator: false, Disabled: false},
+			{
+				Label:       "TGO_MENU_ITEM_M",
+				Key:         "m",
+				Commands:    testSequence(t, command),
+				IsSeparator: false,
+				Disabled:    false,
+			},
 			tmux.MenuSeparator(),
 		}
 
@@ -202,14 +252,21 @@ func TestIntegrationClientPrompt(t *testing.T) {
 	var options tmux.PromptOptions
 
 	options.Label = "TGO_PROMPT_READY"
-	template := tmux.PromptTemplate("set-option -t " + string(session.ID()) + " @prompt-effect '%%'")
+	template := tmux.PromptTemplate(
+		"set-option -t " + string(session.ID()) + " @prompt-effect '%%'",
+	)
 
 	// Prompt returns once the prompt is shown, before anyone answers it.
 	if err := client.Prompt(ctx, template, options); err != nil {
 		t.Fatal(err)
 	}
 
-	awaitObservation(t, ctx, "prompt rendered", func() bool { return output.contains("TGO_PROMPT_READY") })
+	awaitObservation(
+		t,
+		ctx,
+		"prompt rendered",
+		func() bool { return output.contains("TGO_PROMPT_READY") },
+	)
 
 	if _, err := terminal.WriteString("typed-value\r"); err != nil {
 		t.Fatal(err)
@@ -227,7 +284,11 @@ func TestIntegrationClientPopup(t *testing.T) {
 
 	options.Dir = dir
 	options.Env = map[string]string{"TGO_POPUP_VALUE": "literal ; #{pane_id}"}
-	options.Program = tmux.Exec("/bin/sh", "-c", `printf '%s\n%s' "$PWD" "$TGO_POPUP_VALUE" > result`)
+	options.Program = tmux.Exec(
+		"/bin/sh",
+		"-c",
+		`printf '%s\n%s' "$PWD" "$TGO_POPUP_VALUE" > result`,
+	)
 
 	options.CloseOnExit = true
 	if err := client.Popup(ctx, options); err != nil {
@@ -275,19 +336,34 @@ func TestIntegrationMessage(t *testing.T) {
 		t.Fatalf("client.Message: %v", err)
 	}
 
-	awaitObservation(t, ctx, "client message rendered", func() bool { return output.contains("CLIENT_MSG_OK") })
+	awaitObservation(
+		t,
+		ctx,
+		"client message rendered",
+		func() bool { return output.contains("CLIENT_MSG_OK") },
+	)
 
 	if err := pane.Message(ctx, "PANE_MSG_OK"); err != nil {
 		t.Fatalf("pane.Message: %v", err)
 	}
 
-	awaitObservation(t, ctx, "pane message rendered", func() bool { return output.contains("PANE_MSG_OK") })
+	awaitObservation(
+		t,
+		ctx,
+		"pane message rendered",
+		func() bool { return output.contains("PANE_MSG_OK") },
+	)
 
 	if err := server.Message(ctx, "SERVER_MSG_OK"); err != nil {
 		t.Fatalf("server.Message: %v", err)
 	}
 
-	awaitObservation(t, ctx, "server message rendered", func() bool { return output.contains("SERVER_MSG_OK") })
+	awaitObservation(
+		t,
+		ctx,
+		"server message rendered",
+		func() bool { return output.contains("SERVER_MSG_OK") },
+	)
 }
 
 func TestIntegrationClientPopupWithoutDeadline(t *testing.T) {
@@ -362,7 +438,14 @@ func assertReadOnly(t *testing.T, ctx context.Context, client tmux.Client, want 
 	}
 }
 
-func switchAndAwait(t *testing.T, ctx context.Context, client tmux.Client, target tmux.Session, toggle, wantReadOnly bool) {
+func switchAndAwait(
+	t *testing.T,
+	ctx context.Context,
+	client tmux.Client,
+	target tmux.Session,
+	toggle bool,
+	wantReadOnly bool,
+) {
 	t.Helper()
 
 	if err := client.Switch(ctx, target, tmux.SwitchOptions{ToggleReadOnly: toggle}); err != nil {
@@ -386,7 +469,11 @@ func TestIntegrationUIControls(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 	client, terminal, output := uiClient(t, ctx, server, session)
 
-	if err := client.MessageWith(ctx, "hello from ui controls test", tmux.MessageOptions{Duration: 200 * time.Millisecond}); err != nil {
+	if err := client.MessageWith(
+		ctx,
+		"hello from ui controls test",
+		tmux.MessageOptions{Duration: 200 * time.Millisecond},
+	); err != nil {
 		t.Fatalf("MessageWith failed: %v", err)
 	}
 
@@ -410,7 +497,12 @@ func TestIntegrationUIControls(t *testing.T) {
 		})
 	}()
 
-	awaitObservation(t, ctx, "keyless menu rendered", func() bool { return output.contains("TGO_KEYLESS_ITEM") })
+	awaitObservation(
+		t,
+		ctx,
+		"keyless menu rendered",
+		func() bool { return output.contains("TGO_KEYLESS_ITEM") },
+	)
 
 	if _, err := terminal.WriteString("q"); err != nil {
 		t.Fatal(err)
@@ -428,7 +520,10 @@ func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
 	client, _, _ := uiClient(t, ctx, server, displayed)
 
 	// The newest session becomes tmux's default command target, which must not leak into client metadata.
-	if _, err := server.NewSession(ctx, tmux.NewSessionOptions{Window: "newer", Program: tmux.Shell("sleep 60")}); err != nil {
+	if _, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Window: "newer", Program: tmux.Shell("sleep 60")},
+	); err != nil {
 		t.Fatal(err)
 	}
 
@@ -453,7 +548,13 @@ func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
 	}
 }
 
-func assertUnprobedClientSession(t *testing.T, ctx context.Context, server *tmux.Server, name tmux.ClientName, displayed tmux.Session) {
+func assertUnprobedClientSession(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	name tmux.ClientName,
+	displayed tmux.Session,
+) {
 	t.Helper()
 
 	unprobed, err := server.ClientHandle(name)
@@ -461,16 +562,28 @@ func assertUnprobedClientSession(t *testing.T, ctx context.Context, server *tmux
 		t.Fatal(err)
 	}
 
-	extended, err := unprobed.InfoWith(ctx, tmux.QueryOptions{Filter: "", ExtraFields: []string{"session_name"}})
+	extended, err := unprobed.InfoWith(
+		ctx,
+		tmux.QueryOptions{Filter: "", ExtraFields: []string{"session_name"}},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	if id, ok := extended.SessionID.Get(); !ok || id != displayed.ID() {
-		t.Fatalf("unprobed Client.InfoWith session = %q (present %v), want %q", id, ok, displayed.ID())
+		t.Fatalf(
+			"unprobed Client.InfoWith session = %q (present %v), want %q",
+			id,
+			ok,
+			displayed.ID(),
+		)
 	}
 
 	if sessionName, ok := extended.Raw("session_name"); !ok || string(sessionName) != "fixture" {
-		t.Fatalf("unprobed Client.InfoWith session_name = %q (present %v), want fixture", sessionName, ok)
+		t.Fatalf(
+			"unprobed Client.InfoWith session_name = %q (present %v), want fixture",
+			sessionName,
+			ok,
+		)
 	}
 }

@@ -34,7 +34,13 @@ func TestIntegrationControlParityAndExplicitSubprocess(t *testing.T) {
 	plain, controlled := transportPanes(t, ctx, s, conn)
 
 	pane := controlled.Handle()
-	if _, e = pane.Capture(ctx, tmux.CaptureOptions{}); !errors.Is(e, tmux.ErrTransportUnsupported) {
+	if _, e = pane.Capture(
+		ctx,
+		tmux.CaptureOptions{},
+	); !errors.Is(
+		e,
+		tmux.ErrTransportUnsupported,
+	) {
 		t.Fatalf("unsafe control capture accepted: %v", e)
 	}
 
@@ -63,7 +69,12 @@ func TestIntegrationControlParityAndExplicitSubprocess(t *testing.T) {
 	}
 }
 
-func transportPanes(t *testing.T, ctx context.Context, s *tmux.Server, conn *tmux.Connection) (tmux.PaneInfo, tmux.PaneInfo) {
+func transportPanes(
+	t *testing.T,
+	ctx context.Context,
+	s *tmux.Server,
+	conn *tmux.Connection,
+) (tmux.PaneInfo, tmux.PaneInfo) {
 	t.Helper()
 
 	plain, e := s.Panes(ctx)
@@ -76,14 +87,15 @@ func transportPanes(t *testing.T, ctx context.Context, s *tmux.Server, conn *tmu
 		t.Fatal(e)
 	}
 
-	if len(plain) != len(controlled) || plain[0].ID != controlled[0].ID || plain[0].Title != controlled[0].Title {
+	if len(plain) != len(controlled) || plain[0].ID != controlled[0].ID ||
+		plain[0].Title != controlled[0].Title {
 		t.Fatal("transport record mismatch")
 	}
 
 	return plain[0], controlled[0]
 }
 
-func assertSameCapture(t *testing.T, ctx context.Context, a, b tmux.Pane) {
+func assertSameCapture(t *testing.T, ctx context.Context, a tmux.Pane, b tmux.Pane) {
 	t.Helper()
 
 	first, e := a.Capture(ctx, tmux.CaptureOptions{})
@@ -100,7 +112,14 @@ func assertSameCapture(t *testing.T, ctx context.Context, a, b tmux.Pane) {
 func TestIntegrationOpenControlMissingSessionIsNotFound(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
-	if _, err := server.OpenControl(ctx, "$999", tmux.ControlOptions{}); !errors.Is(err, tmux.ErrNotFound) {
+	if _, err := server.OpenControl(
+		ctx,
+		"$999",
+		tmux.ControlOptions{},
+	); !errors.Is(
+		err,
+		tmux.ErrNotFound,
+	) {
 		t.Fatalf("missing session: %v, want ErrNotFound", err)
 	}
 
@@ -124,7 +143,9 @@ func TestIntegrationOpenControlBindsAnsweringDaemon(t *testing.T) {
 	}
 
 	bound := sessions[0].Handle().ServerIdentity()
-	if bound.PID != probe.Identity.PID || !bound.Started.Equal(probe.Identity.Started) || bound.ReportedSocket != probe.Identity.ReportedSocket || bound.Generation == 0 {
+	if bound.PID != probe.Identity.PID || !bound.Started.Equal(probe.Identity.Started) ||
+		bound.ReportedSocket != probe.Identity.ReportedSocket ||
+		bound.Generation == 0 {
 		t.Fatalf("control-bound identity = %+v, daemon = %+v", bound, probe.Identity)
 	}
 
@@ -137,7 +158,11 @@ func TestIntegrationOpenControlBindsAnsweringDaemon(t *testing.T) {
 		t.Fatalf("control version = %+v, daemon reports %+v", version, probe.Version)
 	}
 
-	if _, err := conn.SubprocessServer().OpenControl(ctx, session.ID(), tmux.ControlOptions{}); !errors.Is(err, tmux.ErrTransportUnsupported) {
+	if _, err := conn.SubprocessServer().
+		OpenControl(ctx, session.ID(), tmux.ControlOptions{}); !errors.Is(
+		err,
+		tmux.ErrTransportUnsupported,
+	) {
 		t.Fatalf("open from bound server: %v, want ErrTransportUnsupported", err)
 	}
 }
@@ -147,7 +172,11 @@ func TestIntegrationOpenControlBindsAnsweringDaemon(t *testing.T) {
 func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {
 	server, session, ctx := apiFixture(t)
 
-	connection, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0})
+	connection, err := server.OpenControl(
+		ctx,
+		session.ID(),
+		tmux.ControlOptions{PaneOutput: false, QueuedBytes: 0},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}

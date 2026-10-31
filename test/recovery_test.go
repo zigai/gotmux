@@ -52,7 +52,13 @@ func TestDaemonReplacement(t *testing.T) {
 
 	paneB := firstPane(t, ctx, serverB)
 	if sessionB.ID() != sessionA.ID() || paneB.ID() != paneA.ID() {
-		t.Fatalf("replacement did not reuse context IDs: session %s/%s, pane %s/%s", sessionA.ID(), sessionB.ID(), paneA.ID(), paneB.ID())
+		t.Fatalf(
+			"replacement did not reuse context IDs: session %s/%s, pane %s/%s",
+			sessionA.ID(),
+			sessionB.ID(),
+			paneA.ID(),
+			paneB.ID(),
+		)
 	}
 
 	for _, name := range []string{"stale-environment-with-pane", "stale-environment-without-pane"} {
@@ -92,7 +98,8 @@ func TestDaemonReplacement(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			err := test.source.Swap(ctx, test.target, tmux.SwapPaneOptions{Select: false})
-			if !errors.Is(err, tmux.ErrServerChanged) || outcomeOf(err).Effect != tmux.EffectNotSent {
+			if !errors.Is(err, tmux.ErrServerChanged) ||
+				outcomeOf(err).Effect != tmux.EffectNotSent {
 				t.Errorf("mixed handles lost stale daemon guard: %v", err)
 			}
 
@@ -101,7 +108,12 @@ func TestDaemonReplacement(t *testing.T) {
 	}
 }
 
-func unprobedParentWindow(t *testing.T, ctx context.Context, server *tmux.Server, paneID tmux.PaneID) tmux.Window {
+func unprobedParentWindow(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	paneID tmux.PaneID,
+) tmux.Window {
 	t.Helper()
 
 	pane, err := server.PaneHandle(paneID)
@@ -117,7 +129,12 @@ func unprobedParentWindow(t *testing.T, ctx context.Context, server *tmux.Server
 	return window
 }
 
-func assertStaleParentWindowRefused(t *testing.T, ctx context.Context, parentWindow tmux.Window, paneB tmux.Pane) {
+func assertStaleParentWindowRefused(
+	t *testing.T,
+	ctx context.Context,
+	parentWindow tmux.Window,
+	paneB tmux.Pane,
+) {
 	t.Helper()
 
 	replacementWindow, err := paneB.Window(ctx)
@@ -126,7 +143,11 @@ func assertStaleParentWindowRefused(t *testing.T, ctx context.Context, parentWin
 	}
 
 	beforeWindowName := windowName(t, ctx, replacementWindow)
-	if err := parentWindow.Rename(ctx, "stale-parent"); !errors.Is(err, tmux.ErrServerChanged) || outcomeOf(err).Effect != tmux.EffectNotSent {
+	if err := parentWindow.Rename(
+		ctx,
+		"stale-parent",
+	); !errors.Is(err, tmux.ErrServerChanged) ||
+		outcomeOf(err).Effect != tmux.EffectNotSent {
 		t.Errorf("stale parent window mutation = %v", err)
 	}
 
@@ -150,7 +171,11 @@ func killDaemon(t *testing.T, pid int) {
 	time.Sleep(50 * time.Millisecond)
 }
 
-func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerIdentity) (*tmux.Server, tmux.Session) {
+func startReplacementDaemon(
+	t *testing.T,
+	ctx context.Context,
+	old tmux.ServerIdentity,
+) (*tmux.Server, tmux.Session) {
 	t.Helper()
 
 	server, err := tmux.New(tmux.Config{
@@ -162,7 +187,10 @@ func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerId
 		t.Fatalf("tmux.New for Server B failed: %v", err)
 	}
 
-	session, err := server.NewSession(ctx, tmux.NewSessionOptions{Name: "replacement", Start: tmux.StartPolicyAllowStart})
+	session, err := server.NewSession(
+		ctx,
+		tmux.NewSessionOptions{Name: "replacement", Start: tmux.StartPolicyAllowStart},
+	)
 	if session.Valid() {
 		identity := session.ServerIdentity()
 
@@ -170,7 +198,11 @@ func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerId
 			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
 
-			if err := server.KillMatching(cleanupCtx, identity); err != nil && !errors.Is(err, tmux.ErrNoServer) {
+			if err := server.KillMatching(
+				cleanupCtx,
+				identity,
+			); err != nil &&
+				!errors.Is(err, tmux.ErrNoServer) {
 				t.Errorf("kill Server B: %v", err)
 			}
 		})
@@ -187,7 +219,12 @@ func startReplacementDaemon(t *testing.T, ctx context.Context, old tmux.ServerId
 	return server, session
 }
 
-func assertStaleMutationRefused(t *testing.T, ctx context.Context, stale tmux.Session, replacement *tmux.Server) {
+func assertStaleMutationRefused(
+	t *testing.T,
+	ctx context.Context,
+	stale tmux.Session,
+	replacement *tmux.Server,
+) {
 	t.Helper()
 
 	_, err := stale.NewWindow(ctx, tmux.NewWindowOptions{Name: "should-fail"})

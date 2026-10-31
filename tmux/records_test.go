@@ -18,7 +18,15 @@ func paneFixture(s *Server) map[string]string {
 		m[f] = "0"
 	}
 
-	for _, f := range []string{"pane_title", "pane_current_path", "pane_current_command", "pane_tty", "pane_dead_status", "pane_mode", "selection_present"} {
+	for _, f := range []string{
+		"pane_title",
+		"pane_current_path",
+		"pane_current_command",
+		"pane_tty",
+		"pane_dead_status",
+		"pane_mode",
+		"selection_present",
+	} {
 		m[f] = ""
 	}
 
@@ -149,7 +157,6 @@ func TestRecordProvenanceAndRawOwnership(t *testing.T) {
 		t.Fatal("aliased raw")
 	}
 
-	//nolint:exhaustruct_v5 // test verifies manual uninitialized record cannot fabricate valid handle provenance
 	if (PaneInfo{ID: "%7"}).Handle().Valid() {
 		t.Fatal("manual record fabricated provenance")
 	}
@@ -243,8 +250,10 @@ func TestSnapshotCopiesAndChurn(t *testing.T) {
 		t.Fatal(e)
 	}
 
-	//nolint:exhaustruct_v5 // testing snapshot field copying on partial test fixture
-	snap := Snapshot{panes: []PaneInfo{p}, clients: []ClientInfo{{Name: "x", Flags: []string{"read-only"}}}}
+	snap := Snapshot{
+		panes:   []PaneInfo{p},
+		clients: []ClientInfo{{Name: "x", Flags: []string{"read-only"}}},
+	}
 	snap.assess()
 
 	if snap.Consistency != ConsistencyIncomplete || snap.MissingCount != 1 {
@@ -280,7 +289,6 @@ func TestSnapshotCopiesAndChurn(t *testing.T) {
 func TestSnapshotMissingDetailsBounded(t *testing.T) {
 	var snap Snapshot
 	for range 1000 {
-		//nolint:exhaustruct_v5 // testing bounding of missing references on partial test fixture
 		snap.panes = append(snap.panes, PaneInfo{ID: "%1", WindowID: "@999"})
 	}
 
@@ -293,7 +301,11 @@ func TestSnapshotMissingDetailsBounded(t *testing.T) {
 
 func TestGuardWrap(t *testing.T) {
 	s := localServer(t)
-	g := &guard{identity: fixtureIdentity(s), links: []linkCheck{{session: "$1", index: 0, window: "@2"}}, clients: nil}
+	g := &guard{
+		identity: fixtureIdentity(s),
+		links:    []linkCheck{{session: "$1", index: 0, window: "@2"}},
+		clients:  nil,
+	}
 	p := g.wrap(emptyPlan(command("kill-pane", "-t", "%7")))
 
 	argv, e := p.argv()
@@ -302,7 +314,8 @@ func TestGuardWrap(t *testing.T) {
 	}
 
 	combined := strings.Join(argv, " ")
-	if argv[0] != "if-shell" || !strings.Contains(combined, "start_time") || !strings.Contains(combined, "window_index") {
+	if argv[0] != "if-shell" || !strings.Contains(combined, "start_time") ||
+		!strings.Contains(combined, "window_index") {
 		t.Fatal(argv)
 	}
 
@@ -319,14 +332,21 @@ func TestGuardWrap(t *testing.T) {
 
 func TestGuardUnwrap(t *testing.T) {
 	s := localServer(t)
-	g := &guard{identity: fixtureIdentity(s), links: []linkCheck{{session: "$1", index: 0, window: "@2"}}, clients: nil}
+	g := &guard{
+		identity: fixtureIdentity(s),
+		links:    []linkCheck{{session: "$1", index: 0, window: "@2"}},
+		clients:  nil,
+	}
 
 	_, e := g.unwrap(Result{Stdout: []byte(guardServerChanged), Stderr: nil, ExitCode: 0}, nil)
 	if !errors.Is(e, ErrServerChanged) || outcomeOf(e).Effect != EffectNotSent {
 		t.Fatal(e)
 	}
 
-	r, e := g.unwrap(Result{Stdout: append([]byte(guardOK), []byte("payload\n")...), Stderr: nil, ExitCode: 0}, nil)
+	r, e := g.unwrap(
+		Result{Stdout: append([]byte(guardOK), []byte("payload\n")...), Stderr: nil, ExitCode: 0},
+		nil,
+	)
 	if e != nil || string(r.Stdout) != "payload\n" {
 		t.Fatal(r, e)
 	}
@@ -391,24 +411,43 @@ func TestCreationRecoveryUsesObjectIDNotPID(t *testing.T) {
 	}
 
 	objects := recoverCreated(wire.EncodeRecord(values), ObjectKindPane)
-	if len(objects) != 1 || objects[0].RawID != "%7" || objects[0].Identity.State() != ValueStateUnavailable {
+	if len(objects) != 1 || objects[0].RawID != "%7" ||
+		objects[0].Identity.State() != ValueStateUnavailable {
 		t.Fatalf("%#v", objects)
 	}
 }
 
 func TestProbeFailureDoesNotDispatchRequestedMutation(t *testing.T) {
-	e := opError("NewSession", &discoveryError{Err: &CommandError{Command: "", Result: failedResult(), Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrNoServer}})
+	e := opError(
+		"NewSession",
+		&discoveryError{
+			Err: &CommandError{
+				Command: "",
+				Result:  failedResult(),
+				Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil},
+				Timeout: TimeoutSourceNone,
+				Err:     ErrNoServer,
+			},
+		},
+	)
 	if outcomeOf(e).Effect != EffectNotSent || !errors.Is(e, ErrNoServer) {
 		t.Fatal(e)
 	}
 }
 
 func TestDuplicateSessionRejectionHasNoCreatedObject(t *testing.T) {
-	commandErr := &CommandError{Command: "new-session", Result: Result{Stdout: nil, Stderr: []byte("duplicate session: fixture\n"), ExitCode: 1}, Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil}, Timeout: TimeoutSourceNone, Err: ErrAlreadyExists}
+	commandErr := &CommandError{
+		Command: "new-session",
+		Result:  Result{Stdout: nil, Stderr: []byte("duplicate session: fixture\n"), ExitCode: 1},
+		Outcome: Outcome{Effect: EffectUnknown, Steps: nil, Created: nil},
+		Timeout: TimeoutSourceNone,
+		Err:     ErrAlreadyExists,
+	}
 	err := creationError("NewSession", commandErr, nil, ObjectKindSession)
 
 	got, ok := errors.AsType[*OperationError](err)
-	if !ok || !errors.Is(err, ErrAlreadyExists) || got.Outcome.Effect != EffectRejected || len(got.Outcome.Created) != 0 {
+	if !ok || !errors.Is(err, ErrAlreadyExists) || got.Outcome.Effect != EffectRejected ||
+		len(got.Outcome.Created) != 0 {
 		t.Fatalf("duplicate creation = %#v, %v", got, err)
 	}
 
@@ -429,7 +468,8 @@ func TestDuplicateSessionRejectionHasNoCreatedObject(t *testing.T) {
 	err = creationError("NewSession", commandErr, nil, ObjectKindSession)
 
 	got, ok = errors.AsType[*OperationError](err)
-	if !ok || got.Outcome.Effect != EffectUnknown || len(got.Outcome.Created) != 1 || got.Outcome.Created[0].RawID != prior.RawID {
+	if !ok || got.Outcome.Effect != EffectUnknown || len(got.Outcome.Created) != 1 ||
+		got.Outcome.Created[0].RawID != prior.RawID {
 		t.Fatalf("duplicate with prior creation = %#v, %v", got, err)
 	}
 }
@@ -443,7 +483,14 @@ func TestQueryFieldsDeduplication(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	expected := []string{"pid", "start_time", "socket_path", "version", "session_id", "custom_field"}
+	expected := []string{
+		"pid",
+		"start_time",
+		"socket_path",
+		"version",
+		"session_id",
+		"custom_field",
+	}
 	if len(fields) != len(expected) {
 		t.Fatalf("expected %v, got %v", expected, fields)
 	}
@@ -530,7 +577,13 @@ func TestSnapshotResolveEmpty(t *testing.T) {
 	}
 }
 
-func assertResolvedWindow(t *testing.T, snap Snapshot, id WindowID, want Window, origin ServerIdentity) {
+func assertResolvedWindow(
+	t *testing.T,
+	snap Snapshot,
+	id WindowID,
+	want Window,
+	origin ServerIdentity,
+) {
 	t.Helper()
 
 	w, ok := snap.ResolveWindow(id)
@@ -544,11 +597,18 @@ func assertResolvedWindow(t *testing.T, snap Snapshot, id WindowID, want Window,
 	}
 }
 
-func assertResolvedSession(t *testing.T, snap Snapshot, id SessionID, want Session, origin ServerIdentity) {
+func assertResolvedSession(
+	t *testing.T,
+	snap Snapshot,
+	id SessionID,
+	want Session,
+	origin ServerIdentity,
+) {
 	t.Helper()
 
 	sess, ok := snap.ResolveSession(id)
-	if !ok || !sess.Valid() || sess.ID() != id || !sess.Equal(want) || !sess.ServerIdentity().Equal(origin) {
+	if !ok || !sess.Valid() || sess.ID() != id || !sess.Equal(want) ||
+		!sess.ServerIdentity().Equal(origin) {
 		t.Fatalf("unexpected session resolution: ok=%v, handle=%v", ok, sess)
 	}
 
@@ -558,11 +618,18 @@ func assertResolvedSession(t *testing.T, snap Snapshot, id SessionID, want Sessi
 	}
 }
 
-func assertResolvedClient(t *testing.T, snap Snapshot, name ClientName, want Client, origin ServerIdentity) {
+func assertResolvedClient(
+	t *testing.T,
+	snap Snapshot,
+	name ClientName,
+	want Client,
+	origin ServerIdentity,
+) {
 	t.Helper()
 
 	c, ok := snap.ResolveClient(name)
-	if !ok || !c.Valid() || c.Name() != name || !c.Equal(want) || !c.ServerIdentity().Equal(origin) {
+	if !ok || !c.Valid() || c.Name() != name || !c.Equal(want) ||
+		!c.ServerIdentity().Equal(origin) {
 		t.Fatalf("unexpected client resolution: ok=%v, handle=%v", ok, c)
 	}
 
@@ -572,7 +639,11 @@ func assertResolvedClient(t *testing.T, snap Snapshot, name ClientName, want Cli
 	}
 }
 
-func assertResolveMissing[K ~string, V interface{ Valid() bool }](t *testing.T, resolve func(K) (V, bool), keys []K) {
+func assertResolveMissing[K ~string, V interface{ Valid() bool }](
+	t *testing.T,
+	resolve func(K) (V, bool),
+	keys []K,
+) {
 	t.Helper()
 
 	for _, k := range keys {
@@ -603,7 +674,6 @@ func TestSnapshotResolveSuccessAndProvenance(t *testing.T) {
 
 	expectedOrigin := fixtureIdentity(s)
 
-	//nolint:exhaustruct_v5 // testing snapshot resolve on decoded records
 	snap := Snapshot{
 		sessions: []SessionInfo{sessRecord},
 		windows:  []WindowInfo{winRecord},
@@ -633,7 +703,6 @@ func TestSnapshotResolveMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//nolint:exhaustruct_v5 // testing snapshot resolve on decoded records
 	snap := Snapshot{
 		sessions: []SessionInfo{sessRecord},
 		windows:  []WindowInfo{winRecord},
@@ -736,7 +805,9 @@ func TestRecordSetRejectsMalformedData(t *testing.T) {
 	s := localServer(t)
 	header := wire.EncodeRecord([]string{"42", "100", s.Endpoint().String(), "3.6"})
 
-	req, err := recordQueryRequest(RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: ""})
+	req, err := recordQueryRequest(
+		RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: ""},
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -746,10 +817,22 @@ func TestRecordSetRejectsMalformedData(t *testing.T) {
 		data []byte
 	}{
 		{name: "missing identity", data: wire.EncodeRecord([]string{"%1"})},
-		{name: "extra identity field", data: wire.EncodeRecord([]string{"42", "100", s.Endpoint().String(), "3.6", "extra"})},
-		{name: "invalid identity", data: wire.EncodeRecord([]string{"0", "100", s.Endpoint().String(), "3.6"})},
+		{
+			name: "extra identity field",
+			data: wire.EncodeRecord([]string{"42", "100", s.Endpoint().String(), "3.6", "extra"}),
+		},
+		{
+			name: "invalid identity",
+			data: wire.EncodeRecord([]string{"0", "100", s.Endpoint().String(), "3.6"}),
+		},
 		{name: "torn identity", data: header[:len(header)-1]},
-		{name: "wrong row count", data: append(append([]byte{}, header...), wire.EncodeRecord([]string{"%1", "extra"})...)},
+		{
+			name: "wrong row count",
+			data: append(
+				append([]byte{}, header...),
+				wire.EncodeRecord([]string{"%1", "extra"})...,
+			),
+		},
 		{name: "torn row", data: append(append([]byte{}, header...), []byte("TGO1:1:2:%")...)},
 	}
 	for _, tc := range cases {
@@ -774,10 +857,30 @@ func TestQueryRecordsRejectsInvalidSelection(t *testing.T) {
 		query RecordQuery
 	}{
 		{name: "empty fields", query: RecordQuery{Kind: ObjectKindPane, Fields: nil, Filter: ""}},
-		{name: "expression instead of name", query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"#{pane_id}"}, Filter: ""}},
-		{name: "unknown kind", query: RecordQuery{Kind: ObjectKind("unknown"), Fields: []string{"pane_id"}, Filter: ""}},
-		{name: "window link kind", query: RecordQuery{Kind: ObjectKindWindowLink, Fields: []string{"window_id"}, Filter: ""}},
-		{name: "nul filter", query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: "\x00"}},
+		{
+			name:  "expression instead of name",
+			query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"#{pane_id}"}, Filter: ""},
+		},
+		{
+			name: "unknown kind",
+			query: RecordQuery{
+				Kind:   ObjectKind("unknown"),
+				Fields: []string{"pane_id"},
+				Filter: "",
+			},
+		},
+		{
+			name: "window link kind",
+			query: RecordQuery{
+				Kind:   ObjectKindWindowLink,
+				Fields: []string{"window_id"},
+				Filter: "",
+			},
+		},
+		{
+			name:  "nul filter",
+			query: RecordQuery{Kind: ObjectKindPane, Fields: []string{"pane_id"}, Filter: "\x00"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

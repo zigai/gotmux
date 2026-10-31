@@ -38,8 +38,16 @@ func attachmentTerminal(t *testing.T) *os.File {
 func setTerminalSize(t *testing.T, slave *os.File) {
 	t.Helper()
 
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: 24, Columns: 80, Xpixel: 0, Ypixel: 0}
-	ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size)) //nolint:gosec // G103: ioctl reads this owned aligned eight-byte winsize synchronously on Linux/Darwin amd64/arm64; KeepAlive retains it; Linux PTY tests and Darwin cross-builds cover the ABI use.
+	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+		Rows:    24,
+		Columns: 80,
+		Xpixel:  0,
+		Ypixel:  0,
+	}
+	// G103: ioctl reads this owned aligned eight-byte winsize synchronously on Linux/Darwin amd64/arm64; KeepAlive
+	// retains it; Linux PTY tests and Darwin cross-builds cover the ABI use.
+	//nolint:gosec // See evidence above.
+	ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size))
 }
 
 func ptyIoctl(t *testing.T, fd int, request uintptr, value unsafe.Pointer) {

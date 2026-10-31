@@ -50,6 +50,8 @@ type (
 
 // Config specifies how [New] locates a tmux daemon and configures subprocess execution.
 // Frozen at [New] time; subsequent mutations have no effect.
+//
+//exhaustruct:optional
 type Config struct {
 	// Binary is the tmux executable path or name. If empty, defaults to "tmux" in PATH.
 	Binary string
@@ -94,6 +96,9 @@ type Config struct {
 }
 
 // Limits bounds execution time, concurrent processes, and buffers across operations on a [Server].
+// Zero fields use the corresponding values from [DefaultLimits].
+//
+//exhaustruct:optional
 type Limits struct {
 	// CommandTimeout is the maximum duration for a single command before cancellation.
 	// It does not apply to commands that wait by design, which the caller's context bounds:
@@ -112,7 +117,12 @@ type Limits struct {
 
 // DefaultLimits returns the standard operational bounds: 5s timeout, 4 MiB output, 1 MiB input, 8 workers.
 func DefaultLimits() Limits {
-	return Limits{CommandTimeout: DefaultCommandTimeout, OutputBytes: defaultOutputBytes, InputBytes: defaultInputBytes, Concurrent: defaultConcurrent}
+	return Limits{
+		CommandTimeout: DefaultCommandTimeout,
+		OutputBytes:    defaultOutputBytes,
+		InputBytes:     defaultInputBytes,
+		Concurrent:     defaultConcurrent,
+	}
 }
 
 func normalizeLimits(l Limits) (Limits, error) {
@@ -162,7 +172,7 @@ func parseEnvList(env []string) (map[string]string, error) {
 	return vars, nil
 }
 
-func replaceEnv(env []string, key, value string) []string {
+func replaceEnv(env []string, key string, value string) []string {
 	out := append([]string{}, env...)
 	for i, e := range out {
 		if strings.HasPrefix(e, key+"=") {
@@ -174,7 +184,7 @@ func replaceEnv(env []string, key, value string) []string {
 	return append(out, key+"="+value)
 }
 
-func lookPath(name, path, dir string) (string, error) {
+func lookPath(name string, path string, dir string) (string, error) {
 	check := func(p string) (string, error) {
 		if !filepath.IsAbs(p) {
 			p = filepath.Join(dir, p)

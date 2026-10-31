@@ -27,14 +27,21 @@ func BenchmarkMetadataDecode(b *testing.B) {
 }
 
 func BenchmarkControlFramedMetadata(b *testing.B) {
-	stream := append([]byte("%begin 1 8 1\n"), wire.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...)
+	stream := append(
+		[]byte("%begin 1 8 1\n"),
+		wire.EncodeRecord([]string{"%end 1 8 1\nnot a delimiter"})...,
+	)
 	stream = append(stream, []byte("%end 1 8 1\n")...)
 
 	b.ReportAllocs()
 	b.SetBytes(int64(len(stream)))
 
 	for b.Loop() {
-		if _, err := readControlUnit(bufio.NewReader(bytes.NewReader(stream)), 4096, func(Event) {}); err != nil {
+		if _, err := readControlUnit(
+			bufio.NewReader(bytes.NewReader(stream)),
+			4096,
+			func(Event) {},
+		); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -45,12 +52,18 @@ func BenchmarkSnapshotLocalCopies(b *testing.B) {
 	for _, count := range []int{1, 100, 1000} {
 		b.Run(fmt.Sprintf("panes-%d", count), func(b *testing.B) {
 			snapshot := Snapshot{
-				sessions:     nil,
-				windows:      nil,
-				panes:        make([]PaneInfo, count),
-				clients:      nil,
-				links:        nil,
-				Identity:     ServerIdentity{PID: 0, Started: time.Time{}, ReportedSocket: "", Endpoint: Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0}, Generation: 0},
+				sessions: nil,
+				windows:  nil,
+				panes:    make([]PaneInfo, count),
+				clients:  nil,
+				links:    nil,
+				Identity: ServerIdentity{
+					PID:            0,
+					Started:        time.Time{},
+					ReportedSocket: "",
+					Endpoint:       Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0},
+					Generation:     0,
+				},
 				Started:      time.Time{},
 				Finished:     time.Time{},
 				Consistency:  0,
@@ -71,7 +84,15 @@ func BenchmarkSnapshotLocalCopies(b *testing.B) {
 }
 
 func BenchmarkGuardEncoding(b *testing.B) {
-	g := newGuard(ServerIdentity{PID: 1, ReportedSocket: "/tmp/socket", Started: time.Unix(100, 0), Endpoint: Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0}, Generation: 0})
+	g := newGuard(
+		ServerIdentity{
+			PID:            1,
+			ReportedSocket: "/tmp/socket",
+			Started:        time.Unix(100, 0),
+			Endpoint:       Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: 0},
+			Generation:     0,
+		},
+	)
 
 	p := g.wrap(emptyPlan(command("send-keys", "-t", "%1", "-l", "literal\n;$#")))
 	if _, err := p.size(1 << 20); err != nil {

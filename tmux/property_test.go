@@ -22,14 +22,22 @@ func TestRapidVersionProperties(t *testing.T) {
 			patch := rapid.SampledFrom([]string{"", "a", "b", "c", "z"}).Draw(rt, "patch")
 			raw = fmt.Sprintf("%d.%d%s", major, minor, patch)
 		} else {
-			vendor := rapid.SampledFrom([]string{"-rc1", "-git", "-vendor", "~beta1"}).Draw(rt, "vendor")
+			vendor := rapid.SampledFrom([]string{"-rc1", "-git", "-vendor", "~beta1"}).
+				Draw(rt, "vendor")
 			raw = fmt.Sprintf("%d.%d%s", major, minor, vendor)
 		}
 
 		v := tmux.ParseVersion(raw)
 
 		if v.Major != major || v.Minor != minor {
-			rt.Fatalf("parsed version mismatch for %q: got %d.%d, want %d.%d", raw, v.Major, v.Minor, major, minor)
+			rt.Fatalf(
+				"parsed version mismatch for %q: got %d.%d, want %d.%d",
+				raw,
+				v.Major,
+				v.Minor,
+				major,
+				minor,
+			)
 		}
 
 		if !isCanonical {
@@ -80,12 +88,14 @@ func TestRapidCommandAndSequenceProperties(t *testing.T) {
 		cmds := make([]tmux.Command, 0, cmdCount)
 
 		for i := range cmdCount {
-			name := rapid.StringMatching(`^[a-z][a-z0-9-]{0,12}$`).Draw(rt, fmt.Sprintf("name-%d", i))
+			name := rapid.StringMatching(`^[a-z][a-z0-9-]{0,12}$`).
+				Draw(rt, fmt.Sprintf("name-%d", i))
 			argCount := rapid.IntRange(0, 6).Draw(rt, fmt.Sprintf("argCount-%d", i))
 			args := make([]string, 0, argCount)
 
 			for j := range argCount {
-				arg := rapid.StringMatching(`^[^\x00]{0,32}$`).Draw(rt, fmt.Sprintf("arg-%d-%d", i, j))
+				arg := rapid.StringMatching(`^[^\x00]{0,32}$`).
+					Draw(rt, fmt.Sprintf("arg-%d-%d", i, j))
 				args = append(args, arg)
 			}
 

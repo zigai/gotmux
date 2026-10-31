@@ -32,7 +32,8 @@ type Reader interface {
 
 type recordReader struct {
 	source Reader
-	data   bytes.Buffer
+	//exhaustruct:optional
+	data bytes.Buffer
 }
 
 func RecordFormat(fields []string) string {
@@ -89,7 +90,7 @@ func ReadRecord(r Reader, maxBytes int64) ([]byte, []string, error) {
 
 // ReadRecordWire scans and verifies one complete record, returning only its wire bytes.
 func ReadRecordWire(r Reader, maxBytes int64) ([]byte, error) {
-	reader := recordReader{source: r, data: bytes.Buffer{}}
+	reader := recordReader{source: r}
 	_, _, err := scanRecord(&reader, maxBytes, 0)
 
 	return reader.data.Bytes(), err

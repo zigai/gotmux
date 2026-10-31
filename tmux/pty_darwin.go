@@ -16,7 +16,11 @@ const (
 )
 
 func openPTY() (*os.File, *os.File, error) {
-	masterFD, err := syscall.Open("/dev/ptmx", syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK|syscall.O_CLOEXEC, 0)
+	masterFD, err := syscall.Open(
+		"/dev/ptmx",
+		syscall.O_RDWR|syscall.O_NOCTTY|syscall.O_NONBLOCK|syscall.O_CLOEXEC,
+		0,
+	)
 	if err != nil {
 		return nil, nil, err
 	}

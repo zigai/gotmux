@@ -59,9 +59,21 @@ func TestParseAccessLine(t *testing.T) {
 			ok: true,
 		},
 		{input: "", expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, ok: false},
-		{input: "invalid line", expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, ok: false},
-		{input: "nobody (X)", expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, ok: false},
-		{input: "(U,W)", expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false}, ok: true},
+		{
+			input:    "invalid line",
+			expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false},
+			ok:       false,
+		},
+		{
+			input:    "nobody (X)",
+			expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false},
+			ok:       false,
+		},
+		{
+			input:    "(U,W)",
+			expected: AccessEntry{Name: "", IsGroup: false, ReadOnly: false},
+			ok:       true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -82,10 +94,19 @@ func TestAccessListPreservesUnicodeWhitespaceInName(test *testing.T) {
 		test.Setenv("ACCESS_IDENTITY", filepath.Join(directory, "identity"))
 		test.Setenv("ACCESS_BODY", filepath.Join(directory, "access"))
 
-		return `case "$*" in *server-access*) exec /bin/cat "$ACCESS_BODY" ;; *) exec /bin/cat "$ACCESS_IDENTITY" ;; esac`
+		return `case "$*" in *server-access*) exec /bin/cat "$ACCESS_BODY" ;; ` +
+			`*) exec /bin/cat "$ACCESS_IDENTITY" ;; esac`
 	})
-	writeMockResponse(test, filepath.Join(directory, "identity"), []byte(fixtureIdentityRecord(server)))
-	writeMockResponse(test, filepath.Join(directory, "access"), []byte(guardOK+"analyst\u00a0 (U,W)\n"))
+	writeMockResponse(
+		test,
+		filepath.Join(directory, "identity"),
+		[]byte(fixtureIdentityRecord(server)),
+	)
+	writeMockResponse(
+		test,
+		filepath.Join(directory, "access"),
+		[]byte(guardOK+"analyst\u00a0 (U,W)\n"),
+	)
 
 	entries, err := server.AccessList(test.Context())
 
@@ -104,11 +125,25 @@ func TestServerAccessValidation(t *testing.T) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.AccessList, got: %v", err)
 	}
 
-	if err := nilServer.GrantAccess(ctx, "user", AccessOptions{IsGroup: false, ReadOnly: false}); !errors.Is(err, ErrInvalidHandle) {
+	if err := nilServer.GrantAccess(
+		ctx,
+		"user",
+		AccessOptions{IsGroup: false, ReadOnly: false},
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.GrantAccess, got: %v", err)
 	}
 
-	if err := nilServer.RevokeAccess(ctx, "user", RevokeAccessOptions{IsGroup: false}); !errors.Is(err, ErrInvalidHandle) {
+	if err := nilServer.RevokeAccess(
+		ctx,
+		"user",
+		RevokeAccessOptions{IsGroup: false},
+	); !errors.Is(
+		err,
+		ErrInvalidHandle,
+	) {
 		t.Errorf("expected ErrInvalidHandle on nilServer.RevokeAccess, got: %v", err)
 	}
 
@@ -116,11 +151,25 @@ func TestServerAccessValidation(t *testing.T) {
 
 	invalidNames := []string{"", "\x00bad", "bad\x00user"}
 	for _, name := range invalidNames {
-		if err := s.GrantAccess(ctx, name, AccessOptions{IsGroup: false, ReadOnly: false}); !errors.Is(err, ErrInvalidArgument) {
+		if err := s.GrantAccess(
+			ctx,
+			name,
+			AccessOptions{IsGroup: false, ReadOnly: false},
+		); !errors.Is(
+			err,
+			ErrInvalidArgument,
+		) {
 			t.Errorf("expected ErrInvalidArgument on GrantAccess(%q), got: %v", name, err)
 		}
 
-		if err := s.RevokeAccess(ctx, name, RevokeAccessOptions{IsGroup: false}); !errors.Is(err, ErrInvalidArgument) {
+		if err := s.RevokeAccess(
+			ctx,
+			name,
+			RevokeAccessOptions{IsGroup: false},
+		); !errors.Is(
+			err,
+			ErrInvalidArgument,
+		) {
 			t.Errorf("expected ErrInvalidArgument on RevokeAccess(%q), got: %v", name, err)
 		}
 	}

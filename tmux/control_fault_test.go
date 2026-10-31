@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
-	"sync"
 	"testing"
 	"time"
 
@@ -63,14 +62,12 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		t.Fatal(err)
 	}
 
-	//nolint:exhaustruct_v5 // mock Connection test fixture intentionally omits unneeded subprocess and buffer fields
 	c := &Connection{
 		original:      s,
 		identity:      fixtureIdentity(s),
 		opts:          o,
 		cancel:        cancel,
 		stopCh:        make(chan struct{}),
-		mu:            sync.Mutex{},
 		closed:        false,
 		terminal:      nil,
 		normal:        false,
@@ -82,13 +79,11 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		frames:        make(chan controlFrame, 1),
 		ready:         make(chan error, 1),
 		done:          make(chan struct{}),
-		work:          sync.WaitGroup{},
 		cmd:           nil,
 		stdin:         inWr,
 		stdout:        outRd,
 		stderr:        nil,
 		diagnostics:   nil,
-		stopOnce:      sync.Once{},
 	}
 	cp := *s
 	cp.conn = c
@@ -132,7 +127,11 @@ func newControlWireFixture(t *testing.T, depth int) *controlWireFixture {
 		close(c.done)
 	}()
 
-	handshake := fmt.Sprintf("%%begin 100 1 0\n%s%%end 100 1 0\n%%begin 100 2 0\n%s%%end 100 2 0\n", fixtureIdentityRecord(s), ready)
+	handshake := fmt.Sprintf(
+		"%%begin 100 1 0\n%s%%end 100 1 0\n%%begin 100 2 0\n%s%%end 100 2 0\n",
+		fixtureIdentityRecord(s),
+		ready,
+	)
 	if _, err := io.WriteString(outWr, handshake); err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +410,11 @@ func TestControlStartupBindsVerifiedIdentity(t *testing.T) {
 	}
 
 	if !c.server.bound.sameDaemon(fixtureIdentity(s)) || c.server.bound.Generation != c.generation {
-		t.Fatalf("bound identity = %+v, want fixture daemon with generation %d", *c.server.bound, c.generation)
+		t.Fatalf(
+			"bound identity = %+v, want fixture daemon with generation %d",
+			*c.server.bound,
+			c.generation,
+		)
 	}
 
 	if v := c.verified().Version; v.Major != 3 || v.Minor != 8 {
@@ -470,7 +473,12 @@ func TestControlStartFailureClosesPipes(t *testing.T) {
 
 	after := count()
 	if after != before {
-		t.Fatalf("12 failed starts retained %d descriptors before GC (before=%d after=%d)", after-before, before, after)
+		t.Fatalf(
+			"12 failed starts retained %d descriptors before GC (before=%d after=%d)",
+			after-before,
+			before,
+			after,
+		)
 	}
 }
 

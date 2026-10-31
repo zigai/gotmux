@@ -84,7 +84,13 @@ func populatedServer(b *testing.B) (*tmux.Server, tmux.Session, context.Context)
 	sessions := []tmux.Session{fixture}
 
 	for i := 1; i < benchSessions; i++ {
-		session, err := s.NewSession(ctx, tmux.NewSessionOptions{Name: fmt.Sprintf("bench-%d", i), Size: tmux.Size{Width: 200, Height: 60}})
+		session, err := s.NewSession(
+			ctx,
+			tmux.NewSessionOptions{
+				Name: fmt.Sprintf("bench-%d", i),
+				Size: tmux.Size{Width: 200, Height: 60},
+			},
+		)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -131,7 +137,12 @@ func populateSession(b *testing.B, ctx context.Context, session tmux.Session) {
 	}
 }
 
-func benchControl(b *testing.B, ctx context.Context, s *tmux.Server, session tmux.Session) *tmux.Connection {
+func benchControl(
+	b *testing.B,
+	ctx context.Context,
+	s *tmux.Server,
+	session tmux.Session,
+) *tmux.Connection {
 	b.Helper()
 
 	conn, err := s.OpenControl(ctx, session.ID(), tmux.ControlOptions{})
@@ -160,7 +171,13 @@ func benchLoop(b *testing.B, op func() error) {
 	}
 }
 
-func benchTransports(b *testing.B, ctx context.Context, s *tmux.Server, session tmux.Session, op func(*tmux.Server) error) {
+func benchTransports(
+	b *testing.B,
+	ctx context.Context,
+	s *tmux.Server,
+	session tmux.Session,
+	op func(*tmux.Server) error,
+) {
 	b.Helper()
 
 	b.Run("subprocess", func(b *testing.B) { benchLoop(b, func() error { return op(s) }) })
@@ -265,11 +282,17 @@ func BenchmarkIntegrationPopulatedStartupReads(b *testing.B) {
 	s, session, ctx := populatedServer(b)
 
 	benchTransports(b, ctx, s, session, func(server *tmux.Server) error {
-		if _, err := server.SessionsWith(ctx, tmux.QueryOptions{ExtraFields: []string{"pane_id", "pane_current_path"}}); err != nil {
+		if _, err := server.SessionsWith(
+			ctx,
+			tmux.QueryOptions{ExtraFields: []string{"pane_id", "pane_current_path"}},
+		); err != nil {
 			return fmt.Errorf("list sessions: %w", err)
 		}
 
-		if _, err := server.PanesWith(ctx, tmux.QueryOptions{ExtraFields: []string{"window_active"}}); err != nil {
+		if _, err := server.PanesWith(
+			ctx,
+			tmux.QueryOptions{ExtraFields: []string{"window_active"}},
+		); err != nil {
 			return fmt.Errorf("list panes: %w", err)
 		}
 
@@ -302,7 +325,9 @@ func BenchmarkIntegrationPopulatedPaneMembershipScoped(b *testing.B) {
 		b.Fatal("no pane", err)
 	}
 
-	filter := tmux.QueryOptions{Filter: tmux.Format("#{==:#{pane_id}," + string(panes[len(panes)-1].ID) + "}")}
+	filter := tmux.QueryOptions{
+		Filter: tmux.Format("#{==:#{pane_id}," + string(panes[len(panes)-1].ID) + "}"),
+	}
 
 	benchLoop(b, func() error {
 		found, err := session.PanesWith(ctx, filter)
@@ -322,8 +347,10 @@ func BenchmarkIntegrationPopulatedStartupReadsBatch(b *testing.B) {
 	s, session, ctx := populatedServer(b)
 
 	request := tmux.ReadRequest{
-		Sessions: tmux.PresentValue(tmux.QueryOptions{ExtraFields: []string{"pane_id", "pane_current_path"}}),
-		Panes:    tmux.PresentValue(tmux.QueryOptions{ExtraFields: []string{"window_active"}}),
+		Sessions: tmux.PresentValue(
+			tmux.QueryOptions{ExtraFields: []string{"pane_id", "pane_current_path"}},
+		),
+		Panes: tmux.PresentValue(tmux.QueryOptions{ExtraFields: []string{"window_active"}}),
 	}
 
 	benchTransports(b, ctx, s, session, func(server *tmux.Server) error {

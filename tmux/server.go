@@ -146,7 +146,7 @@ func (s *Server) Endpoint() Endpoint {
 // Limits returns the active resource limits governing this server's operations.
 func (s *Server) Limits() Limits {
 	if s == nil {
-		return Limits{CommandTimeout: 0, OutputBytes: 0, InputBytes: 0, Concurrent: 0}
+		return Limits{}
 	}
 
 	return s.config.Limits
@@ -334,7 +334,7 @@ func validSocketName(name string) bool {
 	return !strings.ContainsAny(name, "/\x00") && name != "." && name != ".."
 }
 
-func resolveTempDir(dir, tmp string) string {
+func resolveTempDir(dir string, tmp string) string {
 	if tmp == "" {
 		tmp = "/tmp"
 	}
@@ -346,7 +346,12 @@ func resolveTempDir(dir, tmp string) string {
 	return tmp
 }
 
-func resolveEndpoint(cfg Config, vars map[string]string, dir string, env []string) (Endpoint, []string, error) {
+func resolveEndpoint(
+	cfg Config,
+	vars map[string]string,
+	dir string,
+	env []string,
+) (Endpoint, []string, error) {
 	endpoint := Endpoint{SocketPath: "", SocketName: "", TempDir: "", UID: os.Getuid()}
 
 	switch {
@@ -382,7 +387,7 @@ func resolveEndpoint(cfg Config, vars map[string]string, dir string, env []strin
 	return endpoint, env, nil
 }
 
-func resolveConfigFile(file, dir string) (string, error) {
+func resolveConfigFile(file string, dir string) (string, error) {
 	if file == "" {
 		return "", nil
 	}

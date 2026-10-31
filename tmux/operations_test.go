@@ -14,10 +14,21 @@ func TestRespawnPreserveEnvironmentRejectsBeforeCallingTmux(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = pane.Respawn(t.Context(), RespawnOptions{KillRunning: true, PreserveEnvironment: true, Program: Exec("/bin/sleep", "60"), Dir: "", Env: nil, TmuxEnv: nil})
+	err = pane.Respawn(
+		t.Context(),
+		RespawnOptions{
+			KillRunning:         true,
+			PreserveEnvironment: true,
+			Program:             Exec("/bin/sleep", "60"),
+			Dir:                 "",
+			Env:                 nil,
+			TmuxEnv:             nil,
+		},
+	)
 
 	var operation *OperationError
-	if !errors.Is(err, ErrUnsupported) || !errors.As(err, &operation) || operation.Outcome.Effect != EffectNotSent {
+	if !errors.Is(err, ErrUnsupported) || !errors.As(err, &operation) ||
+		operation.Outcome.Effect != EffectNotSent {
 		t.Fatalf("Respawn error = %v, want ErrUnsupported with EffectNotSent", err)
 	}
 
@@ -46,7 +57,8 @@ func TestRespawnRejectsNULInDir(t *testing.T) {
 	err = p.Respawn(t.Context(), opts)
 
 	var op *OperationError
-	if !errors.Is(err, ErrInvalidArgument) || !errors.As(err, &op) || op.Outcome.Effect != EffectNotSent {
+	if !errors.Is(err, ErrInvalidArgument) || !errors.As(err, &op) ||
+		op.Outcome.Effect != EffectNotSent {
 		t.Fatalf("got %v, want ErrInvalidArgument with effect EffectNotSent", err)
 	}
 

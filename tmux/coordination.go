@@ -10,6 +10,8 @@ import (
 
 type (
 	// RunShellOptions configures execution of a shell script or tmux commands via run-shell.
+	//
+	//exhaustruct:optional
 	RunShellOptions struct {
 		// Background executes the script in the background without blocking (-b flag).
 		// When true, RunShell succeeds as soon as tmux schedules the command.
@@ -41,6 +43,8 @@ type (
 	}
 
 	// SourceOptions configures loading tmux configuration commands from a file or text string.
+	//
+	//exhaustruct:optional
 	SourceOptions struct {
 		// QuietMissing ignores missing file errors silently (-q flag).
 		QuietMissing bool
@@ -83,7 +87,14 @@ func (s *Server) WaitFor(ctx context.Context, channel string) error {
 		return opError("Server.WaitFor", invalid("channel"))
 	}
 
-	return s.endpointActionFrom(ctx, "Server.WaitFor", s.beginCallerBounded, "wait-for", "--", channel)
+	return s.endpointActionFrom(
+		ctx,
+		"Server.WaitFor",
+		s.beginCallerBounded,
+		"wait-for",
+		"--",
+		channel,
+	)
 }
 
 // Notify wakes all callers waiting on channel via [Server.WaitFor] (wait-for -S).
@@ -113,7 +124,15 @@ func (s *Server) Lock(ctx context.Context, channel string) error {
 		return opError("Server.Lock", invalid("channel"))
 	}
 
-	return s.endpointActionFrom(ctx, "Server.Lock", s.beginCallerBounded, "wait-for", "-L", "--", channel)
+	return s.endpointActionFrom(
+		ctx,
+		"Server.Lock",
+		s.beginCallerBounded,
+		"wait-for",
+		"-L",
+		"--",
+		channel,
+	)
 }
 
 // Unlock releases an exclusive named lock previously acquired via [Server.Lock] (wait-for -U).
@@ -127,14 +146,20 @@ func (s *Server) Unlock(ctx context.Context, channel string) error {
 
 func validateRunShell(script string, opts RunShellOptions) error {
 	if opts.Cancel {
-		return unsupported("RunShellOptions.Cancel is unsupported; cancellation requires explicit job tracking")
+		return unsupported(
+			"RunShellOptions.Cancel is unsupported; cancellation requires explicit job tracking",
+		)
 	}
 
 	if opts.ClearEnvironment {
-		return unsupported("RunShellOptions.ClearEnvironment is unsupported; native -E enables stderr output, not environment clearing")
+		return unsupported(
+			"RunShellOptions.ClearEnvironment is unsupported; native -E enables stderr output, " +
+				"not environment clearing",
+		)
 	}
 
-	if !wire.ValidString(script) || opts.Delay < 0 || !wire.ValidString(opts.Dir) || !wire.ValidString(opts.Target) {
+	if !wire.ValidString(script) || opts.Delay < 0 || !wire.ValidString(opts.Dir) ||
+		!wire.ValidString(opts.Target) {
 		return invalid("run-shell options")
 	}
 
@@ -182,7 +207,11 @@ func runShellArgs(script string, opts RunShellOptions) ([]string, error) {
 //
 // When o.Background is true, it returns immediately after scheduling; foreground execution
 // blocks until completion and captures standard output and standard error.
-func (s *Server) RunShell(ctx context.Context, script string, opts RunShellOptions) (Result, error) {
+func (s *Server) RunShell(
+	ctx context.Context,
+	script string,
+	opts RunShellOptions,
+) (Result, error) {
 	args, err := runShellArgs(script, opts)
 	if err != nil {
 		return failedResult(), opError("Server.RunShell", err)
@@ -219,7 +248,12 @@ func (s *Server) LockScreen(ctx context.Context) error {
 // If the shell command returns 0, the ifTrue sequence is executed; otherwise, the ifFalse
 // sequence is executed (if non-empty).
 // Unlike [Server.IfFormat], which evaluates a #{...} format expression, IfShell tests shell command exit status.
-func (s *Server) IfShell(ctx context.Context, shellCommand string, ifTrue, ifFalse CommandSequence) error {
+func (s *Server) IfShell(
+	ctx context.Context,
+	shellCommand string,
+	ifTrue CommandSequence,
+	ifFalse CommandSequence,
+) error {
 	if !wire.ValidString(shellCommand) || shellCommand == "" || len(ifTrue.commands) == 0 {
 		return opError("Server.IfShell", invalid("shell command/commands"))
 	}
@@ -243,7 +277,13 @@ func (s *Server) IfShell(ctx context.Context, shellCommand string, ifTrue, ifFal
 		node.args = append(node.args, wireArg{text: "", nested: ifFalse.nodes()})
 	}
 
-	_, err = s.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyRaw, allowStart: false}, newGuard(info.Identity), nil)
+	_, err = s.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyRaw, allowStart: false},
+		newGuard(info.Identity),
+		nil,
+	)
 
 	return opError("Server.IfShell", err)
 }
@@ -265,7 +305,13 @@ func (o SourceOptions) flags() []string {
 	return args
 }
 
-func (s *Server) source(ctx context.Context, opName, target string, input []byte, opts SourceOptions) (Result, error) {
+func (s *Server) source(
+	ctx context.Context,
+	opName string,
+	target string,
+	input []byte,
+	opts SourceOptions,
+) (Result, error) {
 	opCtx, op, err := s.begin(ctx)
 	if err != nil {
 		return failedResult(), opError(opName, err)
@@ -282,7 +328,13 @@ func (s *Server) source(ctx context.Context, opName, target string, input []byte
 	}
 
 	args := append(opts.flags(), "--", target)
-	r, err := s.execute(opCtx, op, plainPlan(command("source-file", args...)), newGuard(info.Identity), input)
+	r, err := s.execute(
+		opCtx,
+		op,
+		plainPlan(command("source-file", args...)),
+		newGuard(info.Identity),
+		input,
+	)
 
 	return r, opError(opName, err)
 }
@@ -305,7 +357,13 @@ func (s *Server) SourceText(ctx context.Context, text string, opts SourceOptions
 	}
 
 	if s.conn != nil {
-		return failedResult(), opError("Server.SourceText", unsupportedControl("streaming configuration text over control transport", ErrTransportUnsupported))
+		return failedResult(), opError(
+			"Server.SourceText",
+			unsupportedControl(
+				"streaming configuration text over control transport",
+				ErrTransportUnsupported,
+			),
+		)
 	}
 
 	if !wire.ValidString(text) {
@@ -317,7 +375,12 @@ func (s *Server) SourceText(ctx context.Context, text string, opts SourceOptions
 
 // IfFormat uses tmux's synchronous format condition, not shell truthiness. The
 // nested command sequence can deliberately run shell-capable commands.
-func (s *Server) IfFormat(ctx context.Context, condition Format, yes, no CommandSequence) (Result, error) {
+func (s *Server) IfFormat(
+	ctx context.Context,
+	condition Format,
+	yes CommandSequence,
+	no CommandSequence,
+) (Result, error) {
 	if !wire.ValidString(string(condition)) || condition == "" || len(yes.commands) == 0 {
 		return failedResult(), opError("Server.IfFormat", invalid("condition/commands"))
 	}
@@ -338,7 +401,13 @@ func (s *Server) IfFormat(ctx context.Context, condition Format, yes, no Command
 		node.args = node.args[:len(node.args)-1]
 	}
 
-	r, err := s.execute(opCtx, op, plan{nodes: []wireNode{node}, mode: replyRaw, allowStart: false}, newGuard(info.Identity), nil)
+	r, err := s.execute(
+		opCtx,
+		op,
+		plan{nodes: []wireNode{node}, mode: replyRaw, allowStart: false},
+		newGuard(info.Identity),
+		nil,
+	)
 
 	return r, opError("Server.IfFormat", err)
 }

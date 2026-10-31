@@ -91,7 +91,8 @@ func TestIntegrationAttachResize_HighBandwidthStorm(t *testing.T) {
 		t.Fatalf("failed to query panes: %v", err)
 	}
 
-	_ = panes[0].Handle().Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
+	_ = panes[0].Handle().
+		Submit(ctx, "for i in $(seq 1 200); do echo \"DATA_STORM_LINE_$i\"; done\n")
 
 	for i := range 30 {
 		resizePTY(t, master, slave, uint16(24+(i%10)), uint16(80+(i%20)))
@@ -131,12 +132,20 @@ func drainPTY(t *testing.T, master *os.File) {
 	})
 }
 
-func resizePTY(t *testing.T, master, slave *os.File, rows, cols uint16) {
+func resizePTY(t *testing.T, master *os.File, slave *os.File, rows uint16, cols uint16) {
 	t.Helper()
 
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{Rows: rows, Columns: cols, Xpixel: 0, Ypixel: 0}
+	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+		Rows:    rows,
+		Columns: cols,
+		Xpixel:  0,
+		Ypixel:  0,
+	}
 	for _, end := range []*os.File{master, slave} {
-		ptyIoctl(t, int(end.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size)) //nolint:gosec // G103: TIOCSWINSZ reads this owned struct winsize (four uint16s, the Linux and Darwin layout) synchronously; ptyIoctl retains its lifetime; covered by the PTY resize tests.
+		// G103: TIOCSWINSZ reads this owned struct winsize (four uint16s, the Linux and Darwin layout)
+		// synchronously; ptyIoctl retains its lifetime; covered by the PTY resize tests.
+		//nolint:gosec // See evidence above.
+		ptyIoctl(t, int(end.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size))
 	}
 }
 
@@ -147,7 +156,12 @@ func signalResize(pid int) {
 	}
 }
 
-func terminalClientInfo(t *testing.T, ctx context.Context, server *tmux.Server, terminal *os.File) tmux.ClientInfo {
+func terminalClientInfo(
+	t *testing.T,
+	ctx context.Context,
+	server *tmux.Server,
+	terminal *os.File,
+) tmux.ClientInfo {
 	t.Helper()
 
 	clients, err := server.Clients(ctx)

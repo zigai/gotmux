@@ -23,7 +23,8 @@ func standInServer(t *testing.T, limits Limits, script func(dir string) string) 
 	dir := t.TempDir()
 
 	binary := filepath.Join(dir, "tmux")
-	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"+script(dir)), 0o700); err != nil { //nolint:gosec // stand-in tmux must be executable
+	//nolint:gosec // stand-in tmux must be executable
+	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"+script(dir)), 0o700); err != nil {
 		t.Fatal(err)
 	}
 
@@ -70,8 +71,13 @@ func unprobedPane(t *testing.T, s *Server) Pane {
 	return p
 }
 
-func limitsWith(timeout time.Duration, output, input int64, concurrent int) Limits {
-	return Limits{CommandTimeout: timeout, OutputBytes: output, InputBytes: input, Concurrent: concurrent}
+func limitsWith(timeout time.Duration, output int64, input int64, concurrent int) Limits {
+	return Limits{
+		CommandTimeout: timeout,
+		OutputBytes:    output,
+		InputBytes:     input,
+		Concurrent:     concurrent,
+	}
 }
 
 func assertOutcome(t *testing.T, err error, want Effect) {
@@ -124,7 +130,12 @@ func waitForFiles(t *testing.T, pattern string, n int) {
 func TestZeroLimitsTakeDocumentedDefaults(t *testing.T) {
 	s, _ := standInServer(t, limitsWith(0, 0, 0, 0), func(string) string { return "" })
 
-	want := Limits{CommandTimeout: 5 * time.Second, OutputBytes: 4 << 20, InputBytes: 1 << 20, Concurrent: 8}
+	want := Limits{
+		CommandTimeout: 5 * time.Second,
+		OutputBytes:    4 << 20,
+		InputBytes:     1 << 20,
+		Concurrent:     8,
+	}
 	if got := s.Limits(); got != want {
 		t.Fatalf("Limits() = %+v, want %+v", got, want)
 	}
@@ -192,7 +203,8 @@ func TestOutputLimitAfterStartIsUnknown(t *testing.T) {
 			}
 
 			var cmd *CommandError
-			if !errors.As(err, &cmd) || len(cmd.Result.Stdout) > 1024 || len(cmd.Result.Stderr) > 1024 {
+			if !errors.As(err, &cmd) || len(cmd.Result.Stdout) > 1024 ||
+				len(cmd.Result.Stderr) > 1024 {
 				t.Fatalf("returned more than OutputBytes: %v", err)
 			}
 
@@ -227,8 +239,23 @@ esac
 	}
 
 	limited, err := New(Config{
-		Binary: s.config.Binary, SocketPath: s.endpoint.SocketPath, SocketName: "", ConfigFile: "", Env: nil, Dir: "",
-		Limits: limitsWith(0, int64(len(probe))+100, 0, 0), UTF8: UTF8Default, Colors256: false, TerminalFeatures: nil, LogLevel: LogLevelNone, LoginShell: false,
+		Binary:     s.config.Binary,
+		SocketPath: s.endpoint.SocketPath,
+		SocketName: "",
+		ConfigFile: "",
+		Env:        nil,
+		Dir:        "",
+		Limits: limitsWith(
+			0,
+			int64(len(probe))+100,
+			0,
+			0,
+		),
+		UTF8:             UTF8Default,
+		Colors256:        false,
+		TerminalFeatures: nil,
+		LogLevel:         LogLevelNone,
+		LoginShell:       false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -272,10 +299,15 @@ func TestInputLimitSendsNothing(t *testing.T) {
 			return e
 		}},
 		{"oversized sequence stdin", func() error {
-			_, e := s.RunSequenceWith(t.Context(), seq, RunOptions{Start: StartPolicyAllowStart, Input: make([]byte, 128)})
+			_, e := s.RunSequenceWith(
+				t.Context(), seq, RunOptions{Start: StartPolicyAllowStart, Input: make([]byte, 128)},
+			)
+
 			return e
 		}},
-		{"oversized pane text", func() error { return unprobedPane(t, s).SendText(t.Context(), strings.Repeat("a", 128)) }},
+		{"oversized pane text", func() error {
+			return unprobedPane(t, s).SendText(t.Context(), strings.Repeat("a", 128))
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.call()
@@ -297,11 +329,15 @@ func TestInputLimitSendsNothing(t *testing.T) {
 func TestConcurrentCapsRunningSubprocesses(t *testing.T) {
 	const concurrent, callers = 2, 5
 
-	s, dir := standInServer(t, limitsWith(10*time.Second, 0, 0, concurrent), func(dir string) string {
-		return `touch '` + filepath.Join(dir, "running.") + `'$$
+	s, dir := standInServer(
+		t,
+		limitsWith(10*time.Second, 0, 0, concurrent),
+		func(dir string) string {
+			return `touch '` + filepath.Join(dir, "running.") + `'$$
 while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 `
-	})
+		},
+	)
 	p := unprobedPane(t, s)
 	running := filepath.Join(dir, "running.*")
 
@@ -319,7 +355,11 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 	time.Sleep(200 * time.Millisecond)
 
 	if matches, _ := filepath.Glob(running); len(matches) != concurrent {
-		t.Fatalf("%d subprocesses started while the gate was closed, want %d", len(matches), concurrent)
+		t.Fatalf(
+			"%d subprocesses started while the gate was closed, want %d",
+			len(matches),
+			concurrent,
+		)
 	}
 
 	waiting, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -327,7 +367,11 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 
 	err := p.Kill(waiting)
 	if !errors.Is(err, context.DeadlineExceeded) || outcomeOf(err).Effect != EffectNotSent {
-		t.Fatalf("caller waiting for admission: got %v (effect %v), want DeadlineExceeded and EffectNotSent", err, outcomeOf(err).Effect)
+		t.Fatalf(
+			"caller waiting for admission: got %v (effect %v), want DeadlineExceeded and EffectNotSent",
+			err,
+			outcomeOf(err).Effect,
+		)
 	}
 
 	openGate()
@@ -341,7 +385,11 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 	}
 
 	if matches, _ := filepath.Glob(running); len(matches) != callers {
-		t.Fatalf("%d subprocesses ran, want %d (the timed-out caller must not run)", len(matches), callers)
+		t.Fatalf(
+			"%d subprocesses ran, want %d (the timed-out caller must not run)",
+			len(matches),
+			callers,
+		)
 	}
 }
 
@@ -359,7 +407,7 @@ while [ ! -e '` + filepath.Join(dir, "gate") + `' ]; do sleep 0.01; done
 		t.Fatal(err)
 	}
 
-	cmd, err := s.PrepareCommand(t.Context(), c, Streams{}, CommandOptions{}) //nolint:exhaustruct_v5 // default streams and options
+	cmd, err := s.PrepareCommand(t.Context(), c, Streams{}, CommandOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +440,7 @@ func TestDecodeFailureAfterCreationIsConfirmed(t *testing.T) {
 		create  func(*Server) error
 	}{
 		{"Split", paneFixture, ObjectKindPane, "pane_width", "%7", func(s *Server) error {
-			_, e := unprobedPane(t, s).Split(context.Background(), SplitOptions{}) //nolint:exhaustruct_v5 // default split
+			_, e := unprobedPane(t, s).Split(context.Background(), SplitOptions{})
 			return e
 		}},
 		{"NewWindow", windowFixture, ObjectKindWindow, "window_width", "@2", func(s *Server) error {
@@ -401,7 +449,7 @@ func TestDecodeFailureAfterCreationIsConfirmed(t *testing.T) {
 				return e
 			}
 
-			_, e = session.NewWindow(context.Background(), NewWindowOptions{}) //nolint:exhaustruct_v5 // default window
+			_, e = session.NewWindow(context.Background(), NewWindowOptions{})
 
 			return e
 		}},
@@ -428,7 +476,8 @@ func TestDecodeFailureAfterCreationIsConfirmed(t *testing.T) {
 				t.Fatalf("got %v, want an OperationError with effect EffectConfirmed", err)
 			}
 
-			if len(op.Outcome.Created) != 1 || op.Outcome.Created[0].Kind != tc.kind || op.Outcome.Created[0].RawID != tc.rawID {
+			if len(op.Outcome.Created) != 1 || op.Outcome.Created[0].Kind != tc.kind ||
+				op.Outcome.Created[0].RawID != tc.rawID {
 				t.Fatalf("Created = %+v, want one %s %s", op.Outcome.Created, tc.kind, tc.rawID)
 			}
 		})
@@ -485,7 +534,11 @@ esac
 
 			if tc.refused {
 				if !errors.Is(err, ErrUnsupported) || outcomeOf(err).Effect != EffectNotSent {
-					t.Fatalf("got %v (effect %v), want ErrUnsupported and EffectNotSent", err, outcomeOf(err).Effect)
+					t.Fatalf(
+						"got %v (effect %v), want ErrUnsupported and EffectNotSent",
+						err,
+						outcomeOf(err).Effect,
+					)
 				}
 
 				if started {
@@ -496,7 +549,10 @@ esac
 			}
 
 			if !started {
-				t.Fatalf("the stand-in never reached new-session with a supported version (err %v)", err)
+				t.Fatalf(
+					"the stand-in never reached new-session with a supported version (err %v)",
+					err,
+				)
 			}
 		})
 	}
@@ -566,7 +622,11 @@ func TestNamesTmuxWouldAlterAreRejected(t *testing.T) {
 			t.Run(tc.entry+"/"+strconv.Quote(name), func(t *testing.T) {
 				err := tc.call(name)
 				if !errors.Is(err, ErrInvalidArgument) || outcomeOf(err).Effect != EffectNotSent {
-					t.Fatalf("got %v (effect %v), want ErrInvalidArgument and EffectNotSent", err, outcomeOf(err).Effect)
+					t.Fatalf(
+						"got %v (effect %v), want ErrInvalidArgument and EffectNotSent",
+						err,
+						outcomeOf(err).Effect,
+					)
 				}
 
 				if _, err := os.Stat(filepath.Join(dir, "ran")); !errors.Is(err, os.ErrNotExist) {
@@ -587,7 +647,11 @@ func TestPopupDismissalIsNotAnError(t *testing.T) {
 		{"tmux failure", "echo 'invalid popup' >&2\nexit 1\n", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s, _ := standInServer(t, limitsWith(0, 0, 0, 0), func(string) string { return tc.script })
+			s, _ := standInServer(
+				t,
+				limitsWith(0, 0, 0, 0),
+				func(string) string { return tc.script },
+			)
 
 			client, err := s.ClientHandle("/dev/pts/1")
 			if err != nil {
