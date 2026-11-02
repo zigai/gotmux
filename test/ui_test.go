@@ -510,9 +510,24 @@ func TestIntegrationUIControls(t *testing.T) {
 
 	waitUIResult(t, ctx, result)
 
+	// Do not launch the host's interactive locker. A lock subprocess can inherit
+	// Attach's output pipes and keep them open after cleanup kills the client.
+	if err := session.Options().Set(ctx, "lock-command", ":"); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := client.LockScreen(ctx); err != nil {
 		t.Fatalf("Client.LockScreen failed: %v", err)
 	}
+
+	// LockScreen returns after requesting the lock, not after the locker exits.
+	// Wait for MSG_UNLOCK to be processed before canceling the attachment.
+	// Some tmux versions omit suspended clients from list-clients entirely.
+	awaitObservation(t, ctx, "client unlocked", func() bool {
+		flags, err := client.Format(ctx, "#{client_flags}")
+
+		return err == nil && !bytes.Contains(flags, []byte("suspended"))
+	})
 }
 
 func TestIntegrationClientInfoReportsDisplayedSession(t *testing.T) {
