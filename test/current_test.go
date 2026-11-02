@@ -193,7 +193,19 @@ func TestIntegrationDiscoveryDropsExitedDaemon(t *testing.T) {
 	ctx := integrationContext(t)
 	directory, socketDirectory := discoverySocketDirectory(t)
 	path := filepath.Join(socketDirectory, "exiting")
-	server := discoveryFixture(t, ctx, directory, path)
+
+	server, err := tmux.New(tmux.Config{
+		Binary: os.Getenv("TMUX_TEST_BINARY"), SocketPath: path,
+		ConfigFile: "/dev/null", Env: testEnvironment(directory),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Own the process so shutdown can be synchronized with Wait rather than
+	// assuming the kill-server command returning means the daemon has exited.
+	done := startForegroundServer(t, server)
+	awaitServerReady(t, server)
 
 	sockets, err := tmux.DiscoverSockets()
 	if err != nil {
@@ -206,6 +218,17 @@ func TestIntegrationDiscoveryDropsExitedDaemon(t *testing.T) {
 
 	if err := server.Kill(ctx); err != nil {
 		t.Fatal(err)
+	}
+
+	select {
+	case err := <-done:
+		done <- err
+
+		if err != nil {
+			t.Fatalf("discovery daemon exited with error: %v", err)
+		}
+	case <-ctx.Done():
+		t.Fatalf("waiting for discovery daemon exit: %v", ctx.Err())
 	}
 
 	sockets, err = tmux.DiscoverSockets()
