@@ -1,6 +1,4 @@
-<a href="https://github.com/zigai/gotmux"><img src="assets/logo.svg" align="right" width="130" alt="gotmux gopher mascot"></a>
-
-# gotmux
+# <a href="https://github.com/zigai/gotmux"><img src="assets/logo.svg" align="right" width="130" alt="gotmux gopher mascot"></a> gotmux
 
 gotmux is a Go library for controlling, inspecting, and automating [tmux](https://github.com/tmux/tmux) sessions, windows, panes, and buffers.
 
