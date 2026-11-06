@@ -18,3 +18,4 @@ tmux-out-*.log
 
 # OS metadata
 .DS_Store
+coverage/
