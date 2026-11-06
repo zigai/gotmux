@@ -75,11 +75,16 @@ func uiClient(
 		cancel()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("UI attachment failed to stop")
 			// Attach still uses the PTY that the next cleanup closes.
-			<-done
+			if err := <-done; err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		}
 	})
 

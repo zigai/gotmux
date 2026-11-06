@@ -446,9 +446,15 @@ func TestDispatcherEnqueueShutdownReleasesCapacity(t *testing.T) {
 		go func() { <-start; connection.stop(nil, true); connection.drainRequests(); close(stopped) }()
 
 		close(start)
-		<-enqueued
+
+		enqueueErr := <-enqueued
+
 		<-stopped
 		cancel(nil)
+
+		if enqueueErr != nil && !errors.Is(enqueueErr, ErrClosed) {
+			t.Fatalf("iteration %d: enqueue during shutdown: %v", iteration, enqueueErr)
+		}
 
 		if len(connection.requests) != 0 {
 			connection.drainRequests()

@@ -16,7 +16,6 @@ func executableFixture(t *testing.T, name string) string {
 	path := filepath.Join(t.TempDir(), name)
 
 	script := "#!/bin/sh\nprintf '%s\\000' \"$#\" \"$@\"\n"
-	//nolint:gosec // test script requires executable permissions
 	if e := os.WriteFile(path, []byte(script), 0o700); e != nil {
 		t.Fatal(e)
 	}

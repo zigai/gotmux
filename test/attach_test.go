@@ -134,11 +134,16 @@ func testAttachmentLifecycle(t *testing.T, finish string) {
 		cancel()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("attachment failed to stop")
 			// Attach still uses the terminal that the next cleanup closes.
-			<-done
+			if err := <-done; err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		}
 	})
 	attached := waitTerminalClient(t, ctx, server, terminal, done)
@@ -352,7 +357,10 @@ func startPrepared(t *testing.T, cmd *exec.Cmd) chan error {
 		_ = cmd.Process.Kill()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("prepared command failed to stop")
 		}
@@ -450,7 +458,10 @@ func TestIntegrationPrepareDefaultTerminal(t *testing.T) {
 		_ = execCmd.Process.Kill()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 			t.Error("process failed to stop")
 		}
@@ -527,7 +538,10 @@ func TestIntegrationPrepareTerminalSequence(t *testing.T) {
 		_ = execCmd.Process.Kill()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 		}
 	})
@@ -587,7 +601,10 @@ func TestIntegrationSessionPrepareAttach(t *testing.T) {
 		_ = execCmd.Process.Kill()
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 		}
 	})
@@ -674,7 +691,10 @@ func TestIntegrationAttach_MasterHangupTeardown(t *testing.T) {
 	}
 
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Logf("completion after teardown: %v", err)
+		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("session.Attach did not unblock within 5 seconds of master PTY hangup")
 	}

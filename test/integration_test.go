@@ -953,7 +953,10 @@ func startForegroundServer(t *testing.T, s *tmux.Server) chan error {
 		}
 
 		select {
-		case <-done:
+		case err := <-done:
+			if err != nil {
+				t.Logf("completion after teardown: %v", err)
+			}
 		case <-time.After(5 * time.Second):
 		}
 	})

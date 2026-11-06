@@ -27,8 +27,8 @@ package="$work/source/$module@$version"
 mkdir -p "$proxy" "$package" "$work/consumer"
 
 cp go.mod "$proxy/$version.mod"
-printf '{"Version":"%s","Time":"2026-09-08T00:00:00Z"}\n' "$version" > "$proxy/$version.info"
-printf '%s\n' "$version" > "$proxy/list"
+printf '{"Version":"%s","Time":"2026-09-08T00:00:00Z"}\n' "$version" >"$proxy/$version.info"
+printf '%s\n' "$version" >"$proxy/list"
 
 cp -R go.mod go.sum tmux internal tmuxtest "$package/"
 (cd "$work/source" && zip -qr "$proxy/$version.zip" "$module@$version")
@@ -37,9 +37,9 @@ cp -R go.mod go.sum tmux internal tmuxtest "$package/"
 
 cd "$work/consumer"
 
-printf 'module consumer.test/check\n\ngo %s\n\nrequire %s %s\n' "$go_version" "$module" "$version" > go.mod
+printf 'module consumer.test/check\n\ngo %s\n\nrequire %s %s\n' "$go_version" "$module" "$version" >go.mod
 
-cat > main.go <<EOF_GO
+cat >main.go <<EOF_GO
 package main
 
 import (

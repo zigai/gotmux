@@ -290,7 +290,6 @@ func TestIntegrationPipeInputDirection(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// G101 false positive: a marker the piped script echoes, not a credential.
-	//nolint:gosec // See evidence above.
 	token := "TGO_PIPE_INPUT_TOKEN_12345"
 
 	script := "echo " + token

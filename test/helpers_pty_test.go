@@ -46,7 +46,6 @@ func setTerminalSize(t *testing.T, slave *os.File) {
 	}
 	// G103: ioctl reads this owned aligned eight-byte winsize synchronously on Linux/Darwin amd64/arm64; KeepAlive
 	// retains it; Linux PTY tests and Darwin cross-builds cover the ABI use.
-	//nolint:gosec // See evidence above.
 	ptyIoctl(t, int(slave.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size))
 }
 

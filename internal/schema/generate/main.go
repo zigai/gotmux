@@ -75,7 +75,6 @@ func run(root string, check bool) error {
 		return nil
 	}
 
-	//nolint:gosec // Generated Go source is a public repository artifact, readable by all users.
 	if err := os.WriteFile(path, generated, 0o644); err != nil {
 		return fmt.Errorf("write generated code: %w", err)
 	}

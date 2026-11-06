@@ -23,7 +23,6 @@ func standInServer(t *testing.T, limits Limits, script func(dir string) string) 
 	dir := t.TempDir()
 
 	binary := filepath.Join(dir, "tmux")
-	//nolint:gosec // stand-in tmux must be executable
 	if err := os.WriteFile(binary, []byte("#!/bin/sh\n"+script(dir)), 0o700); err != nil {
 		t.Fatal(err)
 	}

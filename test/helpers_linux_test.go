@@ -29,13 +29,11 @@ func openPTY(t *testing.T) (*os.File, *os.File) {
 	var unlock int32
 	// G103: Linux reads this owned, aligned int32 synchronously; ptyIoctl retains its lifetime; covered by PTY
 	// race tests.
-	//nolint:gosec // See evidence above.
 	ptyIoctl(t, masterFD, syscall.TIOCSPTLCK, unsafe.Pointer(&unlock))
 
 	var number uint32
 	// G103: Linux writes four bytes to this owned, aligned uint32; ptyIoctl retains its lifetime; covered by PTY
 	// race tests.
-	//nolint:gosec // See evidence above.
 	ptyIoctl(t, masterFD, syscall.TIOCGPTN, unsafe.Pointer(&number))
 
 	slave, err := os.OpenFile(fmt.Sprintf("/dev/pts/%d", number), os.O_RDWR|syscall.O_NOCTTY, 0)

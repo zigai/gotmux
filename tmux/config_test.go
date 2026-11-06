@@ -17,7 +17,6 @@ func TestNewIsPureAndCopiesConfig(t *testing.T) {
 	binary := filepath.Join(dir, "fake")
 
 	marker := filepath.Join(dir, "ran")
-	//nolint:gosec // test script requires executable permissions
 	if e := os.WriteFile(binary, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o700); e != nil {
 		t.Fatal(e)
 	}

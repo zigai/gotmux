@@ -129,7 +129,10 @@ func TestIntegrationClientHandleRefusesReattachedTerminal(t *testing.T) {
 	}
 
 	select {
-	case <-firstDone:
+	case err := <-firstDone:
+		if !endedByDetach(err) {
+			t.Fatalf("first attachment after detach: %v", err)
+		}
 	case <-ctx.Done():
 		t.Fatal("first attachment did not end after Detach")
 	}

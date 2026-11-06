@@ -3,6 +3,7 @@
 package tmux
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"syscall"
@@ -14,7 +15,7 @@ func ptyIoctl(fd int, request uintptr, arg unsafe.Pointer) error {
 	runtime.KeepAlive(arg)
 
 	if errno != 0 {
-		return errno
+		return fmt.Errorf("PTY ioctl: %w", errno)
 	}
 
 	return nil

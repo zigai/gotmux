@@ -144,7 +144,6 @@ func resizePTY(t *testing.T, master *os.File, slave *os.File, rows uint16, cols 
 	for _, end := range []*os.File{master, slave} {
 		// G103: TIOCSWINSZ reads this owned struct winsize (four uint16s, the Linux and Darwin layout)
 		// synchronously; ptyIoctl retains its lifetime; covered by the PTY resize tests.
-		//nolint:gosec // See evidence above.
 		ptyIoctl(t, int(end.Fd()), syscall.TIOCSWINSZ, unsafe.Pointer(&size))
 	}
 }
