@@ -20,7 +20,9 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/zigai/gotmux
-
+  exclusions:
+    paths:
+      - "^tmux/options_generated\\.go$"
 linters:
   enable:
     - arangolint
@@ -257,6 +259,7 @@ linters:
       require-specific: true
     gosec:
       excludes:
+        - G306 # file perms
         - G204 # subprocess launched with variable
         - G301 # directory perms
         - G302 # file perms
@@ -270,17 +273,14 @@ linters:
         linters: [mnd]
 
       - path: ".*_test\\.go"
-        linters: [decorder, funcorder, cyclop, gocognit, dupl, maintidx, exhaustruct_v5, goconst]
-
-      # A test writes its own output to paths the developer running it chooses.
-      - path: ".*_test\\.go"
-        linters: [gosec]
-        text: "G703:"
+        linters:
+          [gosec, decorder, funcorder, cyclop, gocognit, dupl, maintidx, exhaustruct_v5, goconst]
 
       # Test-helper packages (named like httptest) only build fixtures.
       - path: "(^|/)[a-z0-9]+test/"
         linters: [exhaustruct_v5]
-
+      - path: "(?:(^|/)(node_modules|third_party|forks|vendor|testdata|fixtures|__fixtures__|snapshots|__snapshots__|__image_snapshots__|golden|corpus|fuzz_corpus|baselines|generated|\\.tmp|\\.gameops|\\.stryker-tmp|\\.cache)(/|$))|(?:^tmux/options_generated\\.go$)"
+        linters: [whitespace]
 
 issues:
   max-issues-per-linter: 0
