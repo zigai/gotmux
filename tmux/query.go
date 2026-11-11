@@ -278,7 +278,7 @@ func (s *Server) SessionsWith(ctx context.Context, opts QueryOptions) ([]Session
 	}
 	defer op.close()
 
-	req, err := listRequest(ObjectKindSession, opts, "")
+	req, err := serverListRequest(ObjectKindSession, opts)
 	if err != nil {
 		return nil, opError("Server.Sessions", err)
 	}
@@ -350,7 +350,7 @@ func (s *Server) WindowsWith(ctx context.Context, opts QueryOptions) ([]WindowIn
 	}
 	defer op.close()
 
-	req, err := listRequest(ObjectKindWindow, opts, "")
+	req, err := serverListRequest(ObjectKindWindow, opts)
 	if err != nil {
 		return nil, opError("Server.Windows", err)
 	}
@@ -444,7 +444,7 @@ func (s *Server) PanesWith(ctx context.Context, opts QueryOptions) ([]PaneInfo, 
 	}
 	defer op.close()
 
-	req, err := listRequest(ObjectKindPane, opts, "")
+	req, err := serverListRequest(ObjectKindPane, opts)
 	if err != nil {
 		return nil, opError("Server.Panes", err)
 	}
@@ -519,7 +519,7 @@ func (s *Server) ClientsWith(ctx context.Context, opts QueryOptions) ([]ClientIn
 	}
 	defer op.close()
 
-	req, err := listRequest(ObjectKindClient, opts, "")
+	req, err := serverListRequest(ObjectKindClient, opts)
 	if err != nil {
 		return nil, opError("Server.Clients", err)
 	}

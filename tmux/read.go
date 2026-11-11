@@ -37,6 +37,8 @@ type readRequest struct {
 	kind   ObjectKind
 	fields []string
 	node   wireNode
+	//exhaustruct:optional
+	omitsIdentity bool
 }
 
 func listRequest(
@@ -51,6 +53,18 @@ func listRequest(
 	}
 
 	return listFields(kind, fields, opts.Filter, target, scope...)
+}
+
+func serverListRequest(kind ObjectKind, opts QueryOptions) (readRequest, error) {
+	fields, err := queryFields(fieldsFor(kind), opts.ExtraFields)
+	if err != nil {
+		return readRequest{}, err
+	}
+
+	req, err := listFields(kind, fields[len(schema.Identity):], opts.Filter, "")
+	req.omitsIdentity = true
+
+	return req, err
 }
 
 func recordQueryRequest(query RecordQuery) (readRequest, error) {
@@ -234,7 +248,7 @@ func (s *Server) decodeRead(
 			)
 		}
 
-		out[current] = append(out[current], recordMap(requests[current].fields, values))
+		out[current] = append(out[current], requests[current].row(values, info))
 	}
 
 	if current != len(requests)-1 {
@@ -242,6 +256,17 @@ func (s *Server) decodeRead(
 	}
 
 	return info, out, nil
+}
+
+func (r readRequest) row(values []string, info ServerInfo) map[string]string {
+	row := recordMap(r.fields, values)
+	if r.omitsIdentity {
+		for _, f := range schema.Identity {
+			row[f] = info.raw[f]
+		}
+	}
+
+	return row
 }
 
 func recordMap(fields []string, values []string) map[string]string {
@@ -339,7 +364,7 @@ func (r ReadRequest) lists() ([]readRequest, error) {
 			continue
 		}
 
-		req, err := listRequest(entry.kind, opts, "")
+		req, err := serverListRequest(entry.kind, opts)
 		if err != nil {
 			return nil, err
 		}
