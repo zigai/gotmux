@@ -48,6 +48,33 @@ func TestRecordRoundTrip(t *testing.T) {
 	}
 }
 
+func TestQuotedRecordFields(t *testing.T) {
+	// tmux 3.8 quotes newlines; 3.6 and 3.7 leave them raw.
+	data := []byte("TGO1:7:=|=a\\|b|=c\\\\|=d\\\ne\nf|3:x,y,=\\ \\#\\{|=%end 1 2 1\nTGO1:0:|\nrest")
+	want := []string{"", "a|b", `c\`, "d\ne\nf", "x,y", " #{", "%end 1 2 1\nTGO1:0:"}
+	record := data[:len(data)-len("rest")]
+
+	reader := bytes.NewReader(data)
+
+	got, err := ReadRecordFields(reader, int64(len(data)))
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("fields = %#v, %v", got, err)
+	}
+
+	if reader.Len() != len("rest") {
+		t.Fatalf("left %d bytes unread", reader.Len())
+	}
+
+	gotWire, err := ReadRecordWire(bytes.NewReader(data), int64(len(data)))
+	if err != nil || !bytes.Equal(gotWire, record) {
+		t.Fatalf("wire = %q, %v", gotWire, err)
+	}
+
+	if _, err = ReadRecordFields(bytes.NewReader(record), int64(len(record)-1)); err == nil {
+		t.Fatal("accepted over-limit record")
+	}
+}
+
 func TestMalformedRecords(t *testing.T) {
 	for _, data := range []string{
 		"",
@@ -61,6 +88,13 @@ func TestMalformedRecords(t *testing.T) {
 		"TGO1:0:\r\n",
 		"TGO1:-1:\n",
 		"TGO1:1:1:a,",
+		"TGO1:1:=a",
+		"TGO1:1:=a\\",
+		"TGO1:1:=a\\|\n",
+		"TGO1:1:=a|",
+		"TGO1:1:=a|x\n",
+		"TGO1:2:=a|\n",
+		"TGO1:1:a|\n",
 	} {
 		t.Run(data, func(t *testing.T) {
 			if _, _, err := ReadRecord(
@@ -246,7 +280,13 @@ func TestSequenceParsing(t *testing.T) {
 }
 
 func FuzzRecords(f *testing.F) {
-	for _, s := range []string{"", "x\ny", "\x00\xff", "%end 8 10 1\nTGO1:1:0:,\n"} {
+	for _, s := range []string{
+		"",
+		"x\ny",
+		"\x00\xff",
+		"%end 8 10 1\nTGO1:1:0:,\n",
+		"TGO1:2:=a\\|b|1:c,\n",
+	} {
 		f.Add([]byte(s))
 	}
 

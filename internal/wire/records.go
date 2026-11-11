@@ -10,14 +10,17 @@ import (
 )
 
 const (
-	// RecordPrefix identifies records using a versioned count plus netstrings. tmux's n: modifier is byte
-	// strlen, not display width. No byte is assumed absent from a format value.
+	// RecordPrefix identifies records using a versioned count plus fields: netstrings, or values quoted by
+	// tmux's q: modifier and ended by "|". No byte is assumed absent from a format value.
 	RecordPrefix       = "TGO1:"
 	wantWire     uint8 = 1 << iota
 	wantFields
 
 	minRecordOverhead = 3
 	MaxRecordFields   = 1024
+	quotedFieldStart  = '='
+	quotedFieldEnd    = '|'
+	quotedFieldEscape = '\\'
 	octalBase         = 8
 	maxByteValue      = 255
 )
@@ -41,7 +44,7 @@ func RecordFormat(fields []string) string {
 	fmt.Fprintf(&b, "%s%d:", RecordPrefix, len(fields))
 
 	for _, f := range fields {
-		fmt.Fprintf(&b, "#{n:%s}:#{%s},", f, f)
+		fmt.Fprintf(&b, "%c#{q:%s}%c", quotedFieldStart, f, quotedFieldEnd)
 	}
 
 	return b.String()
@@ -344,7 +347,16 @@ func scanField(r Reader, left int64) ([]byte, int64, error) {
 		return nil, 0, ErrRecord
 	}
 
-	size, n, e := decimal(r, left)
+	first, err := r.ReadByte()
+	if err != nil {
+		return nil, 0, err //nolint:wrapcheck // Reader error is propagated directly
+	}
+
+	if first == quotedFieldStart {
+		return scanQuotedField(r, left)
+	}
+
+	size, n, e := decimalFrom(r, first, left)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -371,6 +383,44 @@ func scanField(r Reader, left int64) ([]byte, int64, error) {
 	return b, used + size + 1, nil
 }
 
+func scanQuotedField(r Reader, left int64) ([]byte, int64, error) {
+	var b []byte
+
+	used := int64(1)
+
+	for {
+		if used >= left {
+			return nil, 0, ErrRecord
+		}
+
+		ch, err := r.ReadByte()
+		if err != nil {
+			return nil, 0, err //nolint:wrapcheck // Reader error is propagated directly
+		}
+
+		used++
+
+		if ch == quotedFieldEnd {
+			return b, used, nil
+		}
+
+		if ch == quotedFieldEscape {
+			if used >= left {
+				return nil, 0, ErrRecord
+			}
+
+			ch, err = r.ReadByte()
+			if err != nil {
+				return nil, 0, err //nolint:wrapcheck // Reader error is propagated directly
+			}
+
+			used++
+		}
+
+		b = append(b, ch)
+	}
+}
+
 func isInvalidDecimalChar(ch byte, count int64, zero bool) bool {
 	if ch < '0' || ch > '9' {
 		return true
@@ -380,17 +430,21 @@ func isInvalidDecimalChar(ch byte, count int64, zero bool) bool {
 }
 
 func decimal(r Reader, maxBytes int64) (int64, int64, error) {
+	first, err := r.ReadByte()
+	if err != nil {
+		return 0, 0, err //nolint:wrapcheck // Reader error is propagated directly
+	}
+
+	return decimalFrom(r, first, maxBytes)
+}
+
+func decimalFrom(r Reader, ch byte, maxBytes int64) (int64, int64, error) {
 	var (
 		value, count int64
 		zero         bool
 	)
 
 	for {
-		ch, err := r.ReadByte()
-		if err != nil {
-			return 0, count, err //nolint:wrapcheck // Reader error is propagated directly
-		}
-
 		count++
 		if ch == ':' {
 			if count == 1 {
@@ -414,5 +468,12 @@ func decimal(r Reader, maxBytes int64) (int64, int64, error) {
 		}
 
 		value = value*10 + digit //nolint:mnd // base 10 conversion
+
+		next, err := r.ReadByte()
+		if err != nil {
+			return 0, count, err //nolint:wrapcheck // Reader error is propagated directly
+		}
+
+		ch = next
 	}
 }

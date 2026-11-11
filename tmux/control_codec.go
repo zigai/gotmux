@@ -102,7 +102,7 @@ func boundedLine(r *bufio.Reader, limit int64) ([]byte, error) {
 	}
 }
 
-// readControlUnit never scans for a delimiter inside a length-framed record.
+// readControlUnit never scans for a frame delimiter inside a record.
 // Arbitrary output-producing commands are not accepted on this transport.
 func readControlUnit(r *bufio.Reader, maxBytes int64, publish func(Event)) (controlUnit, error) {
 	if b, err := r.Peek(1); err == nil && b[0] == dscEscapeByte {

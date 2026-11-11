@@ -941,11 +941,11 @@ func splitRecordFormat(fields []string) string {
 
 	for _, f := range fields {
 		if f == "pane_current_command" || f == "pane_current_path" {
-			b.WriteString("0:,")
+			b.WriteString("=|")
 			continue
 		}
 
-		fmt.Fprintf(&b, "#{n:%s}:#{%s},", f, f)
+		fmt.Fprintf(&b, "=#{q:%s}|", f)
 	}
 
 	return b.String()
