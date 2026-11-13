@@ -110,6 +110,10 @@ check: (run-checks "formatcheck" "lockcheck" "generated-check" "lint" "test")
 generate:
     go generate ./tmux
 
+# Fetch upstream tmux option tables and rebuild the option schema
+import-options:
+    go run ./internal/schema/import
+
 # Remove generated output and caches
 clean: (remove "dist" "coverage.out" "*.test" "*.prof" "coverage.html" "lint-report.json" "coverage")
 

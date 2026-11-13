@@ -70,7 +70,7 @@ func TestTypedOptionValidation(t *testing.T) {
 		},
 		{
 			name: "invalid enum",
-			call: func() error { return server.Options().SetClipboard(ctx, ClipboardMode("invalid")) },
+			call: func() error { return server.Options().SetClipboard(ctx, Clipboard("invalid")) },
 		},
 		{
 			name: "invalid key",

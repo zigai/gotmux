@@ -4,11 +4,66 @@ package test
 
 import (
 	"context"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zigai/gotmux/tmux"
 )
+
+func TestIntegrationEveryTypedOptionGetter(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	pane := firstPane(t, ctx, server)
+
+	window, err := pane.Window(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scopes := []struct {
+		name    string
+		options any
+	}{
+		{"server", server.Options()},
+		{"global-session", server.GlobalSessionOptions()},
+		{"session", session.Options()},
+		{"global-window", server.GlobalWindowOptions()},
+		{"window", window.Options()},
+		{"pane", pane.Options()},
+	}
+	for _, scope := range scopes {
+		t.Run(scope.name, func(t *testing.T) {
+			options := reflect.ValueOf(scope.options)
+			for index := range options.NumMethod() {
+				method := options.Method(index)
+
+				signature := method.Type()
+				if signature.NumIn() != 1 ||
+					signature.In(0) != reflect.TypeFor[context.Context]() ||
+					signature.NumOut() != 2 ||
+					signature.Out(1) != reflect.TypeFor[error]() ||
+					!strings.HasPrefix(signature.Out(0).Name(), "OptionValue[") {
+					continue
+				}
+
+				t.Run(options.Type().Method(index).Name, func(t *testing.T) {
+					result := method.Call([]reflect.Value{reflect.ValueOf(ctx)})
+					if !result[1].IsNil() {
+						t.Fatalf("read option: %v", result[1].Interface())
+					}
+
+					effective := result[0].FieldByName("Effective")
+
+					value := effective.MethodByName("Get").Call(nil)
+					if !value[1].Bool() {
+						t.Fatalf("effective option is unavailable: %v", result[0].Interface())
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestIntegrationTypedOptionInteger(t *testing.T) {
 	server, _, ctx := apiFixture(t)
@@ -40,7 +95,7 @@ func TestIntegrationTypedOptionBoolean(t *testing.T) {
 
 func TestIntegrationTypedOptionEnum(t *testing.T) {
 	server, _, ctx := apiFixture(t)
-	for _, value := range []tmux.ClipboardMode{tmux.ClipboardOff, tmux.ClipboardExternal, tmux.ClipboardOn} {
+	for _, value := range []tmux.Clipboard{tmux.ClipboardOff, tmux.ClipboardExternal, tmux.ClipboardOn} {
 		if err := server.Options().SetClipboard(ctx, value); err != nil {
 			t.Fatal(err)
 		}

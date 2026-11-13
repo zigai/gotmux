@@ -58,7 +58,7 @@ func (o {{$scope}}) {{.Method}}(ctx context.Context) (OptionValue[{{.Type}}],err
 }
 // Set{{.Method}} sets the {{.Name}} option in this scope.
 func(o {{$scope}}) Set{{.Method}}(ctx context.Context,value {{.Type}}) error {
- {{if eq .Type "int"}}if value < {{.Min}} || value > {{.Max}} { return opError("{{$scope}}.Set{{.Method}}",invalid("range")) }
+ {{if eq .Type "int"}}if int64(value) < {{.Min}} || int64(value) > {{.Max}} { return opError("{{$scope}}.Set{{.Method}}",invalid("range")) }
  {{else if index $.Enums .Type}}if !value.valid() { return opError("{{$scope}}.Set{{.Method}}",invalid("enum value")) }
  {{else if eq .Type "Key"}}if !value.Valid() { return opError("{{$scope}}.Set{{.Method}}",invalid("key value")) }{{end}}
  return o.target.set(ctx,"{{$scope}}.Set{{.Method}}",{{printf "%q" .Name}},{{if eq .Type "int"}}strconv.Itoa(value){{else if eq .Type "bool"}}boolOption(value){{else if eq .Type "string"}}value{{else}}string(value){{end}},false)

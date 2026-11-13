@@ -6,9 +6,53 @@
     "https://raw.githubusercontent.com/tmux/tmux/3.6a/options-table.c",
     "https://raw.githubusercontent.com/tmux/tmux/3.6b/options-table.c",
     "https://raw.githubusercontent.com/tmux/tmux/3.7c/options-table.c",
-    "https://raw.githubusercontent.com/tmux/tmux/3.8-rc/options-table.c"
+    "https://raw.githubusercontent.com/tmux/tmux/3.8/options-table.c",
+    "https://raw.githubusercontent.com/tmux/tmux/master/options-table.c"
   ],
   "scopes": {
+    "ScopePane": [
+      "allow-passthrough",
+      "allow-rename",
+      "allow-set-title",
+      "alternate-screen",
+      "copy-mode-position-format",
+      "cursor-colour",
+      "cursor-style",
+      "pane-active-border-style",
+      "pane-activity",
+      "pane-bell",
+      "pane-border-format",
+      "pane-border-lines",
+      "pane-border-status",
+      "pane-border-style",
+      "pane-colours",
+      "pane-command-finished",
+      "pane-command-started",
+      "pane-created",
+      "pane-died",
+      "pane-exited",
+      "pane-focus-in",
+      "pane-focus-out",
+      "pane-mode-changed",
+      "pane-mode-entered",
+      "pane-mode-exited",
+      "pane-moved",
+      "pane-prompt-closed",
+      "pane-prompt-opened",
+      "pane-resized",
+      "pane-scrollbars-style",
+      "pane-set-clipboard",
+      "pane-shell-prompt",
+      "pane-title-changed",
+      "remain-on-exit",
+      "remain-on-exit-format",
+      "scroll-on-clear",
+      "switch-mode-match-style",
+      "synchronize-panes",
+      "tree-mode-preview-format",
+      "window-active-style",
+      "window-style"
+    ],
     "ScopeServer": [
       "backspace",
       "buffer-limit",
@@ -37,6 +81,9 @@
       "focus-events",
       "get-clipboard",
       "history-file",
+      "image-size-limit",
+      "image-total-count-limit",
+      "image-total-size-limit",
       "input-buffer-size",
       "light-theme-black",
       "light-theme-blue",
@@ -56,6 +103,7 @@
       "terminal-overrides",
       "theme",
       "user-keys",
+      "utmp",
       "variation-selector-always-wide"
     ],
     "ScopeSession": [
@@ -97,6 +145,7 @@
       "after-show-messages",
       "after-show-options",
       "after-split-window",
+      "after-swap-window",
       "after-unbind-key",
       "alert-activity",
       "alert-bell",
@@ -150,6 +199,10 @@
       "session-window-changed",
       "set-titles",
       "set-titles-string",
+      "side-status",
+      "side-status-format",
+      "side-status-style",
+      "side-status-width",
       "silence-action",
       "status",
       "status-bg",
@@ -183,14 +236,18 @@
       "copy-mode-current-line-number-style",
       "copy-mode-current-line-style",
       "copy-mode-current-match-style",
+      "copy-mode-keep-column",
       "copy-mode-line-number-style",
       "copy-mode-line-numbers",
       "copy-mode-mark-style",
       "copy-mode-match-style",
       "copy-mode-position-style",
       "copy-mode-selection-style",
+      "display-panes-active-colour",
       "display-panes-border-style",
+      "display-panes-colour",
       "display-panes-format",
+      "display-panes-time",
       "fill-character",
       "main-pane-height",
       "main-pane-width",
@@ -223,6 +280,7 @@
       "tree-mode-selection-style",
       "window-closed",
       "window-created",
+      "window-default-command",
       "window-layout-changed",
       "window-pane-changed",
       "window-pane-current-status-format",
@@ -242,61 +300,164 @@
       "window-zoomed",
       "wrap-search",
       "xterm-keys"
-    ],
-    "ScopePane": [
-      "allow-passthrough",
-      "allow-rename",
-      "allow-set-title",
-      "alternate-screen",
-      "copy-mode-position-format",
-      "cursor-colour",
-      "cursor-style",
-      "pane-activity",
-      "pane-bell",
-      "pane-border-format",
-      "pane-colours",
-      "pane-command-finished",
-      "pane-command-started",
-      "pane-created",
-      "pane-died",
-      "pane-exited",
-      "pane-focus-in",
-      "pane-focus-out",
-      "pane-mode-changed",
-      "pane-mode-entered",
-      "pane-mode-exited",
-      "pane-moved",
-      "pane-prompt-closed",
-      "pane-prompt-opened",
-      "pane-resized",
-      "pane-scrollbars-style",
-      "pane-set-clipboard",
-      "pane-shell-prompt",
-      "pane-title-changed",
-      "remain-on-exit",
-      "remain-on-exit-format",
-      "scroll-on-clear",
-      "switch-mode-match-style",
-      "synchronize-panes",
-      "tree-mode-preview-format",
-      "window-active-style",
-      "window-style"
     ]
   },
   "fields": {
+    "PaneOptions": [
+      {
+        "method": "AllowPassthrough",
+        "name": "allow-passthrough",
+        "type": "AllowPassthrough",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowRename",
+        "name": "allow-rename",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowSetTitle",
+        "name": "allow-set-title",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AlternateScreen",
+        "name": "alternate-screen",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModePositionFormat",
+        "name": "copy-mode-position-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CursorColour",
+        "name": "cursor-colour",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CursorStyle",
+        "name": "cursor-style",
+        "type": "CursorStyle",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderFormat",
+        "name": "pane-border-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneScrollbarsStyle",
+        "name": "pane-scrollbars-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RemainOnExit",
+        "name": "remain-on-exit",
+        "type": "RemainOnExit",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RemainOnExitFormat",
+        "name": "remain-on-exit-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ScrollOnClear",
+        "name": "scroll-on-clear",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SynchronizePanes",
+        "name": "synchronize-panes",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowActiveStyle",
+        "name": "window-active-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStyle",
+        "name": "window-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      }
+    ],
     "ServerOptions": [
       {
-        "method": "EscapeTime",
-        "name": "escape-time",
-        "type": "int",
+        "method": "Backspace",
+        "name": "backspace",
+        "type": "Key",
         "min": 0,
-        "max": 2147483647
+        "max": 0
       },
       {
         "method": "BufferLimit",
         "name": "buffer-limit",
         "type": "int",
         "min": 1,
+        "max": 2147483647
+      },
+      {
+        "method": "CopyCommand",
+        "name": "copy-command",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultClientCommand",
+        "name": "default-client-command",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultTerminal",
+        "name": "default-terminal",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Editor",
+        "name": "editor",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "EscapeTime",
+        "name": "escape-time",
+        "type": "int",
+        "min": 0,
         "max": 2147483647
       },
       {
@@ -314,16 +475,23 @@
         "max": 0
       },
       {
-        "method": "DefaultTerminal",
-        "name": "default-terminal",
-        "type": "string",
+        "method": "ExtendedKeys",
+        "name": "extended-keys",
+        "type": "ExtendedKeys",
         "min": 0,
         "max": 0
       },
       {
-        "method": "Clipboard",
-        "name": "set-clipboard",
-        "type": "ClipboardMode",
+        "method": "ExtendedKeysFormat",
+        "name": "extended-keys-format",
+        "type": "ExtendedKeysFormat",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "FocusEvents",
+        "name": "focus-events",
+        "type": "bool",
         "min": 0,
         "max": 0
       },
@@ -333,12 +501,61 @@
         "type": "string",
         "min": 0,
         "max": 0
+      },
+      {
+        "method": "InputBufferSize",
+        "name": "input-buffer-size",
+        "type": "int",
+        "min": 1048576,
+        "max": 4294967295
+      },
+      {
+        "method": "MessageLimit",
+        "name": "message-limit",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "PrefixTimeout",
+        "name": "prefix-timeout",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "PromptHistoryLimit",
+        "name": "prompt-history-limit",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "Clipboard",
+        "name": "set-clipboard",
+        "type": "Clipboard",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "VariationSelectorAlwaysWide",
+        "name": "variation-selector-always-wide",
+        "type": "bool",
+        "min": 0,
+        "max": 0
       }
     ],
     "SessionOptions": [
       {
-        "method": "HistoryLimit",
-        "name": "history-limit",
+        "method": "ActivityAction",
+        "name": "activity-action",
+        "type": "BellAction",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AssumePasteTime",
+        "name": "assume-paste-time",
         "type": "int",
         "min": 0,
         "max": 2147483647
@@ -351,43 +568,22 @@
         "max": 2147483647
       },
       {
-        "method": "DisplayTime",
-        "name": "display-time",
-        "type": "int",
-        "min": 0,
-        "max": 2147483647
-      },
-      {
-        "method": "RepeatTime",
-        "name": "repeat-time",
-        "type": "int",
-        "min": 0,
-        "max": 2147483647
-      },
-      {
-        "method": "Mouse",
-        "name": "mouse",
-        "type": "bool",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "Titles",
-        "name": "set-titles",
-        "type": "bool",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "DefaultShell",
-        "name": "default-shell",
-        "type": "string",
+        "method": "BellAction",
+        "name": "bell-action",
+        "type": "BellAction",
         "min": 0,
         "max": 0
       },
       {
         "method": "DefaultCommand",
         "name": "default-command",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DefaultShell",
+        "name": "default-shell",
         "type": "string",
         "min": 0,
         "max": 0
@@ -400,6 +596,195 @@
         "max": 0
       },
       {
+        "method": "DestroyUnattached",
+        "name": "destroy-unattached",
+        "type": "DestroyUnattached",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DetachOnDestroy",
+        "name": "detach-on-destroy",
+        "type": "DetachOnDestroy",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "DisplayTime",
+        "name": "display-time",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "HistoryLimit",
+        "name": "history-limit",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "InitialRepeatTime",
+        "name": "initial-repeat-time",
+        "type": "int",
+        "min": 0,
+        "max": 2000000
+      },
+      {
+        "method": "KeyTable",
+        "name": "key-table",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "LockAfterTime",
+        "name": "lock-after-time",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "LockCommand",
+        "name": "lock-command",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MessageCommandStyle",
+        "name": "message-command-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MessageLine",
+        "name": "message-line",
+        "type": "MessageLine",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MessageStyle",
+        "name": "message-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Mouse",
+        "name": "mouse",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Prefix",
+        "name": "prefix",
+        "type": "Key",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Prefix2",
+        "name": "prefix2",
+        "type": "Key",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PromptCursorColour",
+        "name": "prompt-cursor-colour",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PromptCursorStyle",
+        "name": "prompt-cursor-style",
+        "type": "CursorStyle",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RenumberWindows",
+        "name": "renumber-windows",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RepeatTime",
+        "name": "repeat-time",
+        "type": "int",
+        "min": 0,
+        "max": 2000000
+      },
+      {
+        "method": "Titles",
+        "name": "set-titles",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "TitlesString",
+        "name": "set-titles-string",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SilenceAction",
+        "name": "silence-action",
+        "type": "BellAction",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "Status",
+        "name": "status",
+        "type": "Status",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusBg",
+        "name": "status-bg",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusFg",
+        "name": "status-fg",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusInterval",
+        "name": "status-interval",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "StatusJustify",
+        "name": "status-justify",
+        "type": "StatusJustify",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "StatusKeys",
+        "name": "status-keys",
+        "type": "StatusKeys",
+        "min": 0,
+        "max": 0
+      },
+      {
         "method": "StatusLeft",
         "name": "status-left",
         "type": "string",
@@ -407,15 +792,15 @@
         "max": 0
       },
       {
-        "method": "StatusRight",
-        "name": "status-right",
-        "type": "string",
+        "method": "StatusLeftLength",
+        "name": "status-left-length",
+        "type": "int",
         "min": 0,
-        "max": 0
+        "max": 32767
       },
       {
-        "method": "StatusStyle",
-        "name": "status-style",
+        "method": "StatusLeftStyle",
+        "name": "status-left-style",
         "type": "string",
         "min": 0,
         "max": 0
@@ -428,32 +813,74 @@
         "max": 0
       },
       {
-        "method": "Status",
-        "name": "status",
-        "type": "StatusMode",
+        "method": "StatusRight",
+        "name": "status-right",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "Prefix",
-        "name": "prefix",
-        "type": "Key",
+        "method": "StatusRightLength",
+        "name": "status-right-length",
+        "type": "int",
+        "min": 0,
+        "max": 32767
+      },
+      {
+        "method": "StatusRightStyle",
+        "name": "status-right-style",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "DetachOnDestroy",
-        "name": "detach-on-destroy",
-        "type": "DetachPolicy",
+        "method": "StatusStyle",
+        "name": "status-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "VisualActivity",
+        "name": "visual-activity",
+        "type": "VisualBell",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "VisualBell",
+        "name": "visual-bell",
+        "type": "VisualBell",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "VisualSilence",
+        "name": "visual-silence",
+        "type": "VisualBell",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WordSeparators",
+        "name": "word-separators",
+        "type": "string",
         "min": 0,
         "max": 0
       }
     ],
     "WindowOptions": [
       {
-        "method": "AutomaticRename",
-        "name": "automatic-rename",
+        "method": "AggressiveResize",
+        "name": "aggressive-resize",
         "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AllowPassthrough",
+        "name": "allow-passthrough",
+        "type": "AllowPassthrough",
         "min": 0,
         "max": 0
       },
@@ -465,58 +892,156 @@
         "max": 0
       },
       {
-        "method": "AggressiveResize",
-        "name": "aggressive-resize",
+        "method": "AllowSetTitle",
+        "name": "allow-set-title",
         "type": "bool",
         "min": 0,
         "max": 0
       },
       {
-        "method": "PaneBaseIndex",
-        "name": "pane-base-index",
-        "type": "int",
+        "method": "AlternateScreen",
+        "name": "alternate-screen",
+        "type": "bool",
         "min": 0,
-        "max": 2147483647
+        "max": 0
+      },
+      {
+        "method": "AutomaticRename",
+        "name": "automatic-rename",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "AutomaticRenameFormat",
+        "name": "automatic-rename-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ClockModeColour",
+        "name": "clock-mode-colour",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ClockModeStyle",
+        "name": "clock-mode-style",
+        "type": "ClockModeStyle",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModeCurrentMatchStyle",
+        "name": "copy-mode-current-match-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModeMarkStyle",
+        "name": "copy-mode-mark-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModeMatchStyle",
+        "name": "copy-mode-match-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModePositionFormat",
+        "name": "copy-mode-position-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModePositionStyle",
+        "name": "copy-mode-position-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CopyModeSelectionStyle",
+        "name": "copy-mode-selection-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CursorColour",
+        "name": "cursor-colour",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "CursorStyle",
+        "name": "cursor-style",
+        "type": "CursorStyle",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "FillCharacter",
+        "name": "fill-character",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MainPaneHeight",
+        "name": "main-pane-height",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MainPaneWidth",
+        "name": "main-pane-width",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MenuBorderLines",
+        "name": "menu-border-lines",
+        "type": "MenuBorderLines",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MenuBorderStyle",
+        "name": "menu-border-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MenuSelectedStyle",
+        "name": "menu-selected-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MenuStyle",
+        "name": "menu-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
       },
       {
         "method": "ModeKeys",
         "name": "mode-keys",
         "type": "ModeKeys",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "WindowSize",
-        "name": "window-size",
-        "type": "WindowSizePolicy",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "RemainOnExit",
-        "name": "remain-on-exit",
-        "type": "RemainOnExitPolicy",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "SynchronizePanes",
-        "name": "synchronize-panes",
-        "type": "bool",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "PaneBorderStatus",
-        "name": "pane-border-status",
-        "type": "PaneBorderStatus",
-        "min": 0,
-        "max": 0
-      },
-      {
-        "method": "PaneBorderFormat",
-        "name": "pane-border-format",
-        "type": "string",
         "min": 0,
         "max": 0
       },
@@ -528,8 +1053,197 @@
         "max": 0
       },
       {
-        "method": "WindowStatusFormat",
-        "name": "window-status-format",
+        "method": "MonitorActivity",
+        "name": "monitor-activity",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MonitorBell",
+        "name": "monitor-bell",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "MonitorSilence",
+        "name": "monitor-silence",
+        "type": "int",
+        "min": 0,
+        "max": 2147483647
+      },
+      {
+        "method": "OtherPaneHeight",
+        "name": "other-pane-height",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "OtherPaneWidth",
+        "name": "other-pane-width",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneActiveBorderStyle",
+        "name": "pane-active-border-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBaseIndex",
+        "name": "pane-base-index",
+        "type": "int",
+        "min": 0,
+        "max": 65535
+      },
+      {
+        "method": "PaneBorderFormat",
+        "name": "pane-border-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderIndicators",
+        "name": "pane-border-indicators",
+        "type": "PaneBorderIndicators",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderLines",
+        "name": "pane-border-lines",
+        "type": "PaneBorderLineStyle",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderStatus",
+        "name": "pane-border-status",
+        "type": "PaneStatus",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneBorderStyle",
+        "name": "pane-border-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneScrollbars",
+        "name": "pane-scrollbars",
+        "type": "PaneScrollbars",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneScrollbarsPosition",
+        "name": "pane-scrollbars-position",
+        "type": "PaneScrollbarsPosition",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneScrollbarsStyle",
+        "name": "pane-scrollbars-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneStatusCurrentStyle",
+        "name": "pane-status-current-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "PaneStatusStyle",
+        "name": "pane-status-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RemainOnExit",
+        "name": "remain-on-exit",
+        "type": "RemainOnExit",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "RemainOnExitFormat",
+        "name": "remain-on-exit-format",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "ScrollOnClear",
+        "name": "scroll-on-clear",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SessionStatusCurrentStyle",
+        "name": "session-status-current-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SessionStatusStyle",
+        "name": "session-status-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "SynchronizePanes",
+        "name": "synchronize-panes",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "TiledLayoutMaxColumns",
+        "name": "tiled-layout-max-columns",
+        "type": "int",
+        "min": 0,
+        "max": 65535
+      },
+      {
+        "method": "WindowActiveStyle",
+        "name": "window-active-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowSize",
+        "name": "window-size",
+        "type": "WindowSize",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStatusActivityStyle",
+        "name": "window-status-activity-style",
+        "type": "string",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "WindowStatusBellStyle",
+        "name": "window-status-bell-style",
         "type": "string",
         "min": 0,
         "max": 0
@@ -542,46 +1256,37 @@
         "max": 0
       },
       {
-        "method": "AllowPassthrough",
-        "name": "allow-passthrough",
-        "type": "PassthroughPolicy",
-        "min": 0,
-        "max": 0
-      }
-    ],
-    "PaneOptions": [
-      {
-        "method": "RemainOnExit",
-        "name": "remain-on-exit",
-        "type": "RemainOnExitPolicy",
+        "method": "WindowStatusCurrentStyle",
+        "name": "window-status-current-style",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "SynchronizePanes",
-        "name": "synchronize-panes",
-        "type": "bool",
+        "method": "WindowStatusFormat",
+        "name": "window-status-format",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "AllowPassthrough",
-        "name": "allow-passthrough",
-        "type": "PassthroughPolicy",
+        "method": "WindowStatusLastStyle",
+        "name": "window-status-last-style",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "AllowRename",
-        "name": "allow-rename",
-        "type": "bool",
+        "method": "WindowStatusSeparator",
+        "name": "window-status-separator",
+        "type": "string",
         "min": 0,
         "max": 0
       },
       {
-        "method": "ScrollOnClear",
-        "name": "scroll-on-clear",
-        "type": "bool",
+        "method": "WindowStatusStyle",
+        "name": "window-status-style",
+        "type": "string",
         "min": 0,
         "max": 0
       },
@@ -593,63 +1298,160 @@
         "max": 0
       },
       {
-        "method": "WindowActiveStyle",
-        "name": "window-active-style",
-        "type": "string",
+        "method": "WrapSearch",
+        "name": "wrap-search",
+        "type": "bool",
+        "min": 0,
+        "max": 0
+      },
+      {
+        "method": "XtermKeys",
+        "name": "xterm-keys",
+        "type": "bool",
         "min": 0,
         "max": 0
       }
     ]
   },
   "enums": {
-    "ClipboardMode": {
+    "AllowPassthrough": {
+      "AllowPassthroughAll": "all",
+      "AllowPassthroughOff": "off",
+      "AllowPassthroughOn": "on"
+    },
+    "BellAction": {
+      "BellActionAny": "any",
+      "BellActionCurrent": "current",
+      "BellActionNone": "none",
+      "BellActionOther": "other"
+    },
+    "Clipboard": {
+      "ClipboardExternal": "external",
       "ClipboardOff": "off",
-      "ClipboardOn": "on",
-      "ClipboardExternal": "external"
+      "ClipboardOn": "on"
     },
-    "StatusPosition": {
-      "StatusPositionTop": "top",
-      "StatusPositionBottom": "bottom"
+    "ClockModeStyle": {
+      "ClockModeStyle12": "12",
+      "ClockModeStyle12WithSeconds": "12-with-seconds",
+      "ClockModeStyle24": "24",
+      "ClockModeStyle24WithSeconds": "24-with-seconds"
     },
-    "StatusMode": {
-      "StatusModeOff": "off",
-      "StatusModeOn": "on",
-      "StatusModeTwoLines": "2",
-      "StatusModeThreeLines": "3",
-      "StatusModeFourLines": "4",
-      "StatusModeFiveLines": "5"
+    "CursorStyle": {
+      "CursorStyleBar": "bar",
+      "CursorStyleBlinkingBar": "blinking-bar",
+      "CursorStyleBlinkingBlock": "blinking-block",
+      "CursorStyleBlinkingUnderline": "blinking-underline",
+      "CursorStyleBlock": "block",
+      "CursorStyleDefault": "default",
+      "CursorStyleUnderline": "underline"
     },
-    "DetachPolicy": {
-      "DetachPolicyOff": "off",
-      "DetachPolicyOn": "on",
-      "DetachPolicyNoDetached": "no-detached",
-      "DetachPolicyPrevious": "previous",
-      "DetachPolicyNext": "next"
+    "DestroyUnattached": {
+      "DestroyUnattachedKeepGroup": "keep-group",
+      "DestroyUnattachedKeepLast": "keep-last",
+      "DestroyUnattachedOff": "off",
+      "DestroyUnattachedOn": "on"
+    },
+    "DetachOnDestroy": {
+      "DetachOnDestroyNext": "next",
+      "DetachOnDestroyNoDetached": "no-detached",
+      "DetachOnDestroyOff": "off",
+      "DetachOnDestroyOn": "on",
+      "DetachOnDestroyPrevious": "previous"
+    },
+    "ExtendedKeys": {
+      "ExtendedKeysAlways": "always",
+      "ExtendedKeysOff": "off",
+      "ExtendedKeysOn": "on"
+    },
+    "ExtendedKeysFormat": {
+      "ExtendedKeysFormatCsiU": "csi-u",
+      "ExtendedKeysFormatXterm": "xterm"
+    },
+    "MenuBorderLines": {
+      "MenuBorderLinesDouble": "double",
+      "MenuBorderLinesHeavy": "heavy",
+      "MenuBorderLinesNone": "none",
+      "MenuBorderLinesPadded": "padded",
+      "MenuBorderLinesRounded": "rounded",
+      "MenuBorderLinesSimple": "simple",
+      "MenuBorderLinesSingle": "single"
+    },
+    "MessageLine": {
+      "MessageLine0": "0",
+      "MessageLine1": "1",
+      "MessageLine2": "2",
+      "MessageLine3": "3",
+      "MessageLine4": "4"
     },
     "ModeKeys": {
-      "ModeKeysVi": "vi",
-      "ModeKeysEmacs": "emacs"
+      "ModeKeysEmacs": "emacs",
+      "ModeKeysVi": "vi"
     },
-    "WindowSizePolicy": {
+    "PaneBorderIndicators": {
+      "PaneBorderIndicatorsArrows": "arrows",
+      "PaneBorderIndicatorsBoth": "both",
+      "PaneBorderIndicatorsColour": "colour",
+      "PaneBorderIndicatorsOff": "off"
+    },
+    "PaneBorderLineStyle": {
+      "PaneBorderLineStyleDouble": "double",
+      "PaneBorderLineStyleHeavy": "heavy",
+      "PaneBorderLineStyleNumber": "number",
+      "PaneBorderLineStyleSimple": "simple",
+      "PaneBorderLineStyleSingle": "single",
+      "PaneBorderLineStyleSpaces": "spaces"
+    },
+    "PaneScrollbars": {
+      "PaneScrollbarsModal": "modal",
+      "PaneScrollbarsOff": "off",
+      "PaneScrollbarsOn": "on"
+    },
+    "PaneScrollbarsPosition": {
+      "PaneScrollbarsPositionLeft": "left",
+      "PaneScrollbarsPositionRight": "right"
+    },
+    "PaneStatus": {
+      "PaneStatusBottom": "bottom",
+      "PaneStatusOff": "off",
+      "PaneStatusTop": "top"
+    },
+    "RemainOnExit": {
+      "RemainOnExitFailed": "failed",
+      "RemainOnExitOff": "off",
+      "RemainOnExitOn": "on"
+    },
+    "Status": {
+      "Status2": "2",
+      "Status3": "3",
+      "Status4": "4",
+      "Status5": "5",
+      "StatusOff": "off",
+      "StatusOn": "on"
+    },
+    "StatusJustify": {
+      "StatusJustifyAbsoluteCentre": "absolute-centre",
+      "StatusJustifyCentre": "centre",
+      "StatusJustifyLeft": "left",
+      "StatusJustifyRight": "right"
+    },
+    "StatusKeys": {
+      "StatusKeysEmacs": "emacs",
+      "StatusKeysVi": "vi"
+    },
+    "StatusPosition": {
+      "StatusPositionBottom": "bottom",
+      "StatusPositionTop": "top"
+    },
+    "VisualBell": {
+      "VisualBellBoth": "both",
+      "VisualBellOff": "off",
+      "VisualBellOn": "on"
+    },
+    "WindowSize": {
       "WindowSizeLargest": "largest",
-      "WindowSizeSmallest": "smallest",
+      "WindowSizeLatest": "latest",
       "WindowSizeManual": "manual",
-      "WindowSizeLatest": "latest"
-    },
-    "RemainOnExitPolicy": {
-      "RemainOff": "off",
-      "RemainOn": "on",
-      "RemainFailed": "failed"
-    },
-    "PaneBorderStatus": {
-      "PaneBorderStatusOff": "off",
-      "PaneBorderStatusTop": "top",
-      "PaneBorderStatusBottom": "bottom"
-    },
-    "PassthroughPolicy": {
-      "PassthroughOff": "off",
-      "PassthroughOn": "on",
-      "PassthroughAll": "all"
+      "WindowSizeSmallest": "smallest"
     }
   }
 }

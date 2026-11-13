@@ -7,16 +7,51 @@ import (
 	"strconv"
 )
 
-// ClipboardMode selects a supported tmux option value.
-type ClipboardMode string
+// AllowPassthrough selects a supported tmux option value.
+type AllowPassthrough string
 
 const (
-	ClipboardExternal ClipboardMode = "external"
-	ClipboardOff      ClipboardMode = "off"
-	ClipboardOn       ClipboardMode = "on"
+	AllowPassthroughAll AllowPassthrough = "all"
+	AllowPassthroughOff AllowPassthrough = "off"
+	AllowPassthroughOn  AllowPassthrough = "on"
 )
 
-func (v ClipboardMode) valid() bool {
+func (v AllowPassthrough) valid() bool {
+	switch v {
+	case AllowPassthroughAll, AllowPassthroughOff, AllowPassthroughOn:
+		return true
+	}
+	return false
+}
+
+// BellAction selects a supported tmux option value.
+type BellAction string
+
+const (
+	BellActionAny     BellAction = "any"
+	BellActionCurrent BellAction = "current"
+	BellActionNone    BellAction = "none"
+	BellActionOther   BellAction = "other"
+)
+
+func (v BellAction) valid() bool {
+	switch v {
+	case BellActionAny, BellActionCurrent, BellActionNone, BellActionOther:
+		return true
+	}
+	return false
+}
+
+// Clipboard selects a supported tmux option value.
+type Clipboard string
+
+const (
+	ClipboardExternal Clipboard = "external"
+	ClipboardOff      Clipboard = "off"
+	ClipboardOn       Clipboard = "on"
+)
+
+func (v Clipboard) valid() bool {
 	switch v {
 	case ClipboardExternal, ClipboardOff, ClipboardOn:
 		return true
@@ -24,20 +59,150 @@ func (v ClipboardMode) valid() bool {
 	return false
 }
 
-// DetachPolicy selects a supported tmux option value.
-type DetachPolicy string
+// ClockModeStyle selects a supported tmux option value.
+type ClockModeStyle string
 
 const (
-	DetachPolicyNext       DetachPolicy = "next"
-	DetachPolicyNoDetached DetachPolicy = "no-detached"
-	DetachPolicyOff        DetachPolicy = "off"
-	DetachPolicyOn         DetachPolicy = "on"
-	DetachPolicyPrevious   DetachPolicy = "previous"
+	ClockModeStyle12            ClockModeStyle = "12"
+	ClockModeStyle12WithSeconds ClockModeStyle = "12-with-seconds"
+	ClockModeStyle24            ClockModeStyle = "24"
+	ClockModeStyle24WithSeconds ClockModeStyle = "24-with-seconds"
 )
 
-func (v DetachPolicy) valid() bool {
+func (v ClockModeStyle) valid() bool {
 	switch v {
-	case DetachPolicyNext, DetachPolicyNoDetached, DetachPolicyOff, DetachPolicyOn, DetachPolicyPrevious:
+	case ClockModeStyle12, ClockModeStyle12WithSeconds, ClockModeStyle24, ClockModeStyle24WithSeconds:
+		return true
+	}
+	return false
+}
+
+// CursorStyle selects a supported tmux option value.
+type CursorStyle string
+
+const (
+	CursorStyleBar               CursorStyle = "bar"
+	CursorStyleBlinkingBar       CursorStyle = "blinking-bar"
+	CursorStyleBlinkingBlock     CursorStyle = "blinking-block"
+	CursorStyleBlinkingUnderline CursorStyle = "blinking-underline"
+	CursorStyleBlock             CursorStyle = "block"
+	CursorStyleDefault           CursorStyle = "default"
+	CursorStyleUnderline         CursorStyle = "underline"
+)
+
+func (v CursorStyle) valid() bool {
+	switch v {
+	case CursorStyleBar, CursorStyleBlinkingBar, CursorStyleBlinkingBlock, CursorStyleBlinkingUnderline, CursorStyleBlock, CursorStyleDefault, CursorStyleUnderline:
+		return true
+	}
+	return false
+}
+
+// DestroyUnattached selects a supported tmux option value.
+type DestroyUnattached string
+
+const (
+	DestroyUnattachedKeepGroup DestroyUnattached = "keep-group"
+	DestroyUnattachedKeepLast  DestroyUnattached = "keep-last"
+	DestroyUnattachedOff       DestroyUnattached = "off"
+	DestroyUnattachedOn        DestroyUnattached = "on"
+)
+
+func (v DestroyUnattached) valid() bool {
+	switch v {
+	case DestroyUnattachedKeepGroup, DestroyUnattachedKeepLast, DestroyUnattachedOff, DestroyUnattachedOn:
+		return true
+	}
+	return false
+}
+
+// DetachOnDestroy selects a supported tmux option value.
+type DetachOnDestroy string
+
+const (
+	DetachOnDestroyNext       DetachOnDestroy = "next"
+	DetachOnDestroyNoDetached DetachOnDestroy = "no-detached"
+	DetachOnDestroyOff        DetachOnDestroy = "off"
+	DetachOnDestroyOn         DetachOnDestroy = "on"
+	DetachOnDestroyPrevious   DetachOnDestroy = "previous"
+)
+
+func (v DetachOnDestroy) valid() bool {
+	switch v {
+	case DetachOnDestroyNext, DetachOnDestroyNoDetached, DetachOnDestroyOff, DetachOnDestroyOn, DetachOnDestroyPrevious:
+		return true
+	}
+	return false
+}
+
+// ExtendedKeys selects a supported tmux option value.
+type ExtendedKeys string
+
+const (
+	ExtendedKeysAlways ExtendedKeys = "always"
+	ExtendedKeysOff    ExtendedKeys = "off"
+	ExtendedKeysOn     ExtendedKeys = "on"
+)
+
+func (v ExtendedKeys) valid() bool {
+	switch v {
+	case ExtendedKeysAlways, ExtendedKeysOff, ExtendedKeysOn:
+		return true
+	}
+	return false
+}
+
+// ExtendedKeysFormat selects a supported tmux option value.
+type ExtendedKeysFormat string
+
+const (
+	ExtendedKeysFormatCsiU  ExtendedKeysFormat = "csi-u"
+	ExtendedKeysFormatXterm ExtendedKeysFormat = "xterm"
+)
+
+func (v ExtendedKeysFormat) valid() bool {
+	switch v {
+	case ExtendedKeysFormatCsiU, ExtendedKeysFormatXterm:
+		return true
+	}
+	return false
+}
+
+// MenuBorderLines selects a supported tmux option value.
+type MenuBorderLines string
+
+const (
+	MenuBorderLinesDouble  MenuBorderLines = "double"
+	MenuBorderLinesHeavy   MenuBorderLines = "heavy"
+	MenuBorderLinesNone    MenuBorderLines = "none"
+	MenuBorderLinesPadded  MenuBorderLines = "padded"
+	MenuBorderLinesRounded MenuBorderLines = "rounded"
+	MenuBorderLinesSimple  MenuBorderLines = "simple"
+	MenuBorderLinesSingle  MenuBorderLines = "single"
+)
+
+func (v MenuBorderLines) valid() bool {
+	switch v {
+	case MenuBorderLinesDouble, MenuBorderLinesHeavy, MenuBorderLinesNone, MenuBorderLinesPadded, MenuBorderLinesRounded, MenuBorderLinesSimple, MenuBorderLinesSingle:
+		return true
+	}
+	return false
+}
+
+// MessageLine selects a supported tmux option value.
+type MessageLine string
+
+const (
+	MessageLine0 MessageLine = "0"
+	MessageLine1 MessageLine = "1"
+	MessageLine2 MessageLine = "2"
+	MessageLine3 MessageLine = "3"
+	MessageLine4 MessageLine = "4"
+)
+
+func (v MessageLine) valid() bool {
+	switch v {
+	case MessageLine0, MessageLine1, MessageLine2, MessageLine3, MessageLine4:
 		return true
 	}
 	return false
@@ -59,72 +224,160 @@ func (v ModeKeys) valid() bool {
 	return false
 }
 
-// PaneBorderStatus selects a supported tmux option value.
-type PaneBorderStatus string
+// PaneBorderIndicators selects a supported tmux option value.
+type PaneBorderIndicators string
 
 const (
-	PaneBorderStatusBottom PaneBorderStatus = "bottom"
-	PaneBorderStatusOff    PaneBorderStatus = "off"
-	PaneBorderStatusTop    PaneBorderStatus = "top"
+	PaneBorderIndicatorsArrows PaneBorderIndicators = "arrows"
+	PaneBorderIndicatorsBoth   PaneBorderIndicators = "both"
+	PaneBorderIndicatorsColour PaneBorderIndicators = "colour"
+	PaneBorderIndicatorsOff    PaneBorderIndicators = "off"
 )
 
-func (v PaneBorderStatus) valid() bool {
+func (v PaneBorderIndicators) valid() bool {
 	switch v {
-	case PaneBorderStatusBottom, PaneBorderStatusOff, PaneBorderStatusTop:
+	case PaneBorderIndicatorsArrows, PaneBorderIndicatorsBoth, PaneBorderIndicatorsColour, PaneBorderIndicatorsOff:
 		return true
 	}
 	return false
 }
 
-// PassthroughPolicy selects a supported tmux option value.
-type PassthroughPolicy string
+// PaneBorderLineStyle selects a supported tmux option value.
+type PaneBorderLineStyle string
 
 const (
-	PassthroughAll PassthroughPolicy = "all"
-	PassthroughOff PassthroughPolicy = "off"
-	PassthroughOn  PassthroughPolicy = "on"
+	PaneBorderLineStyleDouble PaneBorderLineStyle = "double"
+	PaneBorderLineStyleHeavy  PaneBorderLineStyle = "heavy"
+	PaneBorderLineStyleNumber PaneBorderLineStyle = "number"
+	PaneBorderLineStyleSimple PaneBorderLineStyle = "simple"
+	PaneBorderLineStyleSingle PaneBorderLineStyle = "single"
+	PaneBorderLineStyleSpaces PaneBorderLineStyle = "spaces"
 )
 
-func (v PassthroughPolicy) valid() bool {
+func (v PaneBorderLineStyle) valid() bool {
 	switch v {
-	case PassthroughAll, PassthroughOff, PassthroughOn:
+	case PaneBorderLineStyleDouble, PaneBorderLineStyleHeavy, PaneBorderLineStyleNumber, PaneBorderLineStyleSimple, PaneBorderLineStyleSingle, PaneBorderLineStyleSpaces:
 		return true
 	}
 	return false
 }
 
-// RemainOnExitPolicy selects a supported tmux option value.
-type RemainOnExitPolicy string
+// PaneScrollbars selects a supported tmux option value.
+type PaneScrollbars string
 
 const (
-	RemainFailed RemainOnExitPolicy = "failed"
-	RemainOff    RemainOnExitPolicy = "off"
-	RemainOn     RemainOnExitPolicy = "on"
+	PaneScrollbarsModal PaneScrollbars = "modal"
+	PaneScrollbarsOff   PaneScrollbars = "off"
+	PaneScrollbarsOn    PaneScrollbars = "on"
 )
 
-func (v RemainOnExitPolicy) valid() bool {
+func (v PaneScrollbars) valid() bool {
 	switch v {
-	case RemainFailed, RemainOff, RemainOn:
+	case PaneScrollbarsModal, PaneScrollbarsOff, PaneScrollbarsOn:
 		return true
 	}
 	return false
 }
 
-// StatusMode selects a supported tmux option value.
-type StatusMode string
+// PaneScrollbarsPosition selects a supported tmux option value.
+type PaneScrollbarsPosition string
 
 const (
-	StatusModeFiveLines  StatusMode = "5"
-	StatusModeFourLines  StatusMode = "4"
-	StatusModeOff        StatusMode = "off"
-	StatusModeOn         StatusMode = "on"
-	StatusModeThreeLines StatusMode = "3"
-	StatusModeTwoLines   StatusMode = "2"
+	PaneScrollbarsPositionLeft  PaneScrollbarsPosition = "left"
+	PaneScrollbarsPositionRight PaneScrollbarsPosition = "right"
 )
 
-func (v StatusMode) valid() bool {
+func (v PaneScrollbarsPosition) valid() bool {
 	switch v {
-	case StatusModeFiveLines, StatusModeFourLines, StatusModeOff, StatusModeOn, StatusModeThreeLines, StatusModeTwoLines:
+	case PaneScrollbarsPositionLeft, PaneScrollbarsPositionRight:
+		return true
+	}
+	return false
+}
+
+// PaneStatus selects a supported tmux option value.
+type PaneStatus string
+
+const (
+	PaneStatusBottom PaneStatus = "bottom"
+	PaneStatusOff    PaneStatus = "off"
+	PaneStatusTop    PaneStatus = "top"
+)
+
+func (v PaneStatus) valid() bool {
+	switch v {
+	case PaneStatusBottom, PaneStatusOff, PaneStatusTop:
+		return true
+	}
+	return false
+}
+
+// RemainOnExit selects a supported tmux option value.
+type RemainOnExit string
+
+const (
+	RemainOnExitFailed RemainOnExit = "failed"
+	RemainOnExitOff    RemainOnExit = "off"
+	RemainOnExitOn     RemainOnExit = "on"
+)
+
+func (v RemainOnExit) valid() bool {
+	switch v {
+	case RemainOnExitFailed, RemainOnExitOff, RemainOnExitOn:
+		return true
+	}
+	return false
+}
+
+// Status selects a supported tmux option value.
+type Status string
+
+const (
+	Status2   Status = "2"
+	Status3   Status = "3"
+	Status4   Status = "4"
+	Status5   Status = "5"
+	StatusOff Status = "off"
+	StatusOn  Status = "on"
+)
+
+func (v Status) valid() bool {
+	switch v {
+	case Status2, Status3, Status4, Status5, StatusOff, StatusOn:
+		return true
+	}
+	return false
+}
+
+// StatusJustify selects a supported tmux option value.
+type StatusJustify string
+
+const (
+	StatusJustifyAbsoluteCentre StatusJustify = "absolute-centre"
+	StatusJustifyCentre         StatusJustify = "centre"
+	StatusJustifyLeft           StatusJustify = "left"
+	StatusJustifyRight          StatusJustify = "right"
+)
+
+func (v StatusJustify) valid() bool {
+	switch v {
+	case StatusJustifyAbsoluteCentre, StatusJustifyCentre, StatusJustifyLeft, StatusJustifyRight:
+		return true
+	}
+	return false
+}
+
+// StatusKeys selects a supported tmux option value.
+type StatusKeys string
+
+const (
+	StatusKeysEmacs StatusKeys = "emacs"
+	StatusKeysVi    StatusKeys = "vi"
+)
+
+func (v StatusKeys) valid() bool {
+	switch v {
+	case StatusKeysEmacs, StatusKeysVi:
 		return true
 	}
 	return false
@@ -146,17 +399,34 @@ func (v StatusPosition) valid() bool {
 	return false
 }
 
-// WindowSizePolicy selects a supported tmux option value.
-type WindowSizePolicy string
+// VisualBell selects a supported tmux option value.
+type VisualBell string
 
 const (
-	WindowSizeLargest  WindowSizePolicy = "largest"
-	WindowSizeLatest   WindowSizePolicy = "latest"
-	WindowSizeManual   WindowSizePolicy = "manual"
-	WindowSizeSmallest WindowSizePolicy = "smallest"
+	VisualBellBoth VisualBell = "both"
+	VisualBellOff  VisualBell = "off"
+	VisualBellOn   VisualBell = "on"
 )
 
-func (v WindowSizePolicy) valid() bool {
+func (v VisualBell) valid() bool {
+	switch v {
+	case VisualBellBoth, VisualBellOff, VisualBellOn:
+		return true
+	}
+	return false
+}
+
+// WindowSize selects a supported tmux option value.
+type WindowSize string
+
+const (
+	WindowSizeLargest  WindowSize = "largest"
+	WindowSizeLatest   WindowSize = "latest"
+	WindowSizeManual   WindowSize = "manual"
+	WindowSizeSmallest WindowSize = "smallest"
+)
+
+func (v WindowSize) valid() bool {
 	switch v {
 	case WindowSizeLargest, WindowSizeLatest, WindowSizeManual, WindowSizeSmallest:
 		return true
@@ -232,78 +502,23 @@ func (o PaneOptions) UpdateArray(ctx context.Context, name string, updates []Arr
 	return o.target.updateArray(ctx, "PaneOptions.UpdateArray", name, updates)
 }
 
-// RemainOnExit observes remain-on-exit; inherited origins may be unavailable.
-func (o PaneOptions) RemainOnExit(ctx context.Context) (OptionValue[RemainOnExitPolicy], error) {
-
-	v, err := o.target.read(ctx, "PaneOptions.RemainOnExit", "remain-on-exit")
-	if err != nil {
-		return OptionValue[RemainOnExitPolicy]{}, err
-	}
-	r, err := convertOption(v, func(s string) (RemainOnExitPolicy, error) { return RemainOnExitPolicy(s), nil })
-	if err != nil {
-		return OptionValue[RemainOnExitPolicy]{}, afterError("PaneOptions.RemainOnExit", err)
-	}
-	return r, nil
-
-}
-
-// SetRemainOnExit sets the remain-on-exit option in this scope.
-func (o PaneOptions) SetRemainOnExit(ctx context.Context, value RemainOnExitPolicy) error {
-	if !value.valid() {
-		return opError("PaneOptions.SetRemainOnExit", invalid("enum value"))
-	}
-
-	return o.target.set(ctx, "PaneOptions.SetRemainOnExit", "remain-on-exit", string(value), false)
-}
-
-// UnsetRemainOnExit unsets the remain-on-exit option in this scope, restoring inherited defaults.
-func (o PaneOptions) UnsetRemainOnExit(ctx context.Context) error {
-	return o.target.set(ctx, "PaneOptions.UnsetRemainOnExit", "remain-on-exit", "", true)
-}
-
-// SynchronizePanes observes synchronize-panes; inherited origins may be unavailable.
-func (o PaneOptions) SynchronizePanes(ctx context.Context) (OptionValue[bool], error) {
-
-	v, err := o.target.read(ctx, "PaneOptions.SynchronizePanes", "synchronize-panes")
-	if err != nil {
-		return OptionValue[bool]{}, err
-	}
-	r, err := convertOption(v, parseOptionBool)
-	if err != nil {
-		return OptionValue[bool]{}, afterError("PaneOptions.SynchronizePanes", err)
-	}
-	return r, nil
-
-}
-
-// SetSynchronizePanes sets the synchronize-panes option in this scope.
-func (o PaneOptions) SetSynchronizePanes(ctx context.Context, value bool) error {
-
-	return o.target.set(ctx, "PaneOptions.SetSynchronizePanes", "synchronize-panes", boolOption(value), false)
-}
-
-// UnsetSynchronizePanes unsets the synchronize-panes option in this scope, restoring inherited defaults.
-func (o PaneOptions) UnsetSynchronizePanes(ctx context.Context) error {
-	return o.target.set(ctx, "PaneOptions.UnsetSynchronizePanes", "synchronize-panes", "", true)
-}
-
 // AllowPassthrough observes allow-passthrough; inherited origins may be unavailable.
-func (o PaneOptions) AllowPassthrough(ctx context.Context) (OptionValue[PassthroughPolicy], error) {
+func (o PaneOptions) AllowPassthrough(ctx context.Context) (OptionValue[AllowPassthrough], error) {
 
 	v, err := o.target.read(ctx, "PaneOptions.AllowPassthrough", "allow-passthrough")
 	if err != nil {
-		return OptionValue[PassthroughPolicy]{}, err
+		return OptionValue[AllowPassthrough]{}, err
 	}
-	r, err := convertOption(v, func(s string) (PassthroughPolicy, error) { return PassthroughPolicy(s), nil })
+	r, err := convertOption(v, func(s string) (AllowPassthrough, error) { return AllowPassthrough(s), nil })
 	if err != nil {
-		return OptionValue[PassthroughPolicy]{}, afterError("PaneOptions.AllowPassthrough", err)
+		return OptionValue[AllowPassthrough]{}, afterError("PaneOptions.AllowPassthrough", err)
 	}
 	return r, nil
 
 }
 
 // SetAllowPassthrough sets the allow-passthrough option in this scope.
-func (o PaneOptions) SetAllowPassthrough(ctx context.Context, value PassthroughPolicy) error {
+func (o PaneOptions) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
 	if !value.valid() {
 		return opError("PaneOptions.SetAllowPassthrough", invalid("enum value"))
 	}
@@ -342,6 +557,196 @@ func (o PaneOptions) UnsetAllowRename(ctx context.Context) error {
 	return o.target.set(ctx, "PaneOptions.UnsetAllowRename", "allow-rename", "", true)
 }
 
+// AllowSetTitle observes allow-set-title; inherited origins may be unavailable.
+func (o PaneOptions) AllowSetTitle(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "PaneOptions.AllowSetTitle", "allow-set-title")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("PaneOptions.AllowSetTitle", err)
+	}
+	return r, nil
+
+}
+
+// SetAllowSetTitle sets the allow-set-title option in this scope.
+func (o PaneOptions) SetAllowSetTitle(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "PaneOptions.SetAllowSetTitle", "allow-set-title", boolOption(value), false)
+}
+
+// UnsetAllowSetTitle unsets the allow-set-title option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetAllowSetTitle(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetAllowSetTitle", "allow-set-title", "", true)
+}
+
+// AlternateScreen observes alternate-screen; inherited origins may be unavailable.
+func (o PaneOptions) AlternateScreen(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "PaneOptions.AlternateScreen", "alternate-screen")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("PaneOptions.AlternateScreen", err)
+	}
+	return r, nil
+
+}
+
+// SetAlternateScreen sets the alternate-screen option in this scope.
+func (o PaneOptions) SetAlternateScreen(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "PaneOptions.SetAlternateScreen", "alternate-screen", boolOption(value), false)
+}
+
+// UnsetAlternateScreen unsets the alternate-screen option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetAlternateScreen(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetAlternateScreen", "alternate-screen", "", true)
+}
+
+// CopyModePositionFormat observes copy-mode-position-format; inherited origins may be unavailable.
+func (o PaneOptions) CopyModePositionFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.CopyModePositionFormat", "copy-mode-position-format")
+}
+
+// SetCopyModePositionFormat sets the copy-mode-position-format option in this scope.
+func (o PaneOptions) SetCopyModePositionFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetCopyModePositionFormat", "copy-mode-position-format", value, false)
+}
+
+// UnsetCopyModePositionFormat unsets the copy-mode-position-format option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetCopyModePositionFormat(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetCopyModePositionFormat", "copy-mode-position-format", "", true)
+}
+
+// CursorColour observes cursor-colour; inherited origins may be unavailable.
+func (o PaneOptions) CursorColour(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.CursorColour", "cursor-colour")
+}
+
+// SetCursorColour sets the cursor-colour option in this scope.
+func (o PaneOptions) SetCursorColour(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetCursorColour", "cursor-colour", value, false)
+}
+
+// UnsetCursorColour unsets the cursor-colour option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetCursorColour(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetCursorColour", "cursor-colour", "", true)
+}
+
+// CursorStyle observes cursor-style; inherited origins may be unavailable.
+func (o PaneOptions) CursorStyle(ctx context.Context) (OptionValue[CursorStyle], error) {
+
+	v, err := o.target.read(ctx, "PaneOptions.CursorStyle", "cursor-style")
+	if err != nil {
+		return OptionValue[CursorStyle]{}, err
+	}
+	r, err := convertOption(v, func(s string) (CursorStyle, error) { return CursorStyle(s), nil })
+	if err != nil {
+		return OptionValue[CursorStyle]{}, afterError("PaneOptions.CursorStyle", err)
+	}
+	return r, nil
+
+}
+
+// SetCursorStyle sets the cursor-style option in this scope.
+func (o PaneOptions) SetCursorStyle(ctx context.Context, value CursorStyle) error {
+	if !value.valid() {
+		return opError("PaneOptions.SetCursorStyle", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "PaneOptions.SetCursorStyle", "cursor-style", string(value), false)
+}
+
+// UnsetCursorStyle unsets the cursor-style option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetCursorStyle(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetCursorStyle", "cursor-style", "", true)
+}
+
+// PaneBorderFormat observes pane-border-format; inherited origins may be unavailable.
+func (o PaneOptions) PaneBorderFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.PaneBorderFormat", "pane-border-format")
+}
+
+// SetPaneBorderFormat sets the pane-border-format option in this scope.
+func (o PaneOptions) SetPaneBorderFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetPaneBorderFormat", "pane-border-format", value, false)
+}
+
+// UnsetPaneBorderFormat unsets the pane-border-format option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetPaneBorderFormat(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetPaneBorderFormat", "pane-border-format", "", true)
+}
+
+// PaneScrollbarsStyle observes pane-scrollbars-style; inherited origins may be unavailable.
+func (o PaneOptions) PaneScrollbarsStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.PaneScrollbarsStyle", "pane-scrollbars-style")
+}
+
+// SetPaneScrollbarsStyle sets the pane-scrollbars-style option in this scope.
+func (o PaneOptions) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetPaneScrollbarsStyle", "pane-scrollbars-style", value, false)
+}
+
+// UnsetPaneScrollbarsStyle unsets the pane-scrollbars-style option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetPaneScrollbarsStyle(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetPaneScrollbarsStyle", "pane-scrollbars-style", "", true)
+}
+
+// RemainOnExit observes remain-on-exit; inherited origins may be unavailable.
+func (o PaneOptions) RemainOnExit(ctx context.Context) (OptionValue[RemainOnExit], error) {
+
+	v, err := o.target.read(ctx, "PaneOptions.RemainOnExit", "remain-on-exit")
+	if err != nil {
+		return OptionValue[RemainOnExit]{}, err
+	}
+	r, err := convertOption(v, func(s string) (RemainOnExit, error) { return RemainOnExit(s), nil })
+	if err != nil {
+		return OptionValue[RemainOnExit]{}, afterError("PaneOptions.RemainOnExit", err)
+	}
+	return r, nil
+
+}
+
+// SetRemainOnExit sets the remain-on-exit option in this scope.
+func (o PaneOptions) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
+	if !value.valid() {
+		return opError("PaneOptions.SetRemainOnExit", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "PaneOptions.SetRemainOnExit", "remain-on-exit", string(value), false)
+}
+
+// UnsetRemainOnExit unsets the remain-on-exit option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetRemainOnExit(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetRemainOnExit", "remain-on-exit", "", true)
+}
+
+// RemainOnExitFormat observes remain-on-exit-format; inherited origins may be unavailable.
+func (o PaneOptions) RemainOnExitFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.RemainOnExitFormat", "remain-on-exit-format")
+}
+
+// SetRemainOnExitFormat sets the remain-on-exit-format option in this scope.
+func (o PaneOptions) SetRemainOnExitFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetRemainOnExitFormat", "remain-on-exit-format", value, false)
+}
+
+// UnsetRemainOnExitFormat unsets the remain-on-exit-format option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetRemainOnExitFormat(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetRemainOnExitFormat", "remain-on-exit-format", "", true)
+}
+
 // ScrollOnClear observes scroll-on-clear; inherited origins may be unavailable.
 func (o PaneOptions) ScrollOnClear(ctx context.Context) (OptionValue[bool], error) {
 
@@ -368,20 +773,30 @@ func (o PaneOptions) UnsetScrollOnClear(ctx context.Context) error {
 	return o.target.set(ctx, "PaneOptions.UnsetScrollOnClear", "scroll-on-clear", "", true)
 }
 
-// WindowStyle observes window-style; inherited origins may be unavailable.
-func (o PaneOptions) WindowStyle(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "PaneOptions.WindowStyle", "window-style")
+// SynchronizePanes observes synchronize-panes; inherited origins may be unavailable.
+func (o PaneOptions) SynchronizePanes(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "PaneOptions.SynchronizePanes", "synchronize-panes")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("PaneOptions.SynchronizePanes", err)
+	}
+	return r, nil
+
 }
 
-// SetWindowStyle sets the window-style option in this scope.
-func (o PaneOptions) SetWindowStyle(ctx context.Context, value string) error {
+// SetSynchronizePanes sets the synchronize-panes option in this scope.
+func (o PaneOptions) SetSynchronizePanes(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "PaneOptions.SetWindowStyle", "window-style", value, false)
+	return o.target.set(ctx, "PaneOptions.SetSynchronizePanes", "synchronize-panes", boolOption(value), false)
 }
 
-// UnsetWindowStyle unsets the window-style option in this scope, restoring inherited defaults.
-func (o PaneOptions) UnsetWindowStyle(ctx context.Context) error {
-	return o.target.set(ctx, "PaneOptions.UnsetWindowStyle", "window-style", "", true)
+// UnsetSynchronizePanes unsets the synchronize-panes option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetSynchronizePanes(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetSynchronizePanes", "synchronize-panes", "", true)
 }
 
 // WindowActiveStyle observes window-active-style; inherited origins may be unavailable.
@@ -398,6 +813,22 @@ func (o PaneOptions) SetWindowActiveStyle(ctx context.Context, value string) err
 // UnsetWindowActiveStyle unsets the window-active-style option in this scope, restoring inherited defaults.
 func (o PaneOptions) UnsetWindowActiveStyle(ctx context.Context) error {
 	return o.target.set(ctx, "PaneOptions.UnsetWindowActiveStyle", "window-active-style", "", true)
+}
+
+// WindowStyle observes window-style; inherited origins may be unavailable.
+func (o PaneOptions) WindowStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "PaneOptions.WindowStyle", "window-style")
+}
+
+// SetWindowStyle sets the window-style option in this scope.
+func (o PaneOptions) SetWindowStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "PaneOptions.SetWindowStyle", "window-style", value, false)
+}
+
+// UnsetWindowStyle unsets the window-style option in this scope, restoring inherited defaults.
+func (o PaneOptions) UnsetWindowStyle(ctx context.Context) error {
+	return o.target.set(ctx, "PaneOptions.UnsetWindowStyle", "window-style", "", true)
 }
 
 // Get reads a scalar option by its tmux name, preserving local and effective values.
@@ -468,33 +899,32 @@ func (o ServerOptions) UpdateArray(ctx context.Context, name string, updates []A
 	return o.target.updateArray(ctx, "ServerOptions.UpdateArray", name, updates)
 }
 
-// EscapeTime observes escape-time; inherited origins may be unavailable.
-func (o ServerOptions) EscapeTime(ctx context.Context) (OptionValue[int], error) {
+// Backspace observes backspace; inherited origins may be unavailable.
+func (o ServerOptions) Backspace(ctx context.Context) (OptionValue[Key], error) {
 
-	v, err := o.target.read(ctx, "ServerOptions.EscapeTime", "escape-time")
+	v, err := o.target.read(ctx, "ServerOptions.Backspace", "backspace")
 	if err != nil {
-		return OptionValue[int]{}, err
+		return OptionValue[Key]{}, err
 	}
-	r, err := convertOption(v, parseOptionInt)
+	r, err := convertOption(v, func(s string) (Key, error) { return Key(s), nil })
 	if err != nil {
-		return OptionValue[int]{}, afterError("ServerOptions.EscapeTime", err)
+		return OptionValue[Key]{}, afterError("ServerOptions.Backspace", err)
 	}
 	return r, nil
 
 }
 
-// SetEscapeTime sets the escape-time option in this scope.
-func (o ServerOptions) SetEscapeTime(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
-		return opError("ServerOptions.SetEscapeTime", invalid("range"))
+// SetBackspace sets the backspace option in this scope.
+func (o ServerOptions) SetBackspace(ctx context.Context, value Key) error {
+	if !value.Valid() {
+		return opError("ServerOptions.SetBackspace", invalid("key value"))
 	}
-
-	return o.target.set(ctx, "ServerOptions.SetEscapeTime", "escape-time", strconv.Itoa(value), false)
+	return o.target.set(ctx, "ServerOptions.SetBackspace", "backspace", string(value), false)
 }
 
-// UnsetEscapeTime unsets the escape-time option in this scope, restoring inherited defaults.
-func (o ServerOptions) UnsetEscapeTime(ctx context.Context) error {
-	return o.target.set(ctx, "ServerOptions.UnsetEscapeTime", "escape-time", "", true)
+// UnsetBackspace unsets the backspace option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetBackspace(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetBackspace", "backspace", "", true)
 }
 
 // BufferLimit observes buffer-limit; inherited origins may be unavailable.
@@ -514,7 +944,7 @@ func (o ServerOptions) BufferLimit(ctx context.Context) (OptionValue[int], error
 
 // SetBufferLimit sets the buffer-limit option in this scope.
 func (o ServerOptions) SetBufferLimit(ctx context.Context, value int) error {
-	if value < 1 || value > 2147483647 {
+	if int64(value) < 1 || int64(value) > 2147483647 {
 		return opError("ServerOptions.SetBufferLimit", invalid("range"))
 	}
 
@@ -524,6 +954,99 @@ func (o ServerOptions) SetBufferLimit(ctx context.Context, value int) error {
 // UnsetBufferLimit unsets the buffer-limit option in this scope, restoring inherited defaults.
 func (o ServerOptions) UnsetBufferLimit(ctx context.Context) error {
 	return o.target.set(ctx, "ServerOptions.UnsetBufferLimit", "buffer-limit", "", true)
+}
+
+// CopyCommand observes copy-command; inherited origins may be unavailable.
+func (o ServerOptions) CopyCommand(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "ServerOptions.CopyCommand", "copy-command")
+}
+
+// SetCopyCommand sets the copy-command option in this scope.
+func (o ServerOptions) SetCopyCommand(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "ServerOptions.SetCopyCommand", "copy-command", value, false)
+}
+
+// UnsetCopyCommand unsets the copy-command option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetCopyCommand(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetCopyCommand", "copy-command", "", true)
+}
+
+// DefaultClientCommand observes default-client-command; inherited origins may be unavailable.
+func (o ServerOptions) DefaultClientCommand(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "ServerOptions.DefaultClientCommand", "default-client-command")
+}
+
+// SetDefaultClientCommand sets the default-client-command option in this scope.
+func (o ServerOptions) SetDefaultClientCommand(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "ServerOptions.SetDefaultClientCommand", "default-client-command", value, false)
+}
+
+// UnsetDefaultClientCommand unsets the default-client-command option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetDefaultClientCommand(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetDefaultClientCommand", "default-client-command", "", true)
+}
+
+// DefaultTerminal observes default-terminal; inherited origins may be unavailable.
+func (o ServerOptions) DefaultTerminal(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "ServerOptions.DefaultTerminal", "default-terminal")
+}
+
+// SetDefaultTerminal sets the default-terminal option in this scope.
+func (o ServerOptions) SetDefaultTerminal(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "ServerOptions.SetDefaultTerminal", "default-terminal", value, false)
+}
+
+// UnsetDefaultTerminal unsets the default-terminal option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetDefaultTerminal(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetDefaultTerminal", "default-terminal", "", true)
+}
+
+// Editor observes editor; inherited origins may be unavailable.
+func (o ServerOptions) Editor(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "ServerOptions.Editor", "editor")
+}
+
+// SetEditor sets the editor option in this scope.
+func (o ServerOptions) SetEditor(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "ServerOptions.SetEditor", "editor", value, false)
+}
+
+// UnsetEditor unsets the editor option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetEditor(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetEditor", "editor", "", true)
+}
+
+// EscapeTime observes escape-time; inherited origins may be unavailable.
+func (o ServerOptions) EscapeTime(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.EscapeTime", "escape-time")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("ServerOptions.EscapeTime", err)
+	}
+	return r, nil
+
+}
+
+// SetEscapeTime sets the escape-time option in this scope.
+func (o ServerOptions) SetEscapeTime(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("ServerOptions.SetEscapeTime", invalid("range"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetEscapeTime", "escape-time", strconv.Itoa(value), false)
+}
+
+// UnsetEscapeTime unsets the escape-time option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetEscapeTime(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetEscapeTime", "escape-time", "", true)
 }
 
 // ExitEmpty observes exit-empty; inherited origins may be unavailable.
@@ -578,49 +1101,88 @@ func (o ServerOptions) UnsetExitUnattached(ctx context.Context) error {
 	return o.target.set(ctx, "ServerOptions.UnsetExitUnattached", "exit-unattached", "", true)
 }
 
-// DefaultTerminal observes default-terminal; inherited origins may be unavailable.
-func (o ServerOptions) DefaultTerminal(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "ServerOptions.DefaultTerminal", "default-terminal")
-}
+// ExtendedKeys observes extended-keys; inherited origins may be unavailable.
+func (o ServerOptions) ExtendedKeys(ctx context.Context) (OptionValue[ExtendedKeys], error) {
 
-// SetDefaultTerminal sets the default-terminal option in this scope.
-func (o ServerOptions) SetDefaultTerminal(ctx context.Context, value string) error {
-
-	return o.target.set(ctx, "ServerOptions.SetDefaultTerminal", "default-terminal", value, false)
-}
-
-// UnsetDefaultTerminal unsets the default-terminal option in this scope, restoring inherited defaults.
-func (o ServerOptions) UnsetDefaultTerminal(ctx context.Context) error {
-	return o.target.set(ctx, "ServerOptions.UnsetDefaultTerminal", "default-terminal", "", true)
-}
-
-// Clipboard observes set-clipboard; inherited origins may be unavailable.
-func (o ServerOptions) Clipboard(ctx context.Context) (OptionValue[ClipboardMode], error) {
-
-	v, err := o.target.read(ctx, "ServerOptions.Clipboard", "set-clipboard")
+	v, err := o.target.read(ctx, "ServerOptions.ExtendedKeys", "extended-keys")
 	if err != nil {
-		return OptionValue[ClipboardMode]{}, err
+		return OptionValue[ExtendedKeys]{}, err
 	}
-	r, err := convertOption(v, func(s string) (ClipboardMode, error) { return ClipboardMode(s), nil })
+	r, err := convertOption(v, func(s string) (ExtendedKeys, error) { return ExtendedKeys(s), nil })
 	if err != nil {
-		return OptionValue[ClipboardMode]{}, afterError("ServerOptions.Clipboard", err)
+		return OptionValue[ExtendedKeys]{}, afterError("ServerOptions.ExtendedKeys", err)
 	}
 	return r, nil
 
 }
 
-// SetClipboard sets the set-clipboard option in this scope.
-func (o ServerOptions) SetClipboard(ctx context.Context, value ClipboardMode) error {
+// SetExtendedKeys sets the extended-keys option in this scope.
+func (o ServerOptions) SetExtendedKeys(ctx context.Context, value ExtendedKeys) error {
 	if !value.valid() {
-		return opError("ServerOptions.SetClipboard", invalid("enum value"))
+		return opError("ServerOptions.SetExtendedKeys", invalid("enum value"))
 	}
 
-	return o.target.set(ctx, "ServerOptions.SetClipboard", "set-clipboard", string(value), false)
+	return o.target.set(ctx, "ServerOptions.SetExtendedKeys", "extended-keys", string(value), false)
 }
 
-// UnsetClipboard unsets the set-clipboard option in this scope, restoring inherited defaults.
-func (o ServerOptions) UnsetClipboard(ctx context.Context) error {
-	return o.target.set(ctx, "ServerOptions.UnsetClipboard", "set-clipboard", "", true)
+// UnsetExtendedKeys unsets the extended-keys option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetExtendedKeys(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetExtendedKeys", "extended-keys", "", true)
+}
+
+// ExtendedKeysFormat observes extended-keys-format; inherited origins may be unavailable.
+func (o ServerOptions) ExtendedKeysFormat(ctx context.Context) (OptionValue[ExtendedKeysFormat], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.ExtendedKeysFormat", "extended-keys-format")
+	if err != nil {
+		return OptionValue[ExtendedKeysFormat]{}, err
+	}
+	r, err := convertOption(v, func(s string) (ExtendedKeysFormat, error) { return ExtendedKeysFormat(s), nil })
+	if err != nil {
+		return OptionValue[ExtendedKeysFormat]{}, afterError("ServerOptions.ExtendedKeysFormat", err)
+	}
+	return r, nil
+
+}
+
+// SetExtendedKeysFormat sets the extended-keys-format option in this scope.
+func (o ServerOptions) SetExtendedKeysFormat(ctx context.Context, value ExtendedKeysFormat) error {
+	if !value.valid() {
+		return opError("ServerOptions.SetExtendedKeysFormat", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetExtendedKeysFormat", "extended-keys-format", string(value), false)
+}
+
+// UnsetExtendedKeysFormat unsets the extended-keys-format option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetExtendedKeysFormat(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetExtendedKeysFormat", "extended-keys-format", "", true)
+}
+
+// FocusEvents observes focus-events; inherited origins may be unavailable.
+func (o ServerOptions) FocusEvents(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.FocusEvents", "focus-events")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("ServerOptions.FocusEvents", err)
+	}
+	return r, nil
+
+}
+
+// SetFocusEvents sets the focus-events option in this scope.
+func (o ServerOptions) SetFocusEvents(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "ServerOptions.SetFocusEvents", "focus-events", boolOption(value), false)
+}
+
+// UnsetFocusEvents unsets the focus-events option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetFocusEvents(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetFocusEvents", "focus-events", "", true)
 }
 
 // HistoryFile observes history-file; inherited origins may be unavailable.
@@ -637,6 +1199,177 @@ func (o ServerOptions) SetHistoryFile(ctx context.Context, value string) error {
 // UnsetHistoryFile unsets the history-file option in this scope, restoring inherited defaults.
 func (o ServerOptions) UnsetHistoryFile(ctx context.Context) error {
 	return o.target.set(ctx, "ServerOptions.UnsetHistoryFile", "history-file", "", true)
+}
+
+// InputBufferSize observes input-buffer-size; inherited origins may be unavailable.
+func (o ServerOptions) InputBufferSize(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.InputBufferSize", "input-buffer-size")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("ServerOptions.InputBufferSize", err)
+	}
+	return r, nil
+
+}
+
+// SetInputBufferSize sets the input-buffer-size option in this scope.
+func (o ServerOptions) SetInputBufferSize(ctx context.Context, value int) error {
+	if int64(value) < 1048576 || int64(value) > 4294967295 {
+		return opError("ServerOptions.SetInputBufferSize", invalid("range"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetInputBufferSize", "input-buffer-size", strconv.Itoa(value), false)
+}
+
+// UnsetInputBufferSize unsets the input-buffer-size option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetInputBufferSize(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetInputBufferSize", "input-buffer-size", "", true)
+}
+
+// MessageLimit observes message-limit; inherited origins may be unavailable.
+func (o ServerOptions) MessageLimit(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.MessageLimit", "message-limit")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("ServerOptions.MessageLimit", err)
+	}
+	return r, nil
+
+}
+
+// SetMessageLimit sets the message-limit option in this scope.
+func (o ServerOptions) SetMessageLimit(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("ServerOptions.SetMessageLimit", invalid("range"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetMessageLimit", "message-limit", strconv.Itoa(value), false)
+}
+
+// UnsetMessageLimit unsets the message-limit option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetMessageLimit(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetMessageLimit", "message-limit", "", true)
+}
+
+// PrefixTimeout observes prefix-timeout; inherited origins may be unavailable.
+func (o ServerOptions) PrefixTimeout(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.PrefixTimeout", "prefix-timeout")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("ServerOptions.PrefixTimeout", err)
+	}
+	return r, nil
+
+}
+
+// SetPrefixTimeout sets the prefix-timeout option in this scope.
+func (o ServerOptions) SetPrefixTimeout(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("ServerOptions.SetPrefixTimeout", invalid("range"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetPrefixTimeout", "prefix-timeout", strconv.Itoa(value), false)
+}
+
+// UnsetPrefixTimeout unsets the prefix-timeout option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetPrefixTimeout(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetPrefixTimeout", "prefix-timeout", "", true)
+}
+
+// PromptHistoryLimit observes prompt-history-limit; inherited origins may be unavailable.
+func (o ServerOptions) PromptHistoryLimit(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.PromptHistoryLimit", "prompt-history-limit")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("ServerOptions.PromptHistoryLimit", err)
+	}
+	return r, nil
+
+}
+
+// SetPromptHistoryLimit sets the prompt-history-limit option in this scope.
+func (o ServerOptions) SetPromptHistoryLimit(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("ServerOptions.SetPromptHistoryLimit", invalid("range"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetPromptHistoryLimit", "prompt-history-limit", strconv.Itoa(value), false)
+}
+
+// UnsetPromptHistoryLimit unsets the prompt-history-limit option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetPromptHistoryLimit(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetPromptHistoryLimit", "prompt-history-limit", "", true)
+}
+
+// Clipboard observes set-clipboard; inherited origins may be unavailable.
+func (o ServerOptions) Clipboard(ctx context.Context) (OptionValue[Clipboard], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.Clipboard", "set-clipboard")
+	if err != nil {
+		return OptionValue[Clipboard]{}, err
+	}
+	r, err := convertOption(v, func(s string) (Clipboard, error) { return Clipboard(s), nil })
+	if err != nil {
+		return OptionValue[Clipboard]{}, afterError("ServerOptions.Clipboard", err)
+	}
+	return r, nil
+
+}
+
+// SetClipboard sets the set-clipboard option in this scope.
+func (o ServerOptions) SetClipboard(ctx context.Context, value Clipboard) error {
+	if !value.valid() {
+		return opError("ServerOptions.SetClipboard", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "ServerOptions.SetClipboard", "set-clipboard", string(value), false)
+}
+
+// UnsetClipboard unsets the set-clipboard option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetClipboard(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetClipboard", "set-clipboard", "", true)
+}
+
+// VariationSelectorAlwaysWide observes variation-selector-always-wide; inherited origins may be unavailable.
+func (o ServerOptions) VariationSelectorAlwaysWide(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "ServerOptions.VariationSelectorAlwaysWide", "variation-selector-always-wide")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("ServerOptions.VariationSelectorAlwaysWide", err)
+	}
+	return r, nil
+
+}
+
+// SetVariationSelectorAlwaysWide sets the variation-selector-always-wide option in this scope.
+func (o ServerOptions) SetVariationSelectorAlwaysWide(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "ServerOptions.SetVariationSelectorAlwaysWide", "variation-selector-always-wide", boolOption(value), false)
+}
+
+// UnsetVariationSelectorAlwaysWide unsets the variation-selector-always-wide option in this scope, restoring inherited defaults.
+func (o ServerOptions) UnsetVariationSelectorAlwaysWide(ctx context.Context) error {
+	return o.target.set(ctx, "ServerOptions.UnsetVariationSelectorAlwaysWide", "variation-selector-always-wide", "", true)
 }
 
 // Get reads a scalar option by its tmux name, preserving local and effective values.
@@ -707,33 +1440,62 @@ func (o SessionOptions) UpdateArray(ctx context.Context, name string, updates []
 	return o.target.updateArray(ctx, "SessionOptions.UpdateArray", name, updates)
 }
 
-// HistoryLimit observes history-limit; inherited origins may be unavailable.
-func (o SessionOptions) HistoryLimit(ctx context.Context) (OptionValue[int], error) {
+// ActivityAction observes activity-action; inherited origins may be unavailable.
+func (o SessionOptions) ActivityAction(ctx context.Context) (OptionValue[BellAction], error) {
 
-	v, err := o.target.read(ctx, "SessionOptions.HistoryLimit", "history-limit")
+	v, err := o.target.read(ctx, "SessionOptions.ActivityAction", "activity-action")
 	if err != nil {
-		return OptionValue[int]{}, err
+		return OptionValue[BellAction]{}, err
 	}
-	r, err := convertOption(v, parseOptionInt)
+	r, err := convertOption(v, func(s string) (BellAction, error) { return BellAction(s), nil })
 	if err != nil {
-		return OptionValue[int]{}, afterError("SessionOptions.HistoryLimit", err)
+		return OptionValue[BellAction]{}, afterError("SessionOptions.ActivityAction", err)
 	}
 	return r, nil
 
 }
 
-// SetHistoryLimit sets the history-limit option in this scope.
-func (o SessionOptions) SetHistoryLimit(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
-		return opError("SessionOptions.SetHistoryLimit", invalid("range"))
+// SetActivityAction sets the activity-action option in this scope.
+func (o SessionOptions) SetActivityAction(ctx context.Context, value BellAction) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetActivityAction", invalid("enum value"))
 	}
 
-	return o.target.set(ctx, "SessionOptions.SetHistoryLimit", "history-limit", strconv.Itoa(value), false)
+	return o.target.set(ctx, "SessionOptions.SetActivityAction", "activity-action", string(value), false)
 }
 
-// UnsetHistoryLimit unsets the history-limit option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetHistoryLimit(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetHistoryLimit", "history-limit", "", true)
+// UnsetActivityAction unsets the activity-action option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetActivityAction(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetActivityAction", "activity-action", "", true)
+}
+
+// AssumePasteTime observes assume-paste-time; inherited origins may be unavailable.
+func (o SessionOptions) AssumePasteTime(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.AssumePasteTime", "assume-paste-time")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.AssumePasteTime", err)
+	}
+	return r, nil
+
+}
+
+// SetAssumePasteTime sets the assume-paste-time option in this scope.
+func (o SessionOptions) SetAssumePasteTime(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("SessionOptions.SetAssumePasteTime", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetAssumePasteTime", "assume-paste-time", strconv.Itoa(value), false)
+}
+
+// UnsetAssumePasteTime unsets the assume-paste-time option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetAssumePasteTime(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetAssumePasteTime", "assume-paste-time", "", true)
 }
 
 // BaseIndex observes base-index; inherited origins may be unavailable.
@@ -753,7 +1515,7 @@ func (o SessionOptions) BaseIndex(ctx context.Context) (OptionValue[int], error)
 
 // SetBaseIndex sets the base-index option in this scope.
 func (o SessionOptions) SetBaseIndex(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
+	if int64(value) < 0 || int64(value) > 2147483647 {
 		return opError("SessionOptions.SetBaseIndex", invalid("range"))
 	}
 
@@ -763,6 +1525,141 @@ func (o SessionOptions) SetBaseIndex(ctx context.Context, value int) error {
 // UnsetBaseIndex unsets the base-index option in this scope, restoring inherited defaults.
 func (o SessionOptions) UnsetBaseIndex(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetBaseIndex", "base-index", "", true)
+}
+
+// BellAction observes bell-action; inherited origins may be unavailable.
+func (o SessionOptions) BellAction(ctx context.Context) (OptionValue[BellAction], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.BellAction", "bell-action")
+	if err != nil {
+		return OptionValue[BellAction]{}, err
+	}
+	r, err := convertOption(v, func(s string) (BellAction, error) { return BellAction(s), nil })
+	if err != nil {
+		return OptionValue[BellAction]{}, afterError("SessionOptions.BellAction", err)
+	}
+	return r, nil
+
+}
+
+// SetBellAction sets the bell-action option in this scope.
+func (o SessionOptions) SetBellAction(ctx context.Context, value BellAction) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetBellAction", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetBellAction", "bell-action", string(value), false)
+}
+
+// UnsetBellAction unsets the bell-action option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetBellAction(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetBellAction", "bell-action", "", true)
+}
+
+// DefaultCommand observes default-command; inherited origins may be unavailable.
+func (o SessionOptions) DefaultCommand(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.DefaultCommand", "default-command")
+}
+
+// SetDefaultCommand sets the default-command option in this scope.
+func (o SessionOptions) SetDefaultCommand(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetDefaultCommand", "default-command", value, false)
+}
+
+// UnsetDefaultCommand unsets the default-command option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetDefaultCommand(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetDefaultCommand", "default-command", "", true)
+}
+
+// DefaultShell observes default-shell; inherited origins may be unavailable.
+func (o SessionOptions) DefaultShell(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.DefaultShell", "default-shell")
+}
+
+// SetDefaultShell sets the default-shell option in this scope.
+func (o SessionOptions) SetDefaultShell(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetDefaultShell", "default-shell", value, false)
+}
+
+// UnsetDefaultShell unsets the default-shell option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetDefaultShell(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetDefaultShell", "default-shell", "", true)
+}
+
+// DefaultSize observes default-size; inherited origins may be unavailable.
+func (o SessionOptions) DefaultSize(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.DefaultSize", "default-size")
+}
+
+// SetDefaultSize sets the default-size option in this scope.
+func (o SessionOptions) SetDefaultSize(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetDefaultSize", "default-size", value, false)
+}
+
+// UnsetDefaultSize unsets the default-size option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetDefaultSize(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetDefaultSize", "default-size", "", true)
+}
+
+// DestroyUnattached observes destroy-unattached; inherited origins may be unavailable.
+func (o SessionOptions) DestroyUnattached(ctx context.Context) (OptionValue[DestroyUnattached], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.DestroyUnattached", "destroy-unattached")
+	if err != nil {
+		return OptionValue[DestroyUnattached]{}, err
+	}
+	r, err := convertOption(v, func(s string) (DestroyUnattached, error) { return DestroyUnattached(s), nil })
+	if err != nil {
+		return OptionValue[DestroyUnattached]{}, afterError("SessionOptions.DestroyUnattached", err)
+	}
+	return r, nil
+
+}
+
+// SetDestroyUnattached sets the destroy-unattached option in this scope.
+func (o SessionOptions) SetDestroyUnattached(ctx context.Context, value DestroyUnattached) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetDestroyUnattached", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetDestroyUnattached", "destroy-unattached", string(value), false)
+}
+
+// UnsetDestroyUnattached unsets the destroy-unattached option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetDestroyUnattached(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetDestroyUnattached", "destroy-unattached", "", true)
+}
+
+// DetachOnDestroy observes detach-on-destroy; inherited origins may be unavailable.
+func (o SessionOptions) DetachOnDestroy(ctx context.Context) (OptionValue[DetachOnDestroy], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.DetachOnDestroy", "detach-on-destroy")
+	if err != nil {
+		return OptionValue[DetachOnDestroy]{}, err
+	}
+	r, err := convertOption(v, func(s string) (DetachOnDestroy, error) { return DetachOnDestroy(s), nil })
+	if err != nil {
+		return OptionValue[DetachOnDestroy]{}, afterError("SessionOptions.DetachOnDestroy", err)
+	}
+	return r, nil
+
+}
+
+// SetDetachOnDestroy sets the detach-on-destroy option in this scope.
+func (o SessionOptions) SetDetachOnDestroy(ctx context.Context, value DetachOnDestroy) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetDetachOnDestroy", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetDetachOnDestroy", "detach-on-destroy", string(value), false)
+}
+
+// UnsetDetachOnDestroy unsets the detach-on-destroy option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetDetachOnDestroy(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetDetachOnDestroy", "detach-on-destroy", "", true)
 }
 
 // DisplayTime observes display-time; inherited origins may be unavailable.
@@ -782,7 +1679,7 @@ func (o SessionOptions) DisplayTime(ctx context.Context) (OptionValue[int], erro
 
 // SetDisplayTime sets the display-time option in this scope.
 func (o SessionOptions) SetDisplayTime(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
+	if int64(value) < 0 || int64(value) > 2147483647 {
 		return opError("SessionOptions.SetDisplayTime", invalid("range"))
 	}
 
@@ -794,33 +1691,184 @@ func (o SessionOptions) UnsetDisplayTime(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetDisplayTime", "display-time", "", true)
 }
 
-// RepeatTime observes repeat-time; inherited origins may be unavailable.
-func (o SessionOptions) RepeatTime(ctx context.Context) (OptionValue[int], error) {
+// HistoryLimit observes history-limit; inherited origins may be unavailable.
+func (o SessionOptions) HistoryLimit(ctx context.Context) (OptionValue[int], error) {
 
-	v, err := o.target.read(ctx, "SessionOptions.RepeatTime", "repeat-time")
+	v, err := o.target.read(ctx, "SessionOptions.HistoryLimit", "history-limit")
 	if err != nil {
 		return OptionValue[int]{}, err
 	}
 	r, err := convertOption(v, parseOptionInt)
 	if err != nil {
-		return OptionValue[int]{}, afterError("SessionOptions.RepeatTime", err)
+		return OptionValue[int]{}, afterError("SessionOptions.HistoryLimit", err)
 	}
 	return r, nil
 
 }
 
-// SetRepeatTime sets the repeat-time option in this scope.
-func (o SessionOptions) SetRepeatTime(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
-		return opError("SessionOptions.SetRepeatTime", invalid("range"))
+// SetHistoryLimit sets the history-limit option in this scope.
+func (o SessionOptions) SetHistoryLimit(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("SessionOptions.SetHistoryLimit", invalid("range"))
 	}
 
-	return o.target.set(ctx, "SessionOptions.SetRepeatTime", "repeat-time", strconv.Itoa(value), false)
+	return o.target.set(ctx, "SessionOptions.SetHistoryLimit", "history-limit", strconv.Itoa(value), false)
 }
 
-// UnsetRepeatTime unsets the repeat-time option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetRepeatTime(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetRepeatTime", "repeat-time", "", true)
+// UnsetHistoryLimit unsets the history-limit option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetHistoryLimit(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetHistoryLimit", "history-limit", "", true)
+}
+
+// InitialRepeatTime observes initial-repeat-time; inherited origins may be unavailable.
+func (o SessionOptions) InitialRepeatTime(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.InitialRepeatTime", "initial-repeat-time")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.InitialRepeatTime", err)
+	}
+	return r, nil
+
+}
+
+// SetInitialRepeatTime sets the initial-repeat-time option in this scope.
+func (o SessionOptions) SetInitialRepeatTime(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2000000 {
+		return opError("SessionOptions.SetInitialRepeatTime", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetInitialRepeatTime", "initial-repeat-time", strconv.Itoa(value), false)
+}
+
+// UnsetInitialRepeatTime unsets the initial-repeat-time option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetInitialRepeatTime(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetInitialRepeatTime", "initial-repeat-time", "", true)
+}
+
+// KeyTable observes key-table; inherited origins may be unavailable.
+func (o SessionOptions) KeyTable(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.KeyTable", "key-table")
+}
+
+// SetKeyTable sets the key-table option in this scope.
+func (o SessionOptions) SetKeyTable(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetKeyTable", "key-table", value, false)
+}
+
+// UnsetKeyTable unsets the key-table option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetKeyTable(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetKeyTable", "key-table", "", true)
+}
+
+// LockAfterTime observes lock-after-time; inherited origins may be unavailable.
+func (o SessionOptions) LockAfterTime(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.LockAfterTime", "lock-after-time")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.LockAfterTime", err)
+	}
+	return r, nil
+
+}
+
+// SetLockAfterTime sets the lock-after-time option in this scope.
+func (o SessionOptions) SetLockAfterTime(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("SessionOptions.SetLockAfterTime", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetLockAfterTime", "lock-after-time", strconv.Itoa(value), false)
+}
+
+// UnsetLockAfterTime unsets the lock-after-time option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetLockAfterTime(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetLockAfterTime", "lock-after-time", "", true)
+}
+
+// LockCommand observes lock-command; inherited origins may be unavailable.
+func (o SessionOptions) LockCommand(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.LockCommand", "lock-command")
+}
+
+// SetLockCommand sets the lock-command option in this scope.
+func (o SessionOptions) SetLockCommand(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetLockCommand", "lock-command", value, false)
+}
+
+// UnsetLockCommand unsets the lock-command option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetLockCommand(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetLockCommand", "lock-command", "", true)
+}
+
+// MessageCommandStyle observes message-command-style; inherited origins may be unavailable.
+func (o SessionOptions) MessageCommandStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.MessageCommandStyle", "message-command-style")
+}
+
+// SetMessageCommandStyle sets the message-command-style option in this scope.
+func (o SessionOptions) SetMessageCommandStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetMessageCommandStyle", "message-command-style", value, false)
+}
+
+// UnsetMessageCommandStyle unsets the message-command-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetMessageCommandStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetMessageCommandStyle", "message-command-style", "", true)
+}
+
+// MessageLine observes message-line; inherited origins may be unavailable.
+func (o SessionOptions) MessageLine(ctx context.Context) (OptionValue[MessageLine], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.MessageLine", "message-line")
+	if err != nil {
+		return OptionValue[MessageLine]{}, err
+	}
+	r, err := convertOption(v, func(s string) (MessageLine, error) { return MessageLine(s), nil })
+	if err != nil {
+		return OptionValue[MessageLine]{}, afterError("SessionOptions.MessageLine", err)
+	}
+	return r, nil
+
+}
+
+// SetMessageLine sets the message-line option in this scope.
+func (o SessionOptions) SetMessageLine(ctx context.Context, value MessageLine) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetMessageLine", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetMessageLine", "message-line", string(value), false)
+}
+
+// UnsetMessageLine unsets the message-line option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetMessageLine(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetMessageLine", "message-line", "", true)
+}
+
+// MessageStyle observes message-style; inherited origins may be unavailable.
+func (o SessionOptions) MessageStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.MessageStyle", "message-style")
+}
+
+// SetMessageStyle sets the message-style option in this scope.
+func (o SessionOptions) SetMessageStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetMessageStyle", "message-style", value, false)
+}
+
+// UnsetMessageStyle unsets the message-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetMessageStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetMessageStyle", "message-style", "", true)
 }
 
 // Mouse observes mouse; inherited origins may be unavailable.
@@ -849,6 +1897,162 @@ func (o SessionOptions) UnsetMouse(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetMouse", "mouse", "", true)
 }
 
+// Prefix observes prefix; inherited origins may be unavailable.
+func (o SessionOptions) Prefix(ctx context.Context) (OptionValue[Key], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.Prefix", "prefix")
+	if err != nil {
+		return OptionValue[Key]{}, err
+	}
+	r, err := convertOption(v, func(s string) (Key, error) { return Key(s), nil })
+	if err != nil {
+		return OptionValue[Key]{}, afterError("SessionOptions.Prefix", err)
+	}
+	return r, nil
+
+}
+
+// SetPrefix sets the prefix option in this scope.
+func (o SessionOptions) SetPrefix(ctx context.Context, value Key) error {
+	if !value.Valid() {
+		return opError("SessionOptions.SetPrefix", invalid("key value"))
+	}
+	return o.target.set(ctx, "SessionOptions.SetPrefix", "prefix", string(value), false)
+}
+
+// UnsetPrefix unsets the prefix option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetPrefix(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetPrefix", "prefix", "", true)
+}
+
+// Prefix2 observes prefix2; inherited origins may be unavailable.
+func (o SessionOptions) Prefix2(ctx context.Context) (OptionValue[Key], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.Prefix2", "prefix2")
+	if err != nil {
+		return OptionValue[Key]{}, err
+	}
+	r, err := convertOption(v, func(s string) (Key, error) { return Key(s), nil })
+	if err != nil {
+		return OptionValue[Key]{}, afterError("SessionOptions.Prefix2", err)
+	}
+	return r, nil
+
+}
+
+// SetPrefix2 sets the prefix2 option in this scope.
+func (o SessionOptions) SetPrefix2(ctx context.Context, value Key) error {
+	if !value.Valid() {
+		return opError("SessionOptions.SetPrefix2", invalid("key value"))
+	}
+	return o.target.set(ctx, "SessionOptions.SetPrefix2", "prefix2", string(value), false)
+}
+
+// UnsetPrefix2 unsets the prefix2 option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetPrefix2(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetPrefix2", "prefix2", "", true)
+}
+
+// PromptCursorColour observes prompt-cursor-colour; inherited origins may be unavailable.
+func (o SessionOptions) PromptCursorColour(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.PromptCursorColour", "prompt-cursor-colour")
+}
+
+// SetPromptCursorColour sets the prompt-cursor-colour option in this scope.
+func (o SessionOptions) SetPromptCursorColour(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetPromptCursorColour", "prompt-cursor-colour", value, false)
+}
+
+// UnsetPromptCursorColour unsets the prompt-cursor-colour option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetPromptCursorColour(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetPromptCursorColour", "prompt-cursor-colour", "", true)
+}
+
+// PromptCursorStyle observes prompt-cursor-style; inherited origins may be unavailable.
+func (o SessionOptions) PromptCursorStyle(ctx context.Context) (OptionValue[CursorStyle], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.PromptCursorStyle", "prompt-cursor-style")
+	if err != nil {
+		return OptionValue[CursorStyle]{}, err
+	}
+	r, err := convertOption(v, func(s string) (CursorStyle, error) { return CursorStyle(s), nil })
+	if err != nil {
+		return OptionValue[CursorStyle]{}, afterError("SessionOptions.PromptCursorStyle", err)
+	}
+	return r, nil
+
+}
+
+// SetPromptCursorStyle sets the prompt-cursor-style option in this scope.
+func (o SessionOptions) SetPromptCursorStyle(ctx context.Context, value CursorStyle) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetPromptCursorStyle", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetPromptCursorStyle", "prompt-cursor-style", string(value), false)
+}
+
+// UnsetPromptCursorStyle unsets the prompt-cursor-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetPromptCursorStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetPromptCursorStyle", "prompt-cursor-style", "", true)
+}
+
+// RenumberWindows observes renumber-windows; inherited origins may be unavailable.
+func (o SessionOptions) RenumberWindows(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.RenumberWindows", "renumber-windows")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("SessionOptions.RenumberWindows", err)
+	}
+	return r, nil
+
+}
+
+// SetRenumberWindows sets the renumber-windows option in this scope.
+func (o SessionOptions) SetRenumberWindows(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "SessionOptions.SetRenumberWindows", "renumber-windows", boolOption(value), false)
+}
+
+// UnsetRenumberWindows unsets the renumber-windows option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetRenumberWindows(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetRenumberWindows", "renumber-windows", "", true)
+}
+
+// RepeatTime observes repeat-time; inherited origins may be unavailable.
+func (o SessionOptions) RepeatTime(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.RepeatTime", "repeat-time")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.RepeatTime", err)
+	}
+	return r, nil
+
+}
+
+// SetRepeatTime sets the repeat-time option in this scope.
+func (o SessionOptions) SetRepeatTime(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2000000 {
+		return opError("SessionOptions.SetRepeatTime", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetRepeatTime", "repeat-time", strconv.Itoa(value), false)
+}
+
+// UnsetRepeatTime unsets the repeat-time option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetRepeatTime(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetRepeatTime", "repeat-time", "", true)
+}
+
 // Titles observes set-titles; inherited origins may be unavailable.
 func (o SessionOptions) Titles(ctx context.Context) (OptionValue[bool], error) {
 
@@ -875,52 +2079,197 @@ func (o SessionOptions) UnsetTitles(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetTitles", "set-titles", "", true)
 }
 
-// DefaultShell observes default-shell; inherited origins may be unavailable.
-func (o SessionOptions) DefaultShell(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "SessionOptions.DefaultShell", "default-shell")
+// TitlesString observes set-titles-string; inherited origins may be unavailable.
+func (o SessionOptions) TitlesString(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.TitlesString", "set-titles-string")
 }
 
-// SetDefaultShell sets the default-shell option in this scope.
-func (o SessionOptions) SetDefaultShell(ctx context.Context, value string) error {
+// SetTitlesString sets the set-titles-string option in this scope.
+func (o SessionOptions) SetTitlesString(ctx context.Context, value string) error {
 
-	return o.target.set(ctx, "SessionOptions.SetDefaultShell", "default-shell", value, false)
+	return o.target.set(ctx, "SessionOptions.SetTitlesString", "set-titles-string", value, false)
 }
 
-// UnsetDefaultShell unsets the default-shell option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetDefaultShell(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetDefaultShell", "default-shell", "", true)
+// UnsetTitlesString unsets the set-titles-string option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetTitlesString(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetTitlesString", "set-titles-string", "", true)
 }
 
-// DefaultCommand observes default-command; inherited origins may be unavailable.
-func (o SessionOptions) DefaultCommand(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "SessionOptions.DefaultCommand", "default-command")
+// SilenceAction observes silence-action; inherited origins may be unavailable.
+func (o SessionOptions) SilenceAction(ctx context.Context) (OptionValue[BellAction], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.SilenceAction", "silence-action")
+	if err != nil {
+		return OptionValue[BellAction]{}, err
+	}
+	r, err := convertOption(v, func(s string) (BellAction, error) { return BellAction(s), nil })
+	if err != nil {
+		return OptionValue[BellAction]{}, afterError("SessionOptions.SilenceAction", err)
+	}
+	return r, nil
+
 }
 
-// SetDefaultCommand sets the default-command option in this scope.
-func (o SessionOptions) SetDefaultCommand(ctx context.Context, value string) error {
+// SetSilenceAction sets the silence-action option in this scope.
+func (o SessionOptions) SetSilenceAction(ctx context.Context, value BellAction) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetSilenceAction", invalid("enum value"))
+	}
 
-	return o.target.set(ctx, "SessionOptions.SetDefaultCommand", "default-command", value, false)
+	return o.target.set(ctx, "SessionOptions.SetSilenceAction", "silence-action", string(value), false)
 }
 
-// UnsetDefaultCommand unsets the default-command option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetDefaultCommand(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetDefaultCommand", "default-command", "", true)
+// UnsetSilenceAction unsets the silence-action option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetSilenceAction(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetSilenceAction", "silence-action", "", true)
 }
 
-// DefaultSize observes default-size; inherited origins may be unavailable.
-func (o SessionOptions) DefaultSize(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "SessionOptions.DefaultSize", "default-size")
+// Status observes status; inherited origins may be unavailable.
+func (o SessionOptions) Status(ctx context.Context) (OptionValue[Status], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.Status", "status")
+	if err != nil {
+		return OptionValue[Status]{}, err
+	}
+	r, err := convertOption(v, func(s string) (Status, error) { return Status(s), nil })
+	if err != nil {
+		return OptionValue[Status]{}, afterError("SessionOptions.Status", err)
+	}
+	return r, nil
+
 }
 
-// SetDefaultSize sets the default-size option in this scope.
-func (o SessionOptions) SetDefaultSize(ctx context.Context, value string) error {
+// SetStatus sets the status option in this scope.
+func (o SessionOptions) SetStatus(ctx context.Context, value Status) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetStatus", invalid("enum value"))
+	}
 
-	return o.target.set(ctx, "SessionOptions.SetDefaultSize", "default-size", value, false)
+	return o.target.set(ctx, "SessionOptions.SetStatus", "status", string(value), false)
 }
 
-// UnsetDefaultSize unsets the default-size option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetDefaultSize(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetDefaultSize", "default-size", "", true)
+// UnsetStatus unsets the status option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatus(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatus", "status", "", true)
+}
+
+// StatusBg observes status-bg; inherited origins may be unavailable.
+func (o SessionOptions) StatusBg(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusBg", "status-bg")
+}
+
+// SetStatusBg sets the status-bg option in this scope.
+func (o SessionOptions) SetStatusBg(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetStatusBg", "status-bg", value, false)
+}
+
+// UnsetStatusBg unsets the status-bg option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusBg(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusBg", "status-bg", "", true)
+}
+
+// StatusFg observes status-fg; inherited origins may be unavailable.
+func (o SessionOptions) StatusFg(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusFg", "status-fg")
+}
+
+// SetStatusFg sets the status-fg option in this scope.
+func (o SessionOptions) SetStatusFg(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetStatusFg", "status-fg", value, false)
+}
+
+// UnsetStatusFg unsets the status-fg option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusFg(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusFg", "status-fg", "", true)
+}
+
+// StatusInterval observes status-interval; inherited origins may be unavailable.
+func (o SessionOptions) StatusInterval(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.StatusInterval", "status-interval")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.StatusInterval", err)
+	}
+	return r, nil
+
+}
+
+// SetStatusInterval sets the status-interval option in this scope.
+func (o SessionOptions) SetStatusInterval(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("SessionOptions.SetStatusInterval", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetStatusInterval", "status-interval", strconv.Itoa(value), false)
+}
+
+// UnsetStatusInterval unsets the status-interval option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusInterval(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusInterval", "status-interval", "", true)
+}
+
+// StatusJustify observes status-justify; inherited origins may be unavailable.
+func (o SessionOptions) StatusJustify(ctx context.Context) (OptionValue[StatusJustify], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.StatusJustify", "status-justify")
+	if err != nil {
+		return OptionValue[StatusJustify]{}, err
+	}
+	r, err := convertOption(v, func(s string) (StatusJustify, error) { return StatusJustify(s), nil })
+	if err != nil {
+		return OptionValue[StatusJustify]{}, afterError("SessionOptions.StatusJustify", err)
+	}
+	return r, nil
+
+}
+
+// SetStatusJustify sets the status-justify option in this scope.
+func (o SessionOptions) SetStatusJustify(ctx context.Context, value StatusJustify) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetStatusJustify", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetStatusJustify", "status-justify", string(value), false)
+}
+
+// UnsetStatusJustify unsets the status-justify option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusJustify(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusJustify", "status-justify", "", true)
+}
+
+// StatusKeys observes status-keys; inherited origins may be unavailable.
+func (o SessionOptions) StatusKeys(ctx context.Context) (OptionValue[StatusKeys], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.StatusKeys", "status-keys")
+	if err != nil {
+		return OptionValue[StatusKeys]{}, err
+	}
+	r, err := convertOption(v, func(s string) (StatusKeys, error) { return StatusKeys(s), nil })
+	if err != nil {
+		return OptionValue[StatusKeys]{}, afterError("SessionOptions.StatusKeys", err)
+	}
+	return r, nil
+
+}
+
+// SetStatusKeys sets the status-keys option in this scope.
+func (o SessionOptions) SetStatusKeys(ctx context.Context, value StatusKeys) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetStatusKeys", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetStatusKeys", "status-keys", string(value), false)
+}
+
+// UnsetStatusKeys unsets the status-keys option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusKeys(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusKeys", "status-keys", "", true)
 }
 
 // StatusLeft observes status-left; inherited origins may be unavailable.
@@ -939,36 +2288,49 @@ func (o SessionOptions) UnsetStatusLeft(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetStatusLeft", "status-left", "", true)
 }
 
-// StatusRight observes status-right; inherited origins may be unavailable.
-func (o SessionOptions) StatusRight(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "SessionOptions.StatusRight", "status-right")
+// StatusLeftLength observes status-left-length; inherited origins may be unavailable.
+func (o SessionOptions) StatusLeftLength(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.StatusLeftLength", "status-left-length")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("SessionOptions.StatusLeftLength", err)
+	}
+	return r, nil
+
 }
 
-// SetStatusRight sets the status-right option in this scope.
-func (o SessionOptions) SetStatusRight(ctx context.Context, value string) error {
+// SetStatusLeftLength sets the status-left-length option in this scope.
+func (o SessionOptions) SetStatusLeftLength(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 32767 {
+		return opError("SessionOptions.SetStatusLeftLength", invalid("range"))
+	}
 
-	return o.target.set(ctx, "SessionOptions.SetStatusRight", "status-right", value, false)
+	return o.target.set(ctx, "SessionOptions.SetStatusLeftLength", "status-left-length", strconv.Itoa(value), false)
 }
 
-// UnsetStatusRight unsets the status-right option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetStatusRight(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetStatusRight", "status-right", "", true)
+// UnsetStatusLeftLength unsets the status-left-length option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusLeftLength(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusLeftLength", "status-left-length", "", true)
 }
 
-// StatusStyle observes status-style; inherited origins may be unavailable.
-func (o SessionOptions) StatusStyle(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "SessionOptions.StatusStyle", "status-style")
+// StatusLeftStyle observes status-left-style; inherited origins may be unavailable.
+func (o SessionOptions) StatusLeftStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusLeftStyle", "status-left-style")
 }
 
-// SetStatusStyle sets the status-style option in this scope.
-func (o SessionOptions) SetStatusStyle(ctx context.Context, value string) error {
+// SetStatusLeftStyle sets the status-left-style option in this scope.
+func (o SessionOptions) SetStatusLeftStyle(ctx context.Context, value string) error {
 
-	return o.target.set(ctx, "SessionOptions.SetStatusStyle", "status-style", value, false)
+	return o.target.set(ctx, "SessionOptions.SetStatusLeftStyle", "status-left-style", value, false)
 }
 
-// UnsetStatusStyle unsets the status-style option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetStatusStyle(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetStatusStyle", "status-style", "", true)
+// UnsetStatusLeftStyle unsets the status-left-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusLeftStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusLeftStyle", "status-left-style", "", true)
 }
 
 // StatusPosition observes status-position; inherited origins may be unavailable.
@@ -1000,90 +2362,184 @@ func (o SessionOptions) UnsetStatusPosition(ctx context.Context) error {
 	return o.target.set(ctx, "SessionOptions.UnsetStatusPosition", "status-position", "", true)
 }
 
-// Status observes status; inherited origins may be unavailable.
-func (o SessionOptions) Status(ctx context.Context) (OptionValue[StatusMode], error) {
+// StatusRight observes status-right; inherited origins may be unavailable.
+func (o SessionOptions) StatusRight(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusRight", "status-right")
+}
 
-	v, err := o.target.read(ctx, "SessionOptions.Status", "status")
+// SetStatusRight sets the status-right option in this scope.
+func (o SessionOptions) SetStatusRight(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetStatusRight", "status-right", value, false)
+}
+
+// UnsetStatusRight unsets the status-right option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusRight(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusRight", "status-right", "", true)
+}
+
+// StatusRightLength observes status-right-length; inherited origins may be unavailable.
+func (o SessionOptions) StatusRightLength(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.StatusRightLength", "status-right-length")
 	if err != nil {
-		return OptionValue[StatusMode]{}, err
+		return OptionValue[int]{}, err
 	}
-	r, err := convertOption(v, func(s string) (StatusMode, error) { return StatusMode(s), nil })
+	r, err := convertOption(v, parseOptionInt)
 	if err != nil {
-		return OptionValue[StatusMode]{}, afterError("SessionOptions.Status", err)
+		return OptionValue[int]{}, afterError("SessionOptions.StatusRightLength", err)
 	}
 	return r, nil
 
 }
 
-// SetStatus sets the status option in this scope.
-func (o SessionOptions) SetStatus(ctx context.Context, value StatusMode) error {
+// SetStatusRightLength sets the status-right-length option in this scope.
+func (o SessionOptions) SetStatusRightLength(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 32767 {
+		return opError("SessionOptions.SetStatusRightLength", invalid("range"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetStatusRightLength", "status-right-length", strconv.Itoa(value), false)
+}
+
+// UnsetStatusRightLength unsets the status-right-length option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusRightLength(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusRightLength", "status-right-length", "", true)
+}
+
+// StatusRightStyle observes status-right-style; inherited origins may be unavailable.
+func (o SessionOptions) StatusRightStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusRightStyle", "status-right-style")
+}
+
+// SetStatusRightStyle sets the status-right-style option in this scope.
+func (o SessionOptions) SetStatusRightStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetStatusRightStyle", "status-right-style", value, false)
+}
+
+// UnsetStatusRightStyle unsets the status-right-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusRightStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusRightStyle", "status-right-style", "", true)
+}
+
+// StatusStyle observes status-style; inherited origins may be unavailable.
+func (o SessionOptions) StatusStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.StatusStyle", "status-style")
+}
+
+// SetStatusStyle sets the status-style option in this scope.
+func (o SessionOptions) SetStatusStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetStatusStyle", "status-style", value, false)
+}
+
+// UnsetStatusStyle unsets the status-style option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetStatusStyle(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetStatusStyle", "status-style", "", true)
+}
+
+// VisualActivity observes visual-activity; inherited origins may be unavailable.
+func (o SessionOptions) VisualActivity(ctx context.Context) (OptionValue[VisualBell], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.VisualActivity", "visual-activity")
+	if err != nil {
+		return OptionValue[VisualBell]{}, err
+	}
+	r, err := convertOption(v, func(s string) (VisualBell, error) { return VisualBell(s), nil })
+	if err != nil {
+		return OptionValue[VisualBell]{}, afterError("SessionOptions.VisualActivity", err)
+	}
+	return r, nil
+
+}
+
+// SetVisualActivity sets the visual-activity option in this scope.
+func (o SessionOptions) SetVisualActivity(ctx context.Context, value VisualBell) error {
 	if !value.valid() {
-		return opError("SessionOptions.SetStatus", invalid("enum value"))
+		return opError("SessionOptions.SetVisualActivity", invalid("enum value"))
 	}
 
-	return o.target.set(ctx, "SessionOptions.SetStatus", "status", string(value), false)
+	return o.target.set(ctx, "SessionOptions.SetVisualActivity", "visual-activity", string(value), false)
 }
 
-// UnsetStatus unsets the status option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetStatus(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetStatus", "status", "", true)
+// UnsetVisualActivity unsets the visual-activity option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetVisualActivity(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetVisualActivity", "visual-activity", "", true)
 }
 
-// Prefix observes prefix; inherited origins may be unavailable.
-func (o SessionOptions) Prefix(ctx context.Context) (OptionValue[Key], error) {
+// VisualBell observes visual-bell; inherited origins may be unavailable.
+func (o SessionOptions) VisualBell(ctx context.Context) (OptionValue[VisualBell], error) {
 
-	v, err := o.target.read(ctx, "SessionOptions.Prefix", "prefix")
+	v, err := o.target.read(ctx, "SessionOptions.VisualBell", "visual-bell")
 	if err != nil {
-		return OptionValue[Key]{}, err
+		return OptionValue[VisualBell]{}, err
 	}
-	r, err := convertOption(v, func(s string) (Key, error) { return Key(s), nil })
+	r, err := convertOption(v, func(s string) (VisualBell, error) { return VisualBell(s), nil })
 	if err != nil {
-		return OptionValue[Key]{}, afterError("SessionOptions.Prefix", err)
+		return OptionValue[VisualBell]{}, afterError("SessionOptions.VisualBell", err)
 	}
 	return r, nil
 
 }
 
-// SetPrefix sets the prefix option in this scope.
-func (o SessionOptions) SetPrefix(ctx context.Context, value Key) error {
-	if !value.Valid() {
-		return opError("SessionOptions.SetPrefix", invalid("key value"))
-	}
-	return o.target.set(ctx, "SessionOptions.SetPrefix", "prefix", string(value), false)
-}
-
-// UnsetPrefix unsets the prefix option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetPrefix(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetPrefix", "prefix", "", true)
-}
-
-// DetachOnDestroy observes detach-on-destroy; inherited origins may be unavailable.
-func (o SessionOptions) DetachOnDestroy(ctx context.Context) (OptionValue[DetachPolicy], error) {
-
-	v, err := o.target.read(ctx, "SessionOptions.DetachOnDestroy", "detach-on-destroy")
-	if err != nil {
-		return OptionValue[DetachPolicy]{}, err
-	}
-	r, err := convertOption(v, func(s string) (DetachPolicy, error) { return DetachPolicy(s), nil })
-	if err != nil {
-		return OptionValue[DetachPolicy]{}, afterError("SessionOptions.DetachOnDestroy", err)
-	}
-	return r, nil
-
-}
-
-// SetDetachOnDestroy sets the detach-on-destroy option in this scope.
-func (o SessionOptions) SetDetachOnDestroy(ctx context.Context, value DetachPolicy) error {
+// SetVisualBell sets the visual-bell option in this scope.
+func (o SessionOptions) SetVisualBell(ctx context.Context, value VisualBell) error {
 	if !value.valid() {
-		return opError("SessionOptions.SetDetachOnDestroy", invalid("enum value"))
+		return opError("SessionOptions.SetVisualBell", invalid("enum value"))
 	}
 
-	return o.target.set(ctx, "SessionOptions.SetDetachOnDestroy", "detach-on-destroy", string(value), false)
+	return o.target.set(ctx, "SessionOptions.SetVisualBell", "visual-bell", string(value), false)
 }
 
-// UnsetDetachOnDestroy unsets the detach-on-destroy option in this scope, restoring inherited defaults.
-func (o SessionOptions) UnsetDetachOnDestroy(ctx context.Context) error {
-	return o.target.set(ctx, "SessionOptions.UnsetDetachOnDestroy", "detach-on-destroy", "", true)
+// UnsetVisualBell unsets the visual-bell option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetVisualBell(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetVisualBell", "visual-bell", "", true)
+}
+
+// VisualSilence observes visual-silence; inherited origins may be unavailable.
+func (o SessionOptions) VisualSilence(ctx context.Context) (OptionValue[VisualBell], error) {
+
+	v, err := o.target.read(ctx, "SessionOptions.VisualSilence", "visual-silence")
+	if err != nil {
+		return OptionValue[VisualBell]{}, err
+	}
+	r, err := convertOption(v, func(s string) (VisualBell, error) { return VisualBell(s), nil })
+	if err != nil {
+		return OptionValue[VisualBell]{}, afterError("SessionOptions.VisualSilence", err)
+	}
+	return r, nil
+
+}
+
+// SetVisualSilence sets the visual-silence option in this scope.
+func (o SessionOptions) SetVisualSilence(ctx context.Context, value VisualBell) error {
+	if !value.valid() {
+		return opError("SessionOptions.SetVisualSilence", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "SessionOptions.SetVisualSilence", "visual-silence", string(value), false)
+}
+
+// UnsetVisualSilence unsets the visual-silence option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetVisualSilence(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetVisualSilence", "visual-silence", "", true)
+}
+
+// WordSeparators observes word-separators; inherited origins may be unavailable.
+func (o SessionOptions) WordSeparators(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "SessionOptions.WordSeparators", "word-separators")
+}
+
+// SetWordSeparators sets the word-separators option in this scope.
+func (o SessionOptions) SetWordSeparators(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "SessionOptions.SetWordSeparators", "word-separators", value, false)
+}
+
+// UnsetWordSeparators unsets the word-separators option in this scope, restoring inherited defaults.
+func (o SessionOptions) UnsetWordSeparators(ctx context.Context) error {
+	return o.target.set(ctx, "SessionOptions.UnsetWordSeparators", "word-separators", "", true)
 }
 
 // Get reads a scalar option by its tmux name, preserving local and effective values.
@@ -1154,30 +2610,59 @@ func (o WindowOptions) UpdateArray(ctx context.Context, name string, updates []A
 	return o.target.updateArray(ctx, "WindowOptions.UpdateArray", name, updates)
 }
 
-// AutomaticRename observes automatic-rename; inherited origins may be unavailable.
-func (o WindowOptions) AutomaticRename(ctx context.Context) (OptionValue[bool], error) {
+// AggressiveResize observes aggressive-resize; inherited origins may be unavailable.
+func (o WindowOptions) AggressiveResize(ctx context.Context) (OptionValue[bool], error) {
 
-	v, err := o.target.read(ctx, "WindowOptions.AutomaticRename", "automatic-rename")
+	v, err := o.target.read(ctx, "WindowOptions.AggressiveResize", "aggressive-resize")
 	if err != nil {
 		return OptionValue[bool]{}, err
 	}
 	r, err := convertOption(v, parseOptionBool)
 	if err != nil {
-		return OptionValue[bool]{}, afterError("WindowOptions.AutomaticRename", err)
+		return OptionValue[bool]{}, afterError("WindowOptions.AggressiveResize", err)
 	}
 	return r, nil
 
 }
 
-// SetAutomaticRename sets the automatic-rename option in this scope.
-func (o WindowOptions) SetAutomaticRename(ctx context.Context, value bool) error {
+// SetAggressiveResize sets the aggressive-resize option in this scope.
+func (o WindowOptions) SetAggressiveResize(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "WindowOptions.SetAutomaticRename", "automatic-rename", boolOption(value), false)
+	return o.target.set(ctx, "WindowOptions.SetAggressiveResize", "aggressive-resize", boolOption(value), false)
 }
 
-// UnsetAutomaticRename unsets the automatic-rename option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetAutomaticRename(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetAutomaticRename", "automatic-rename", "", true)
+// UnsetAggressiveResize unsets the aggressive-resize option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAggressiveResize(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAggressiveResize", "aggressive-resize", "", true)
+}
+
+// AllowPassthrough observes allow-passthrough; inherited origins may be unavailable.
+func (o WindowOptions) AllowPassthrough(ctx context.Context) (OptionValue[AllowPassthrough], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.AllowPassthrough", "allow-passthrough")
+	if err != nil {
+		return OptionValue[AllowPassthrough]{}, err
+	}
+	r, err := convertOption(v, func(s string) (AllowPassthrough, error) { return AllowPassthrough(s), nil })
+	if err != nil {
+		return OptionValue[AllowPassthrough]{}, afterError("WindowOptions.AllowPassthrough", err)
+	}
+	return r, nil
+
+}
+
+// SetAllowPassthrough sets the allow-passthrough option in this scope.
+func (o WindowOptions) SetAllowPassthrough(ctx context.Context, value AllowPassthrough) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetAllowPassthrough", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetAllowPassthrough", "allow-passthrough", string(value), false)
+}
+
+// UnsetAllowPassthrough unsets the allow-passthrough option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAllowPassthrough(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAllowPassthrough", "allow-passthrough", "", true)
 }
 
 // AllowRename observes allow-rename; inherited origins may be unavailable.
@@ -1206,59 +2691,409 @@ func (o WindowOptions) UnsetAllowRename(ctx context.Context) error {
 	return o.target.set(ctx, "WindowOptions.UnsetAllowRename", "allow-rename", "", true)
 }
 
-// AggressiveResize observes aggressive-resize; inherited origins may be unavailable.
-func (o WindowOptions) AggressiveResize(ctx context.Context) (OptionValue[bool], error) {
+// AllowSetTitle observes allow-set-title; inherited origins may be unavailable.
+func (o WindowOptions) AllowSetTitle(ctx context.Context) (OptionValue[bool], error) {
 
-	v, err := o.target.read(ctx, "WindowOptions.AggressiveResize", "aggressive-resize")
+	v, err := o.target.read(ctx, "WindowOptions.AllowSetTitle", "allow-set-title")
 	if err != nil {
 		return OptionValue[bool]{}, err
 	}
 	r, err := convertOption(v, parseOptionBool)
 	if err != nil {
-		return OptionValue[bool]{}, afterError("WindowOptions.AggressiveResize", err)
+		return OptionValue[bool]{}, afterError("WindowOptions.AllowSetTitle", err)
 	}
 	return r, nil
 
 }
 
-// SetAggressiveResize sets the aggressive-resize option in this scope.
-func (o WindowOptions) SetAggressiveResize(ctx context.Context, value bool) error {
+// SetAllowSetTitle sets the allow-set-title option in this scope.
+func (o WindowOptions) SetAllowSetTitle(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "WindowOptions.SetAggressiveResize", "aggressive-resize", boolOption(value), false)
+	return o.target.set(ctx, "WindowOptions.SetAllowSetTitle", "allow-set-title", boolOption(value), false)
 }
 
-// UnsetAggressiveResize unsets the aggressive-resize option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetAggressiveResize(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetAggressiveResize", "aggressive-resize", "", true)
+// UnsetAllowSetTitle unsets the allow-set-title option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAllowSetTitle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAllowSetTitle", "allow-set-title", "", true)
 }
 
-// PaneBaseIndex observes pane-base-index; inherited origins may be unavailable.
-func (o WindowOptions) PaneBaseIndex(ctx context.Context) (OptionValue[int], error) {
+// AlternateScreen observes alternate-screen; inherited origins may be unavailable.
+func (o WindowOptions) AlternateScreen(ctx context.Context) (OptionValue[bool], error) {
 
-	v, err := o.target.read(ctx, "WindowOptions.PaneBaseIndex", "pane-base-index")
+	v, err := o.target.read(ctx, "WindowOptions.AlternateScreen", "alternate-screen")
 	if err != nil {
-		return OptionValue[int]{}, err
+		return OptionValue[bool]{}, err
 	}
-	r, err := convertOption(v, parseOptionInt)
+	r, err := convertOption(v, parseOptionBool)
 	if err != nil {
-		return OptionValue[int]{}, afterError("WindowOptions.PaneBaseIndex", err)
+		return OptionValue[bool]{}, afterError("WindowOptions.AlternateScreen", err)
 	}
 	return r, nil
 
 }
 
-// SetPaneBaseIndex sets the pane-base-index option in this scope.
-func (o WindowOptions) SetPaneBaseIndex(ctx context.Context, value int) error {
-	if value < 0 || value > 2147483647 {
-		return opError("WindowOptions.SetPaneBaseIndex", invalid("range"))
-	}
+// SetAlternateScreen sets the alternate-screen option in this scope.
+func (o WindowOptions) SetAlternateScreen(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "WindowOptions.SetPaneBaseIndex", "pane-base-index", strconv.Itoa(value), false)
+	return o.target.set(ctx, "WindowOptions.SetAlternateScreen", "alternate-screen", boolOption(value), false)
 }
 
-// UnsetPaneBaseIndex unsets the pane-base-index option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetPaneBaseIndex(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetPaneBaseIndex", "pane-base-index", "", true)
+// UnsetAlternateScreen unsets the alternate-screen option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAlternateScreen(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAlternateScreen", "alternate-screen", "", true)
+}
+
+// AutomaticRename observes automatic-rename; inherited origins may be unavailable.
+func (o WindowOptions) AutomaticRename(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.AutomaticRename", "automatic-rename")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("WindowOptions.AutomaticRename", err)
+	}
+	return r, nil
+
+}
+
+// SetAutomaticRename sets the automatic-rename option in this scope.
+func (o WindowOptions) SetAutomaticRename(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "WindowOptions.SetAutomaticRename", "automatic-rename", boolOption(value), false)
+}
+
+// UnsetAutomaticRename unsets the automatic-rename option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAutomaticRename(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAutomaticRename", "automatic-rename", "", true)
+}
+
+// AutomaticRenameFormat observes automatic-rename-format; inherited origins may be unavailable.
+func (o WindowOptions) AutomaticRenameFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.AutomaticRenameFormat", "automatic-rename-format")
+}
+
+// SetAutomaticRenameFormat sets the automatic-rename-format option in this scope.
+func (o WindowOptions) SetAutomaticRenameFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetAutomaticRenameFormat", "automatic-rename-format", value, false)
+}
+
+// UnsetAutomaticRenameFormat unsets the automatic-rename-format option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetAutomaticRenameFormat(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetAutomaticRenameFormat", "automatic-rename-format", "", true)
+}
+
+// ClockModeColour observes clock-mode-colour; inherited origins may be unavailable.
+func (o WindowOptions) ClockModeColour(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.ClockModeColour", "clock-mode-colour")
+}
+
+// SetClockModeColour sets the clock-mode-colour option in this scope.
+func (o WindowOptions) SetClockModeColour(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetClockModeColour", "clock-mode-colour", value, false)
+}
+
+// UnsetClockModeColour unsets the clock-mode-colour option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetClockModeColour(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetClockModeColour", "clock-mode-colour", "", true)
+}
+
+// ClockModeStyle observes clock-mode-style; inherited origins may be unavailable.
+func (o WindowOptions) ClockModeStyle(ctx context.Context) (OptionValue[ClockModeStyle], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.ClockModeStyle", "clock-mode-style")
+	if err != nil {
+		return OptionValue[ClockModeStyle]{}, err
+	}
+	r, err := convertOption(v, func(s string) (ClockModeStyle, error) { return ClockModeStyle(s), nil })
+	if err != nil {
+		return OptionValue[ClockModeStyle]{}, afterError("WindowOptions.ClockModeStyle", err)
+	}
+	return r, nil
+
+}
+
+// SetClockModeStyle sets the clock-mode-style option in this scope.
+func (o WindowOptions) SetClockModeStyle(ctx context.Context, value ClockModeStyle) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetClockModeStyle", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetClockModeStyle", "clock-mode-style", string(value), false)
+}
+
+// UnsetClockModeStyle unsets the clock-mode-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetClockModeStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetClockModeStyle", "clock-mode-style", "", true)
+}
+
+// CopyModeCurrentMatchStyle observes copy-mode-current-match-style; inherited origins may be unavailable.
+func (o WindowOptions) CopyModeCurrentMatchStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModeCurrentMatchStyle", "copy-mode-current-match-style")
+}
+
+// SetCopyModeCurrentMatchStyle sets the copy-mode-current-match-style option in this scope.
+func (o WindowOptions) SetCopyModeCurrentMatchStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModeCurrentMatchStyle", "copy-mode-current-match-style", value, false)
+}
+
+// UnsetCopyModeCurrentMatchStyle unsets the copy-mode-current-match-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModeCurrentMatchStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModeCurrentMatchStyle", "copy-mode-current-match-style", "", true)
+}
+
+// CopyModeMarkStyle observes copy-mode-mark-style; inherited origins may be unavailable.
+func (o WindowOptions) CopyModeMarkStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModeMarkStyle", "copy-mode-mark-style")
+}
+
+// SetCopyModeMarkStyle sets the copy-mode-mark-style option in this scope.
+func (o WindowOptions) SetCopyModeMarkStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModeMarkStyle", "copy-mode-mark-style", value, false)
+}
+
+// UnsetCopyModeMarkStyle unsets the copy-mode-mark-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModeMarkStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModeMarkStyle", "copy-mode-mark-style", "", true)
+}
+
+// CopyModeMatchStyle observes copy-mode-match-style; inherited origins may be unavailable.
+func (o WindowOptions) CopyModeMatchStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModeMatchStyle", "copy-mode-match-style")
+}
+
+// SetCopyModeMatchStyle sets the copy-mode-match-style option in this scope.
+func (o WindowOptions) SetCopyModeMatchStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModeMatchStyle", "copy-mode-match-style", value, false)
+}
+
+// UnsetCopyModeMatchStyle unsets the copy-mode-match-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModeMatchStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModeMatchStyle", "copy-mode-match-style", "", true)
+}
+
+// CopyModePositionFormat observes copy-mode-position-format; inherited origins may be unavailable.
+func (o WindowOptions) CopyModePositionFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModePositionFormat", "copy-mode-position-format")
+}
+
+// SetCopyModePositionFormat sets the copy-mode-position-format option in this scope.
+func (o WindowOptions) SetCopyModePositionFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModePositionFormat", "copy-mode-position-format", value, false)
+}
+
+// UnsetCopyModePositionFormat unsets the copy-mode-position-format option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModePositionFormat(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModePositionFormat", "copy-mode-position-format", "", true)
+}
+
+// CopyModePositionStyle observes copy-mode-position-style; inherited origins may be unavailable.
+func (o WindowOptions) CopyModePositionStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModePositionStyle", "copy-mode-position-style")
+}
+
+// SetCopyModePositionStyle sets the copy-mode-position-style option in this scope.
+func (o WindowOptions) SetCopyModePositionStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModePositionStyle", "copy-mode-position-style", value, false)
+}
+
+// UnsetCopyModePositionStyle unsets the copy-mode-position-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModePositionStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModePositionStyle", "copy-mode-position-style", "", true)
+}
+
+// CopyModeSelectionStyle observes copy-mode-selection-style; inherited origins may be unavailable.
+func (o WindowOptions) CopyModeSelectionStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CopyModeSelectionStyle", "copy-mode-selection-style")
+}
+
+// SetCopyModeSelectionStyle sets the copy-mode-selection-style option in this scope.
+func (o WindowOptions) SetCopyModeSelectionStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCopyModeSelectionStyle", "copy-mode-selection-style", value, false)
+}
+
+// UnsetCopyModeSelectionStyle unsets the copy-mode-selection-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCopyModeSelectionStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCopyModeSelectionStyle", "copy-mode-selection-style", "", true)
+}
+
+// CursorColour observes cursor-colour; inherited origins may be unavailable.
+func (o WindowOptions) CursorColour(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.CursorColour", "cursor-colour")
+}
+
+// SetCursorColour sets the cursor-colour option in this scope.
+func (o WindowOptions) SetCursorColour(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetCursorColour", "cursor-colour", value, false)
+}
+
+// UnsetCursorColour unsets the cursor-colour option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCursorColour(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCursorColour", "cursor-colour", "", true)
+}
+
+// CursorStyle observes cursor-style; inherited origins may be unavailable.
+func (o WindowOptions) CursorStyle(ctx context.Context) (OptionValue[CursorStyle], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.CursorStyle", "cursor-style")
+	if err != nil {
+		return OptionValue[CursorStyle]{}, err
+	}
+	r, err := convertOption(v, func(s string) (CursorStyle, error) { return CursorStyle(s), nil })
+	if err != nil {
+		return OptionValue[CursorStyle]{}, afterError("WindowOptions.CursorStyle", err)
+	}
+	return r, nil
+
+}
+
+// SetCursorStyle sets the cursor-style option in this scope.
+func (o WindowOptions) SetCursorStyle(ctx context.Context, value CursorStyle) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetCursorStyle", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetCursorStyle", "cursor-style", string(value), false)
+}
+
+// UnsetCursorStyle unsets the cursor-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetCursorStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetCursorStyle", "cursor-style", "", true)
+}
+
+// FillCharacter observes fill-character; inherited origins may be unavailable.
+func (o WindowOptions) FillCharacter(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.FillCharacter", "fill-character")
+}
+
+// SetFillCharacter sets the fill-character option in this scope.
+func (o WindowOptions) SetFillCharacter(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetFillCharacter", "fill-character", value, false)
+}
+
+// UnsetFillCharacter unsets the fill-character option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetFillCharacter(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetFillCharacter", "fill-character", "", true)
+}
+
+// MainPaneHeight observes main-pane-height; inherited origins may be unavailable.
+func (o WindowOptions) MainPaneHeight(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.MainPaneHeight", "main-pane-height")
+}
+
+// SetMainPaneHeight sets the main-pane-height option in this scope.
+func (o WindowOptions) SetMainPaneHeight(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMainPaneHeight", "main-pane-height", value, false)
+}
+
+// UnsetMainPaneHeight unsets the main-pane-height option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMainPaneHeight(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMainPaneHeight", "main-pane-height", "", true)
+}
+
+// MainPaneWidth observes main-pane-width; inherited origins may be unavailable.
+func (o WindowOptions) MainPaneWidth(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.MainPaneWidth", "main-pane-width")
+}
+
+// SetMainPaneWidth sets the main-pane-width option in this scope.
+func (o WindowOptions) SetMainPaneWidth(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMainPaneWidth", "main-pane-width", value, false)
+}
+
+// UnsetMainPaneWidth unsets the main-pane-width option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMainPaneWidth(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMainPaneWidth", "main-pane-width", "", true)
+}
+
+// MenuBorderLines observes menu-border-lines; inherited origins may be unavailable.
+func (o WindowOptions) MenuBorderLines(ctx context.Context) (OptionValue[MenuBorderLines], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.MenuBorderLines", "menu-border-lines")
+	if err != nil {
+		return OptionValue[MenuBorderLines]{}, err
+	}
+	r, err := convertOption(v, func(s string) (MenuBorderLines, error) { return MenuBorderLines(s), nil })
+	if err != nil {
+		return OptionValue[MenuBorderLines]{}, afterError("WindowOptions.MenuBorderLines", err)
+	}
+	return r, nil
+
+}
+
+// SetMenuBorderLines sets the menu-border-lines option in this scope.
+func (o WindowOptions) SetMenuBorderLines(ctx context.Context, value MenuBorderLines) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetMenuBorderLines", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetMenuBorderLines", "menu-border-lines", string(value), false)
+}
+
+// UnsetMenuBorderLines unsets the menu-border-lines option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMenuBorderLines(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMenuBorderLines", "menu-border-lines", "", true)
+}
+
+// MenuBorderStyle observes menu-border-style; inherited origins may be unavailable.
+func (o WindowOptions) MenuBorderStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.MenuBorderStyle", "menu-border-style")
+}
+
+// SetMenuBorderStyle sets the menu-border-style option in this scope.
+func (o WindowOptions) SetMenuBorderStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMenuBorderStyle", "menu-border-style", value, false)
+}
+
+// UnsetMenuBorderStyle unsets the menu-border-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMenuBorderStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMenuBorderStyle", "menu-border-style", "", true)
+}
+
+// MenuSelectedStyle observes menu-selected-style; inherited origins may be unavailable.
+func (o WindowOptions) MenuSelectedStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.MenuSelectedStyle", "menu-selected-style")
+}
+
+// SetMenuSelectedStyle sets the menu-selected-style option in this scope.
+func (o WindowOptions) SetMenuSelectedStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMenuSelectedStyle", "menu-selected-style", value, false)
+}
+
+// UnsetMenuSelectedStyle unsets the menu-selected-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMenuSelectedStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMenuSelectedStyle", "menu-selected-style", "", true)
+}
+
+// MenuStyle observes menu-style; inherited origins may be unavailable.
+func (o WindowOptions) MenuStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.MenuStyle", "menu-style")
+}
+
+// SetMenuStyle sets the menu-style option in this scope.
+func (o WindowOptions) SetMenuStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMenuStyle", "menu-style", value, false)
+}
+
+// UnsetMenuStyle unsets the menu-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMenuStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMenuStyle", "menu-style", "", true)
 }
 
 // ModeKeys observes mode-keys; inherited origins may be unavailable.
@@ -1290,52 +3125,422 @@ func (o WindowOptions) UnsetModeKeys(ctx context.Context) error {
 	return o.target.set(ctx, "WindowOptions.UnsetModeKeys", "mode-keys", "", true)
 }
 
-// WindowSize observes window-size; inherited origins may be unavailable.
-func (o WindowOptions) WindowSize(ctx context.Context) (OptionValue[WindowSizePolicy], error) {
+// ModeStyle observes mode-style; inherited origins may be unavailable.
+func (o WindowOptions) ModeStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.ModeStyle", "mode-style")
+}
 
-	v, err := o.target.read(ctx, "WindowOptions.WindowSize", "window-size")
+// SetModeStyle sets the mode-style option in this scope.
+func (o WindowOptions) SetModeStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetModeStyle", "mode-style", value, false)
+}
+
+// UnsetModeStyle unsets the mode-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetModeStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetModeStyle", "mode-style", "", true)
+}
+
+// MonitorActivity observes monitor-activity; inherited origins may be unavailable.
+func (o WindowOptions) MonitorActivity(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.MonitorActivity", "monitor-activity")
 	if err != nil {
-		return OptionValue[WindowSizePolicy]{}, err
+		return OptionValue[bool]{}, err
 	}
-	r, err := convertOption(v, func(s string) (WindowSizePolicy, error) { return WindowSizePolicy(s), nil })
+	r, err := convertOption(v, parseOptionBool)
 	if err != nil {
-		return OptionValue[WindowSizePolicy]{}, afterError("WindowOptions.WindowSize", err)
+		return OptionValue[bool]{}, afterError("WindowOptions.MonitorActivity", err)
 	}
 	return r, nil
 
 }
 
-// SetWindowSize sets the window-size option in this scope.
-func (o WindowOptions) SetWindowSize(ctx context.Context, value WindowSizePolicy) error {
-	if !value.valid() {
-		return opError("WindowOptions.SetWindowSize", invalid("enum value"))
-	}
+// SetMonitorActivity sets the monitor-activity option in this scope.
+func (o WindowOptions) SetMonitorActivity(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "WindowOptions.SetWindowSize", "window-size", string(value), false)
+	return o.target.set(ctx, "WindowOptions.SetMonitorActivity", "monitor-activity", boolOption(value), false)
 }
 
-// UnsetWindowSize unsets the window-size option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetWindowSize(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetWindowSize", "window-size", "", true)
+// UnsetMonitorActivity unsets the monitor-activity option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMonitorActivity(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMonitorActivity", "monitor-activity", "", true)
+}
+
+// MonitorBell observes monitor-bell; inherited origins may be unavailable.
+func (o WindowOptions) MonitorBell(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.MonitorBell", "monitor-bell")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("WindowOptions.MonitorBell", err)
+	}
+	return r, nil
+
+}
+
+// SetMonitorBell sets the monitor-bell option in this scope.
+func (o WindowOptions) SetMonitorBell(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "WindowOptions.SetMonitorBell", "monitor-bell", boolOption(value), false)
+}
+
+// UnsetMonitorBell unsets the monitor-bell option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMonitorBell(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMonitorBell", "monitor-bell", "", true)
+}
+
+// MonitorSilence observes monitor-silence; inherited origins may be unavailable.
+func (o WindowOptions) MonitorSilence(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.MonitorSilence", "monitor-silence")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("WindowOptions.MonitorSilence", err)
+	}
+	return r, nil
+
+}
+
+// SetMonitorSilence sets the monitor-silence option in this scope.
+func (o WindowOptions) SetMonitorSilence(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 2147483647 {
+		return opError("WindowOptions.SetMonitorSilence", invalid("range"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetMonitorSilence", "monitor-silence", strconv.Itoa(value), false)
+}
+
+// UnsetMonitorSilence unsets the monitor-silence option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetMonitorSilence(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetMonitorSilence", "monitor-silence", "", true)
+}
+
+// OtherPaneHeight observes other-pane-height; inherited origins may be unavailable.
+func (o WindowOptions) OtherPaneHeight(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.OtherPaneHeight", "other-pane-height")
+}
+
+// SetOtherPaneHeight sets the other-pane-height option in this scope.
+func (o WindowOptions) SetOtherPaneHeight(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetOtherPaneHeight", "other-pane-height", value, false)
+}
+
+// UnsetOtherPaneHeight unsets the other-pane-height option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetOtherPaneHeight(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetOtherPaneHeight", "other-pane-height", "", true)
+}
+
+// OtherPaneWidth observes other-pane-width; inherited origins may be unavailable.
+func (o WindowOptions) OtherPaneWidth(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.OtherPaneWidth", "other-pane-width")
+}
+
+// SetOtherPaneWidth sets the other-pane-width option in this scope.
+func (o WindowOptions) SetOtherPaneWidth(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetOtherPaneWidth", "other-pane-width", value, false)
+}
+
+// UnsetOtherPaneWidth unsets the other-pane-width option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetOtherPaneWidth(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetOtherPaneWidth", "other-pane-width", "", true)
+}
+
+// PaneActiveBorderStyle observes pane-active-border-style; inherited origins may be unavailable.
+func (o WindowOptions) PaneActiveBorderStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneActiveBorderStyle", "pane-active-border-style")
+}
+
+// SetPaneActiveBorderStyle sets the pane-active-border-style option in this scope.
+func (o WindowOptions) SetPaneActiveBorderStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneActiveBorderStyle", "pane-active-border-style", value, false)
+}
+
+// UnsetPaneActiveBorderStyle unsets the pane-active-border-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneActiveBorderStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneActiveBorderStyle", "pane-active-border-style", "", true)
+}
+
+// PaneBaseIndex observes pane-base-index; inherited origins may be unavailable.
+func (o WindowOptions) PaneBaseIndex(ctx context.Context) (OptionValue[int], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneBaseIndex", "pane-base-index")
+	if err != nil {
+		return OptionValue[int]{}, err
+	}
+	r, err := convertOption(v, parseOptionInt)
+	if err != nil {
+		return OptionValue[int]{}, afterError("WindowOptions.PaneBaseIndex", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneBaseIndex sets the pane-base-index option in this scope.
+func (o WindowOptions) SetPaneBaseIndex(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 65535 {
+		return opError("WindowOptions.SetPaneBaseIndex", invalid("range"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBaseIndex", "pane-base-index", strconv.Itoa(value), false)
+}
+
+// UnsetPaneBaseIndex unsets the pane-base-index option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBaseIndex(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBaseIndex", "pane-base-index", "", true)
+}
+
+// PaneBorderFormat observes pane-border-format; inherited origins may be unavailable.
+func (o WindowOptions) PaneBorderFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneBorderFormat", "pane-border-format")
+}
+
+// SetPaneBorderFormat sets the pane-border-format option in this scope.
+func (o WindowOptions) SetPaneBorderFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBorderFormat", "pane-border-format", value, false)
+}
+
+// UnsetPaneBorderFormat unsets the pane-border-format option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBorderFormat(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderFormat", "pane-border-format", "", true)
+}
+
+// PaneBorderIndicators observes pane-border-indicators; inherited origins may be unavailable.
+func (o WindowOptions) PaneBorderIndicators(ctx context.Context) (OptionValue[PaneBorderIndicators], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneBorderIndicators", "pane-border-indicators")
+	if err != nil {
+		return OptionValue[PaneBorderIndicators]{}, err
+	}
+	r, err := convertOption(v, func(s string) (PaneBorderIndicators, error) { return PaneBorderIndicators(s), nil })
+	if err != nil {
+		return OptionValue[PaneBorderIndicators]{}, afterError("WindowOptions.PaneBorderIndicators", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneBorderIndicators sets the pane-border-indicators option in this scope.
+func (o WindowOptions) SetPaneBorderIndicators(ctx context.Context, value PaneBorderIndicators) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetPaneBorderIndicators", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBorderIndicators", "pane-border-indicators", string(value), false)
+}
+
+// UnsetPaneBorderIndicators unsets the pane-border-indicators option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBorderIndicators(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderIndicators", "pane-border-indicators", "", true)
+}
+
+// PaneBorderLines observes pane-border-lines; inherited origins may be unavailable.
+func (o WindowOptions) PaneBorderLines(ctx context.Context) (OptionValue[PaneBorderLineStyle], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneBorderLines", "pane-border-lines")
+	if err != nil {
+		return OptionValue[PaneBorderLineStyle]{}, err
+	}
+	r, err := convertOption(v, func(s string) (PaneBorderLineStyle, error) { return PaneBorderLineStyle(s), nil })
+	if err != nil {
+		return OptionValue[PaneBorderLineStyle]{}, afterError("WindowOptions.PaneBorderLines", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneBorderLines sets the pane-border-lines option in this scope.
+func (o WindowOptions) SetPaneBorderLines(ctx context.Context, value PaneBorderLineStyle) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetPaneBorderLines", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBorderLines", "pane-border-lines", string(value), false)
+}
+
+// UnsetPaneBorderLines unsets the pane-border-lines option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBorderLines(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderLines", "pane-border-lines", "", true)
+}
+
+// PaneBorderStatus observes pane-border-status; inherited origins may be unavailable.
+func (o WindowOptions) PaneBorderStatus(ctx context.Context) (OptionValue[PaneStatus], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneBorderStatus", "pane-border-status")
+	if err != nil {
+		return OptionValue[PaneStatus]{}, err
+	}
+	r, err := convertOption(v, func(s string) (PaneStatus, error) { return PaneStatus(s), nil })
+	if err != nil {
+		return OptionValue[PaneStatus]{}, afterError("WindowOptions.PaneBorderStatus", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneBorderStatus sets the pane-border-status option in this scope.
+func (o WindowOptions) SetPaneBorderStatus(ctx context.Context, value PaneStatus) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetPaneBorderStatus", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBorderStatus", "pane-border-status", string(value), false)
+}
+
+// UnsetPaneBorderStatus unsets the pane-border-status option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBorderStatus(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderStatus", "pane-border-status", "", true)
+}
+
+// PaneBorderStyle observes pane-border-style; inherited origins may be unavailable.
+func (o WindowOptions) PaneBorderStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneBorderStyle", "pane-border-style")
+}
+
+// SetPaneBorderStyle sets the pane-border-style option in this scope.
+func (o WindowOptions) SetPaneBorderStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneBorderStyle", "pane-border-style", value, false)
+}
+
+// UnsetPaneBorderStyle unsets the pane-border-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneBorderStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderStyle", "pane-border-style", "", true)
+}
+
+// PaneScrollbars observes pane-scrollbars; inherited origins may be unavailable.
+func (o WindowOptions) PaneScrollbars(ctx context.Context) (OptionValue[PaneScrollbars], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneScrollbars", "pane-scrollbars")
+	if err != nil {
+		return OptionValue[PaneScrollbars]{}, err
+	}
+	r, err := convertOption(v, func(s string) (PaneScrollbars, error) { return PaneScrollbars(s), nil })
+	if err != nil {
+		return OptionValue[PaneScrollbars]{}, afterError("WindowOptions.PaneScrollbars", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneScrollbars sets the pane-scrollbars option in this scope.
+func (o WindowOptions) SetPaneScrollbars(ctx context.Context, value PaneScrollbars) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetPaneScrollbars", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneScrollbars", "pane-scrollbars", string(value), false)
+}
+
+// UnsetPaneScrollbars unsets the pane-scrollbars option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneScrollbars(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneScrollbars", "pane-scrollbars", "", true)
+}
+
+// PaneScrollbarsPosition observes pane-scrollbars-position; inherited origins may be unavailable.
+func (o WindowOptions) PaneScrollbarsPosition(ctx context.Context) (OptionValue[PaneScrollbarsPosition], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.PaneScrollbarsPosition", "pane-scrollbars-position")
+	if err != nil {
+		return OptionValue[PaneScrollbarsPosition]{}, err
+	}
+	r, err := convertOption(v, func(s string) (PaneScrollbarsPosition, error) { return PaneScrollbarsPosition(s), nil })
+	if err != nil {
+		return OptionValue[PaneScrollbarsPosition]{}, afterError("WindowOptions.PaneScrollbarsPosition", err)
+	}
+	return r, nil
+
+}
+
+// SetPaneScrollbarsPosition sets the pane-scrollbars-position option in this scope.
+func (o WindowOptions) SetPaneScrollbarsPosition(ctx context.Context, value PaneScrollbarsPosition) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetPaneScrollbarsPosition", invalid("enum value"))
+	}
+
+	return o.target.set(ctx, "WindowOptions.SetPaneScrollbarsPosition", "pane-scrollbars-position", string(value), false)
+}
+
+// UnsetPaneScrollbarsPosition unsets the pane-scrollbars-position option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneScrollbarsPosition(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneScrollbarsPosition", "pane-scrollbars-position", "", true)
+}
+
+// PaneScrollbarsStyle observes pane-scrollbars-style; inherited origins may be unavailable.
+func (o WindowOptions) PaneScrollbarsStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneScrollbarsStyle", "pane-scrollbars-style")
+}
+
+// SetPaneScrollbarsStyle sets the pane-scrollbars-style option in this scope.
+func (o WindowOptions) SetPaneScrollbarsStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneScrollbarsStyle", "pane-scrollbars-style", value, false)
+}
+
+// UnsetPaneScrollbarsStyle unsets the pane-scrollbars-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneScrollbarsStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneScrollbarsStyle", "pane-scrollbars-style", "", true)
+}
+
+// PaneStatusCurrentStyle observes pane-status-current-style; inherited origins may be unavailable.
+func (o WindowOptions) PaneStatusCurrentStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneStatusCurrentStyle", "pane-status-current-style")
+}
+
+// SetPaneStatusCurrentStyle sets the pane-status-current-style option in this scope.
+func (o WindowOptions) SetPaneStatusCurrentStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneStatusCurrentStyle", "pane-status-current-style", value, false)
+}
+
+// UnsetPaneStatusCurrentStyle unsets the pane-status-current-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneStatusCurrentStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneStatusCurrentStyle", "pane-status-current-style", "", true)
+}
+
+// PaneStatusStyle observes pane-status-style; inherited origins may be unavailable.
+func (o WindowOptions) PaneStatusStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.PaneStatusStyle", "pane-status-style")
+}
+
+// SetPaneStatusStyle sets the pane-status-style option in this scope.
+func (o WindowOptions) SetPaneStatusStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetPaneStatusStyle", "pane-status-style", value, false)
+}
+
+// UnsetPaneStatusStyle unsets the pane-status-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetPaneStatusStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetPaneStatusStyle", "pane-status-style", "", true)
 }
 
 // RemainOnExit observes remain-on-exit; inherited origins may be unavailable.
-func (o WindowOptions) RemainOnExit(ctx context.Context) (OptionValue[RemainOnExitPolicy], error) {
+func (o WindowOptions) RemainOnExit(ctx context.Context) (OptionValue[RemainOnExit], error) {
 
 	v, err := o.target.read(ctx, "WindowOptions.RemainOnExit", "remain-on-exit")
 	if err != nil {
-		return OptionValue[RemainOnExitPolicy]{}, err
+		return OptionValue[RemainOnExit]{}, err
 	}
-	r, err := convertOption(v, func(s string) (RemainOnExitPolicy, error) { return RemainOnExitPolicy(s), nil })
+	r, err := convertOption(v, func(s string) (RemainOnExit, error) { return RemainOnExit(s), nil })
 	if err != nil {
-		return OptionValue[RemainOnExitPolicy]{}, afterError("WindowOptions.RemainOnExit", err)
+		return OptionValue[RemainOnExit]{}, afterError("WindowOptions.RemainOnExit", err)
 	}
 	return r, nil
 
 }
 
 // SetRemainOnExit sets the remain-on-exit option in this scope.
-func (o WindowOptions) SetRemainOnExit(ctx context.Context, value RemainOnExitPolicy) error {
+func (o WindowOptions) SetRemainOnExit(ctx context.Context, value RemainOnExit) error {
 	if !value.valid() {
 		return opError("WindowOptions.SetRemainOnExit", invalid("enum value"))
 	}
@@ -1346,6 +3551,80 @@ func (o WindowOptions) SetRemainOnExit(ctx context.Context, value RemainOnExitPo
 // UnsetRemainOnExit unsets the remain-on-exit option in this scope, restoring inherited defaults.
 func (o WindowOptions) UnsetRemainOnExit(ctx context.Context) error {
 	return o.target.set(ctx, "WindowOptions.UnsetRemainOnExit", "remain-on-exit", "", true)
+}
+
+// RemainOnExitFormat observes remain-on-exit-format; inherited origins may be unavailable.
+func (o WindowOptions) RemainOnExitFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.RemainOnExitFormat", "remain-on-exit-format")
+}
+
+// SetRemainOnExitFormat sets the remain-on-exit-format option in this scope.
+func (o WindowOptions) SetRemainOnExitFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetRemainOnExitFormat", "remain-on-exit-format", value, false)
+}
+
+// UnsetRemainOnExitFormat unsets the remain-on-exit-format option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetRemainOnExitFormat(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetRemainOnExitFormat", "remain-on-exit-format", "", true)
+}
+
+// ScrollOnClear observes scroll-on-clear; inherited origins may be unavailable.
+func (o WindowOptions) ScrollOnClear(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.ScrollOnClear", "scroll-on-clear")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("WindowOptions.ScrollOnClear", err)
+	}
+	return r, nil
+
+}
+
+// SetScrollOnClear sets the scroll-on-clear option in this scope.
+func (o WindowOptions) SetScrollOnClear(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "WindowOptions.SetScrollOnClear", "scroll-on-clear", boolOption(value), false)
+}
+
+// UnsetScrollOnClear unsets the scroll-on-clear option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetScrollOnClear(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetScrollOnClear", "scroll-on-clear", "", true)
+}
+
+// SessionStatusCurrentStyle observes session-status-current-style; inherited origins may be unavailable.
+func (o WindowOptions) SessionStatusCurrentStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.SessionStatusCurrentStyle", "session-status-current-style")
+}
+
+// SetSessionStatusCurrentStyle sets the session-status-current-style option in this scope.
+func (o WindowOptions) SetSessionStatusCurrentStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetSessionStatusCurrentStyle", "session-status-current-style", value, false)
+}
+
+// UnsetSessionStatusCurrentStyle unsets the session-status-current-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetSessionStatusCurrentStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetSessionStatusCurrentStyle", "session-status-current-style", "", true)
+}
+
+// SessionStatusStyle observes session-status-style; inherited origins may be unavailable.
+func (o WindowOptions) SessionStatusStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.SessionStatusStyle", "session-status-style")
+}
+
+// SetSessionStatusStyle sets the session-status-style option in this scope.
+func (o WindowOptions) SetSessionStatusStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetSessionStatusStyle", "session-status-style", value, false)
+}
+
+// UnsetSessionStatusStyle unsets the session-status-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetSessionStatusStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetSessionStatusStyle", "session-status-style", "", true)
 }
 
 // SynchronizePanes observes synchronize-panes; inherited origins may be unavailable.
@@ -1374,81 +3653,110 @@ func (o WindowOptions) UnsetSynchronizePanes(ctx context.Context) error {
 	return o.target.set(ctx, "WindowOptions.UnsetSynchronizePanes", "synchronize-panes", "", true)
 }
 
-// PaneBorderStatus observes pane-border-status; inherited origins may be unavailable.
-func (o WindowOptions) PaneBorderStatus(ctx context.Context) (OptionValue[PaneBorderStatus], error) {
+// TiledLayoutMaxColumns observes tiled-layout-max-columns; inherited origins may be unavailable.
+func (o WindowOptions) TiledLayoutMaxColumns(ctx context.Context) (OptionValue[int], error) {
 
-	v, err := o.target.read(ctx, "WindowOptions.PaneBorderStatus", "pane-border-status")
+	v, err := o.target.read(ctx, "WindowOptions.TiledLayoutMaxColumns", "tiled-layout-max-columns")
 	if err != nil {
-		return OptionValue[PaneBorderStatus]{}, err
+		return OptionValue[int]{}, err
 	}
-	r, err := convertOption(v, func(s string) (PaneBorderStatus, error) { return PaneBorderStatus(s), nil })
+	r, err := convertOption(v, parseOptionInt)
 	if err != nil {
-		return OptionValue[PaneBorderStatus]{}, afterError("WindowOptions.PaneBorderStatus", err)
+		return OptionValue[int]{}, afterError("WindowOptions.TiledLayoutMaxColumns", err)
 	}
 	return r, nil
 
 }
 
-// SetPaneBorderStatus sets the pane-border-status option in this scope.
-func (o WindowOptions) SetPaneBorderStatus(ctx context.Context, value PaneBorderStatus) error {
-	if !value.valid() {
-		return opError("WindowOptions.SetPaneBorderStatus", invalid("enum value"))
+// SetTiledLayoutMaxColumns sets the tiled-layout-max-columns option in this scope.
+func (o WindowOptions) SetTiledLayoutMaxColumns(ctx context.Context, value int) error {
+	if int64(value) < 0 || int64(value) > 65535 {
+		return opError("WindowOptions.SetTiledLayoutMaxColumns", invalid("range"))
 	}
 
-	return o.target.set(ctx, "WindowOptions.SetPaneBorderStatus", "pane-border-status", string(value), false)
+	return o.target.set(ctx, "WindowOptions.SetTiledLayoutMaxColumns", "tiled-layout-max-columns", strconv.Itoa(value), false)
 }
 
-// UnsetPaneBorderStatus unsets the pane-border-status option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetPaneBorderStatus(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderStatus", "pane-border-status", "", true)
+// UnsetTiledLayoutMaxColumns unsets the tiled-layout-max-columns option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetTiledLayoutMaxColumns(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetTiledLayoutMaxColumns", "tiled-layout-max-columns", "", true)
 }
 
-// PaneBorderFormat observes pane-border-format; inherited origins may be unavailable.
-func (o WindowOptions) PaneBorderFormat(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "WindowOptions.PaneBorderFormat", "pane-border-format")
+// WindowActiveStyle observes window-active-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowActiveStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowActiveStyle", "window-active-style")
 }
 
-// SetPaneBorderFormat sets the pane-border-format option in this scope.
-func (o WindowOptions) SetPaneBorderFormat(ctx context.Context, value string) error {
+// SetWindowActiveStyle sets the window-active-style option in this scope.
+func (o WindowOptions) SetWindowActiveStyle(ctx context.Context, value string) error {
 
-	return o.target.set(ctx, "WindowOptions.SetPaneBorderFormat", "pane-border-format", value, false)
+	return o.target.set(ctx, "WindowOptions.SetWindowActiveStyle", "window-active-style", value, false)
 }
 
-// UnsetPaneBorderFormat unsets the pane-border-format option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetPaneBorderFormat(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetPaneBorderFormat", "pane-border-format", "", true)
+// UnsetWindowActiveStyle unsets the window-active-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowActiveStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowActiveStyle", "window-active-style", "", true)
 }
 
-// ModeStyle observes mode-style; inherited origins may be unavailable.
-func (o WindowOptions) ModeStyle(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "WindowOptions.ModeStyle", "mode-style")
+// WindowSize observes window-size; inherited origins may be unavailable.
+func (o WindowOptions) WindowSize(ctx context.Context) (OptionValue[WindowSize], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.WindowSize", "window-size")
+	if err != nil {
+		return OptionValue[WindowSize]{}, err
+	}
+	r, err := convertOption(v, func(s string) (WindowSize, error) { return WindowSize(s), nil })
+	if err != nil {
+		return OptionValue[WindowSize]{}, afterError("WindowOptions.WindowSize", err)
+	}
+	return r, nil
+
 }
 
-// SetModeStyle sets the mode-style option in this scope.
-func (o WindowOptions) SetModeStyle(ctx context.Context, value string) error {
+// SetWindowSize sets the window-size option in this scope.
+func (o WindowOptions) SetWindowSize(ctx context.Context, value WindowSize) error {
+	if !value.valid() {
+		return opError("WindowOptions.SetWindowSize", invalid("enum value"))
+	}
 
-	return o.target.set(ctx, "WindowOptions.SetModeStyle", "mode-style", value, false)
+	return o.target.set(ctx, "WindowOptions.SetWindowSize", "window-size", string(value), false)
 }
 
-// UnsetModeStyle unsets the mode-style option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetModeStyle(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetModeStyle", "mode-style", "", true)
+// UnsetWindowSize unsets the window-size option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowSize(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowSize", "window-size", "", true)
 }
 
-// WindowStatusFormat observes window-status-format; inherited origins may be unavailable.
-func (o WindowOptions) WindowStatusFormat(ctx context.Context) (OptionValue[string], error) {
-	return o.target.read(ctx, "WindowOptions.WindowStatusFormat", "window-status-format")
+// WindowStatusActivityStyle observes window-status-activity-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusActivityStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusActivityStyle", "window-status-activity-style")
 }
 
-// SetWindowStatusFormat sets the window-status-format option in this scope.
-func (o WindowOptions) SetWindowStatusFormat(ctx context.Context, value string) error {
+// SetWindowStatusActivityStyle sets the window-status-activity-style option in this scope.
+func (o WindowOptions) SetWindowStatusActivityStyle(ctx context.Context, value string) error {
 
-	return o.target.set(ctx, "WindowOptions.SetWindowStatusFormat", "window-status-format", value, false)
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusActivityStyle", "window-status-activity-style", value, false)
 }
 
-// UnsetWindowStatusFormat unsets the window-status-format option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetWindowStatusFormat(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusFormat", "window-status-format", "", true)
+// UnsetWindowStatusActivityStyle unsets the window-status-activity-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusActivityStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusActivityStyle", "window-status-activity-style", "", true)
+}
+
+// WindowStatusBellStyle observes window-status-bell-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusBellStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusBellStyle", "window-status-bell-style")
+}
+
+// SetWindowStatusBellStyle sets the window-status-bell-style option in this scope.
+func (o WindowOptions) SetWindowStatusBellStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusBellStyle", "window-status-bell-style", value, false)
+}
+
+// UnsetWindowStatusBellStyle unsets the window-status-bell-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusBellStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusBellStyle", "window-status-bell-style", "", true)
 }
 
 // WindowStatusCurrentFormat observes window-status-current-format; inherited origins may be unavailable.
@@ -1467,33 +3775,152 @@ func (o WindowOptions) UnsetWindowStatusCurrentFormat(ctx context.Context) error
 	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusCurrentFormat", "window-status-current-format", "", true)
 }
 
-// AllowPassthrough observes allow-passthrough; inherited origins may be unavailable.
-func (o WindowOptions) AllowPassthrough(ctx context.Context) (OptionValue[PassthroughPolicy], error) {
+// WindowStatusCurrentStyle observes window-status-current-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusCurrentStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusCurrentStyle", "window-status-current-style")
+}
 
-	v, err := o.target.read(ctx, "WindowOptions.AllowPassthrough", "allow-passthrough")
+// SetWindowStatusCurrentStyle sets the window-status-current-style option in this scope.
+func (o WindowOptions) SetWindowStatusCurrentStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusCurrentStyle", "window-status-current-style", value, false)
+}
+
+// UnsetWindowStatusCurrentStyle unsets the window-status-current-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusCurrentStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusCurrentStyle", "window-status-current-style", "", true)
+}
+
+// WindowStatusFormat observes window-status-format; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusFormat(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusFormat", "window-status-format")
+}
+
+// SetWindowStatusFormat sets the window-status-format option in this scope.
+func (o WindowOptions) SetWindowStatusFormat(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusFormat", "window-status-format", value, false)
+}
+
+// UnsetWindowStatusFormat unsets the window-status-format option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusFormat(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusFormat", "window-status-format", "", true)
+}
+
+// WindowStatusLastStyle observes window-status-last-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusLastStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusLastStyle", "window-status-last-style")
+}
+
+// SetWindowStatusLastStyle sets the window-status-last-style option in this scope.
+func (o WindowOptions) SetWindowStatusLastStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusLastStyle", "window-status-last-style", value, false)
+}
+
+// UnsetWindowStatusLastStyle unsets the window-status-last-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusLastStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusLastStyle", "window-status-last-style", "", true)
+}
+
+// WindowStatusSeparator observes window-status-separator; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusSeparator(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusSeparator", "window-status-separator")
+}
+
+// SetWindowStatusSeparator sets the window-status-separator option in this scope.
+func (o WindowOptions) SetWindowStatusSeparator(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusSeparator", "window-status-separator", value, false)
+}
+
+// UnsetWindowStatusSeparator unsets the window-status-separator option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusSeparator(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusSeparator", "window-status-separator", "", true)
+}
+
+// WindowStatusStyle observes window-status-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStatusStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStatusStyle", "window-status-style")
+}
+
+// SetWindowStatusStyle sets the window-status-style option in this scope.
+func (o WindowOptions) SetWindowStatusStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStatusStyle", "window-status-style", value, false)
+}
+
+// UnsetWindowStatusStyle unsets the window-status-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStatusStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStatusStyle", "window-status-style", "", true)
+}
+
+// WindowStyle observes window-style; inherited origins may be unavailable.
+func (o WindowOptions) WindowStyle(ctx context.Context) (OptionValue[string], error) {
+	return o.target.read(ctx, "WindowOptions.WindowStyle", "window-style")
+}
+
+// SetWindowStyle sets the window-style option in this scope.
+func (o WindowOptions) SetWindowStyle(ctx context.Context, value string) error {
+
+	return o.target.set(ctx, "WindowOptions.SetWindowStyle", "window-style", value, false)
+}
+
+// UnsetWindowStyle unsets the window-style option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWindowStyle(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWindowStyle", "window-style", "", true)
+}
+
+// WrapSearch observes wrap-search; inherited origins may be unavailable.
+func (o WindowOptions) WrapSearch(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.WrapSearch", "wrap-search")
 	if err != nil {
-		return OptionValue[PassthroughPolicy]{}, err
+		return OptionValue[bool]{}, err
 	}
-	r, err := convertOption(v, func(s string) (PassthroughPolicy, error) { return PassthroughPolicy(s), nil })
+	r, err := convertOption(v, parseOptionBool)
 	if err != nil {
-		return OptionValue[PassthroughPolicy]{}, afterError("WindowOptions.AllowPassthrough", err)
+		return OptionValue[bool]{}, afterError("WindowOptions.WrapSearch", err)
 	}
 	return r, nil
 
 }
 
-// SetAllowPassthrough sets the allow-passthrough option in this scope.
-func (o WindowOptions) SetAllowPassthrough(ctx context.Context, value PassthroughPolicy) error {
-	if !value.valid() {
-		return opError("WindowOptions.SetAllowPassthrough", invalid("enum value"))
-	}
+// SetWrapSearch sets the wrap-search option in this scope.
+func (o WindowOptions) SetWrapSearch(ctx context.Context, value bool) error {
 
-	return o.target.set(ctx, "WindowOptions.SetAllowPassthrough", "allow-passthrough", string(value), false)
+	return o.target.set(ctx, "WindowOptions.SetWrapSearch", "wrap-search", boolOption(value), false)
 }
 
-// UnsetAllowPassthrough unsets the allow-passthrough option in this scope, restoring inherited defaults.
-func (o WindowOptions) UnsetAllowPassthrough(ctx context.Context) error {
-	return o.target.set(ctx, "WindowOptions.UnsetAllowPassthrough", "allow-passthrough", "", true)
+// UnsetWrapSearch unsets the wrap-search option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetWrapSearch(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetWrapSearch", "wrap-search", "", true)
+}
+
+// XtermKeys observes xterm-keys; inherited origins may be unavailable.
+func (o WindowOptions) XtermKeys(ctx context.Context) (OptionValue[bool], error) {
+
+	v, err := o.target.read(ctx, "WindowOptions.XtermKeys", "xterm-keys")
+	if err != nil {
+		return OptionValue[bool]{}, err
+	}
+	r, err := convertOption(v, parseOptionBool)
+	if err != nil {
+		return OptionValue[bool]{}, afterError("WindowOptions.XtermKeys", err)
+	}
+	return r, nil
+
+}
+
+// SetXtermKeys sets the xterm-keys option in this scope.
+func (o WindowOptions) SetXtermKeys(ctx context.Context, value bool) error {
+
+	return o.target.set(ctx, "WindowOptions.SetXtermKeys", "xterm-keys", boolOption(value), false)
+}
+
+// UnsetXtermKeys unsets the xterm-keys option in this scope, restoring inherited defaults.
+func (o WindowOptions) UnsetXtermKeys(ctx context.Context) error {
+	return o.target.set(ctx, "WindowOptions.UnsetXtermKeys", "xterm-keys", "", true)
 }
 
 func nativeOptionScope(name string) (Scope, bool) {
@@ -1505,9 +3932,13 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"copy-mode-position-format",
 		"cursor-colour",
 		"cursor-style",
+		"pane-active-border-style",
 		"pane-activity",
 		"pane-bell",
 		"pane-border-format",
+		"pane-border-lines",
+		"pane-border-status",
+		"pane-border-style",
 		"pane-colours",
 		"pane-command-finished",
 		"pane-command-started",
@@ -1563,6 +3994,9 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"focus-events",
 		"get-clipboard",
 		"history-file",
+		"image-size-limit",
+		"image-total-count-limit",
+		"image-total-size-limit",
 		"input-buffer-size",
 		"light-theme-black",
 		"light-theme-blue",
@@ -1582,6 +4016,7 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"terminal-overrides",
 		"theme",
 		"user-keys",
+		"utmp",
 		"variation-selector-always-wide":
 		return ScopeServer, true
 	case "activity-action",
@@ -1622,6 +4057,7 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"after-show-messages",
 		"after-show-options",
 		"after-split-window",
+		"after-swap-window",
 		"after-unbind-key",
 		"alert-activity",
 		"alert-bell",
@@ -1675,6 +4111,10 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"session-window-changed",
 		"set-titles",
 		"set-titles-string",
+		"side-status",
+		"side-status-format",
+		"side-status-style",
+		"side-status-width",
 		"silence-action",
 		"status",
 		"status-bg",
@@ -1707,14 +4147,18 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"copy-mode-current-line-number-style",
 		"copy-mode-current-line-style",
 		"copy-mode-current-match-style",
+		"copy-mode-keep-column",
 		"copy-mode-line-number-style",
 		"copy-mode-line-numbers",
 		"copy-mode-mark-style",
 		"copy-mode-match-style",
 		"copy-mode-position-style",
 		"copy-mode-selection-style",
+		"display-panes-active-colour",
 		"display-panes-border-style",
+		"display-panes-colour",
 		"display-panes-format",
+		"display-panes-time",
 		"fill-character",
 		"main-pane-height",
 		"main-pane-width",
@@ -1747,6 +4191,7 @@ func nativeOptionScope(name string) (Scope, bool) {
 		"tree-mode-selection-style",
 		"window-closed",
 		"window-created",
+		"window-default-command",
 		"window-layout-changed",
 		"window-pane-changed",
 		"window-pane-current-status-format",
