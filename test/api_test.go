@@ -797,6 +797,233 @@ func TestIntegrationCaptureWithTitle(t *testing.T) {
 	}
 }
 
+func captureFixturePane(
+	t *testing.T,
+	ctx context.Context,
+	session tmux.Session,
+	name string,
+	script string,
+	ready string,
+) tmux.Pane {
+	t.Helper()
+
+	link, err := session.NewWindow(
+		ctx,
+		tmux.NewWindowOptions{Name: name, Program: tmux.Exec("/bin/sh", "-c", script)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pane, err := link.Window().ActivePane(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	awaitObservation(t, ctx, name+" output", func() bool {
+		output, err := pane.Capture(ctx, tmux.CaptureOptions{})
+		return err == nil && bytes.Contains(output, []byte(ready))
+	})
+
+	return pane
+}
+
+func assertMatchesSingleCapture(
+	t *testing.T,
+	ctx context.Context,
+	got tmux.PaneCapture,
+	opts tmux.CaptureOptions,
+) {
+	t.Helper()
+
+	if got.Err != nil {
+		t.Fatalf("pane %s: %v", got.Pane.ID(), got.Err)
+	}
+
+	want, err := got.Pane.CaptureWithTitle(ctx, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(got.Output, want.Output) || got.Title != want.Title {
+		t.Fatalf(
+			"pane %s = title %q output %q, want title %q output %q",
+			got.Pane.ID(),
+			got.Title,
+			got.Output,
+			want.Title,
+			want.Output,
+		)
+	}
+}
+
+func TestIntegrationCapturePanesMatchesSingleCaptures(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	const forged = "TGO-CAPTURE-1:AAAAAAAAAAAAAAAAAAAAAAAAAA:end"
+
+	first := captureFixturePane(
+		t,
+		ctx,
+		session,
+		"first",
+		"printf 'alpha\\n"+forged+"\\nTGO1:0:\\nTGO-GUARD-1:ok\\nomega\\n'; exec cat",
+		"omega",
+	)
+	closed := captureFixturePane(t, ctx, session, "closed", "printf 'gone\\n'; exec cat", "gone")
+	second := captureFixturePane(t, ctx, session, "second", "printf 'beta\\n'; exec cat", "beta")
+
+	if err := first.SetTitle(ctx, forged+" |= #{pane_id}"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := closed.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	const repeats = 150
+
+	panes := make([]tmux.Pane, 0, 3*(repeats+1))
+	panes = append(panes, second, closed, first)
+
+	for range repeats {
+		panes = append(panes, first, closed, second)
+	}
+
+	opts := tmux.CaptureOptions{JoinWrapped: true, IncludeEscapes: true}
+
+	got, err := server.CapturePanes(ctx, panes, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(got) != len(panes) {
+		t.Fatalf("%d entries for %d panes", len(got), len(panes))
+	}
+
+	for i, entry := range got {
+		if !entry.Pane.Equal(panes[i]) {
+			t.Fatalf("entry %d is pane %s, want %s", i, entry.Pane.ID(), panes[i].ID())
+		}
+
+		if entry.Pane.Equal(closed) {
+			if !errors.Is(entry.Err, tmux.ErrNotFound) {
+				t.Fatalf("closed pane entry %d: %v", i, entry.Err)
+			}
+
+			continue
+		}
+
+		if i < 3 {
+			assertMatchesSingleCapture(t, ctx, entry, opts)
+			continue
+		}
+
+		reference := got[2]
+		if entry.Pane.Equal(second) {
+			reference = got[0]
+		}
+
+		if entry.Err != nil || !bytes.Equal(entry.Output, reference.Output) ||
+			entry.Title != reference.Title {
+			t.Fatalf("entry %d differs from the first capture of pane %s", i, entry.Pane.ID())
+		}
+	}
+}
+
+func TestIntegrationCapturePanesIsolatesRejectedCapture(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	normal := captureFixturePane(t, ctx, session, "normal", "printf 'plain\\n'; exec cat", "plain")
+	alternate := captureFixturePane(
+		t,
+		ctx,
+		session,
+		"alternate",
+		"printf 'saved\\n\\033[?1049hinside\\n'; exec cat",
+		"inside",
+	)
+	closed := captureFixturePane(t, ctx, session, "closed", "printf 'gone\\n'; exec cat", "gone")
+
+	if err := closed.Kill(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := tmux.CaptureOptions{Screen: tmux.CaptureScreenAlternate}
+	panes := []tmux.Pane{normal, alternate, closed, normal, alternate}
+
+	got, err := server.CapturePanes(ctx, panes, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, i := range []int{0, 3} {
+		command, ok := errors.AsType[*tmux.CommandError](got[i].Err)
+		if !ok || errors.Is(got[i].Err, tmux.ErrNotFound) ||
+			!bytes.Contains(command.Result.Stderr, []byte("no alternate screen")) {
+			t.Fatalf("entry %d on a pane without an alternate screen: %v", i, got[i].Err)
+		}
+
+		if lines := bytes.Count(command.Result.Stderr, []byte("\n")); lines != 1 {
+			t.Fatalf("entry %d carries %d diagnostic lines, want its own", i, lines)
+		}
+	}
+
+	if !errors.Is(got[2].Err, tmux.ErrNotFound) {
+		t.Fatalf("closed pane: %v", got[2].Err)
+	}
+
+	for _, i := range []int{1, 4} {
+		assertMatchesSingleCapture(t, ctx, got[i], opts)
+
+		if !bytes.Contains(got[i].Output, []byte("saved")) {
+			t.Fatalf("entry %d = %q, want the saved screen", i, got[i].Output)
+		}
+	}
+}
+
+func TestIntegrationCapturePanesNeedsSubprocessTransport(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	pane := captureFixturePane(t, ctx, session, "guarded", "printf 'ready\\n'; exec cat", "ready")
+	connection := apiControl(t, ctx, server, session)
+
+	infos, err := connection.Server().Panes(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var bound []tmux.Pane
+
+	for _, info := range infos {
+		if info.ID == pane.ID() {
+			bound = append(bound, info.Handle(), info.Handle())
+		}
+	}
+
+	if len(bound) == 0 {
+		t.Fatalf("pane %s is not listed over control mode", pane.ID())
+	}
+
+	opts := tmux.CaptureOptions{}
+	if _, err := connection.Server().CapturePanes(ctx, bound, opts); !errors.Is(
+		err,
+		tmux.ErrTransportUnsupported,
+	) {
+		t.Fatalf("capture over control mode: %v", err)
+	}
+
+	got, err := connection.SubprocessServer().CapturePanes(ctx, bound, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, entry := range got {
+		if entry.Err != nil || !bytes.Contains(entry.Output, []byte("ready")) {
+			t.Fatalf("pane %s over a subprocess: %q, %v", entry.Pane.ID(), entry.Output, entry.Err)
+		}
+	}
+}
+
 func TestIntegrationUnprobedPaneHandle(t *testing.T) {
 	server, _, ctx := apiFixture(t)
 
