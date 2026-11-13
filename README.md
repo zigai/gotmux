@@ -2,17 +2,17 @@
 
 gotmux is a Go library for controlling, inspecting, and automating [tmux](https://github.com/tmux/tmux) sessions, windows, panes, and buffers.
 
-[![Tests](https://img.shields.io/github/actions/workflow/status/zigai/gotmux/test.yml?branch=master&label=Tests)](https://github.com/zigai/gotmux/actions/workflows/test.yml)
-[![Latest Release](https://img.shields.io/github/v/release/zigai/gotmux?color=blue)](https://github.com/zigai/gotmux/releases/latest)
-[![Go Reference](https://pkg.go.dev/badge/github.com/zigai/gotmux/tmux.svg)](https://pkg.go.dev/github.com/zigai/gotmux/tmux)
-[![Go version](https://img.shields.io/github/go-mod/go-version/zigai/gotmux)](https://github.com/zigai/gotmux/blob/master/go.mod)
-[![License: MIT](https://img.shields.io/github/license/zigai/gotmux)](https://github.com/zigai/gotmux/blob/master/LICENSE)
+[![tests](https://img.shields.io/github/actions/workflow/status/zigai/gotmux/test.yml?branch=master&label=tests&logo=githubactions&logoColor=white)](https://github.com/zigai/gotmux/actions/workflows/test.yml)
+[![release](https://img.shields.io/github/v/release/zigai/gotmux?label=release&color=blue&logo=github)](https://github.com/zigai/gotmux/releases/latest)
+[![reference](https://img.shields.io/badge/reference-pkg.go.dev-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/zigai/gotmux/tmux)
+[![go](https://img.shields.io/github/go-mod/go-version/zigai/gotmux?label=go&logo=go&logoColor=white)](go.mod)
+[![license](https://img.shields.io/github/license/zigai/gotmux?label=license&logo=opensourceinitiative&logoColor=white)](LICENSE)
 
 ## Features
 
-- **Deep tmux coverage:** Controls sessions, windows, shared window links, pane splits, layouts, paste buffer stacks, and terminal history capture.
+- **Deep tmux coverage:** Controls everything from sessions and panes to paste buffers and history.
 - **Control mode streaming:** Connects via control mode (`-C`/`-CC`) for push-based automation without polling.
-- **Typed options:** Reads and sets over 100 native tmux options and custom `@user` options using native Go types across server, session, window, and pane scopes.
+- **Typed options:** Reads and sets over 100 tmux options as native Go types.
 - **Environment discovery:** Detects the current session, window, and pane from `$TMUX` and `$TMUX_PANE`.
 - **Testing fixtures:** Launches isolated tmux instances via `tmuxtest` for integration tests.
 
