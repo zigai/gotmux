@@ -4,8 +4,8 @@ gotmux is a Go library that controls [tmux](https://github.com/tmux/tmux). It cr
 
 [![tests](https://img.shields.io/github/actions/workflow/status/zigai/gotmux/test.yml?branch=master&label=tests&labelColor=30363d)](https://github.com/zigai/gotmux/actions/workflows/test.yml)
 [![release](https://img.shields.io/github/v/release/zigai/gotmux?label=release&color=blue&logo=github&labelColor=30363d)](https://github.com/zigai/gotmux/releases/latest)
-[![reference](https://img.shields.io/badge/reference-007d9c?logo=go&logoColor=white&labelColor=30363d)](https://pkg.go.dev/github.com/zigai/gotmux/tmux)
 [![go](https://img.shields.io/github/go-mod/go-version/zigai/gotmux?label=&logo=go&logoColor=white&labelColor=30363d)](go.mod)
+[![reference](https://img.shields.io/badge/reference-007d9c?logo=go&logoColor=white&labelColor=30363d)](https://pkg.go.dev/github.com/zigai/gotmux/tmux)
 [![license](https://img.shields.io/github/license/zigai/gotmux?label=license&labelColor=30363d)](LICENSE)
 
 ## Features
