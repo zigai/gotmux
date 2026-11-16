@@ -962,7 +962,10 @@ func (c *Connection) startWorkers(connCtx context.Context, nonce string) {
 		waitErr := c.cmd.Wait()
 		if c.closedError() == nil {
 			c.stop(errors.Join(ErrClosed, waitErr), false)
+			return
 		}
+
+		c.reportExit(waitErr)
 	})
 	c.work.Go(func() { c.dispatch(connCtx, nonce) })
 
@@ -974,6 +977,20 @@ func (c *Connection) startWorkers(connCtx context.Context, nonce string) {
 		}
 	})
 	go func() { c.work.Wait(); close(c.done) }()
+}
+
+func (c *Connection) reportExit(waitErr error) {
+	if waitErr == nil {
+		return
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// A dying client closes its output before it is reaped, so the reader usually stops first.
+	if !c.normal && (errors.Is(c.terminal, io.EOF) || errors.Is(c.terminal, io.ErrUnexpectedEOF)) {
+		c.terminal = errors.Join(ErrClosed, waitErr)
+	}
 }
 
 func (c *Connection) awaitReady(ctx context.Context) error {

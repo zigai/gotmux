@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os/exec"
+	"syscall"
 	"testing"
 	"time"
 
@@ -300,5 +302,33 @@ func TestIntegrationControlExitLifecycle(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("conn.Wait did not unblock within 5 seconds of session termination")
+	}
+}
+
+func TestIntegrationKilledControlClientReportsItsExit(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+
+	conn, err := server.OpenControl(ctx, session.ID(), tmux.ControlOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	client, err := conn.Client(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	info, err := client.Info(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := syscall.Kill(info.PID, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+
+	err = conn.Wait(ctx)
+	if _, ok := errors.AsType[*exec.ExitError](err); !ok || !errors.Is(err, tmux.ErrClosed) {
+		t.Fatalf("killed client wait = %v, want ErrClosed with its exit status", err)
 	}
 }
