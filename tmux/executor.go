@@ -142,6 +142,10 @@ func classifyStderr(data []byte) error {
 		return ErrAlreadyExists
 	}
 
+	if strings.HasPrefix(s, "client is read-only") {
+		return ErrTransportUnsupported
+	}
+
 	if strings.HasPrefix(s, "multiple sessions:") || strings.HasPrefix(s, "ambiguous ") {
 		return ErrAmbiguousTarget
 	}

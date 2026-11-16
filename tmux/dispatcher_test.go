@@ -184,7 +184,7 @@ func (p *dispatcherPeer) mockResponse(wireStr string, c *Connection) ([]byte, bo
 
 func parseEndWords(end string) ([]string, bool) {
 	words, err := wire.ParseWords(strings.TrimSuffix(end, "\n"))
-	if err != nil || len(words) != 3 {
+	if err != nil || len(words) != 5 || words[0] != "list-clients" {
 		return nil, false
 	}
 

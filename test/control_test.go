@@ -167,6 +167,55 @@ func TestIntegrationOpenControlBindsAnsweringDaemon(t *testing.T) {
 	}
 }
 
+func TestIntegrationReadOnlyControlRejectsRequestsPromptly(t *testing.T) {
+	server, session, ctx := apiFixture(t)
+	readOnly := tmux.ControlOptions{Flags: []tmux.ClientFlag{tmux.ClientFlagReadOnly}}
+
+	conn, err := server.OpenControl(ctx, session.ID(), readOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Cleanup(func() { _ = conn.Close() })
+
+	requestCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	client, err := conn.Client(requestCtx)
+	if err != nil {
+		t.Fatalf("read-only connection client: %v", err)
+	}
+
+	info, err := client.Info(requestCtx)
+	if err != nil || !info.ReadOnly {
+		t.Fatalf("read-only connection client info = %+v %v", info, err)
+	}
+
+	_, err = conn.Server().Clients(requestCtx)
+	if err != nil && !errors.Is(err, tmux.ErrTransportUnsupported) {
+		t.Fatalf("read-only control query = %v, want a result or ErrTransportUnsupported", err)
+	}
+
+	bound, err := conn.SubprocessServer().FindSession(requestCtx, "fixture")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bound.Rename(requestCtx, "renamed"); err != nil {
+		t.Fatalf("subprocess rename beside read-only control: %v", err)
+	}
+
+	created, _, err := server.OpenControlNewSession(
+		requestCtx,
+		tmux.ControlNewSessionOptions{Name: "read-only-created", Control: readOnly},
+	)
+	if err != nil {
+		t.Fatalf("read-only control new session: %v", err)
+	}
+
+	_ = created.Close()
+}
+
 // TestIntegrationSubprocessServerNeverAutoSpawns verifies that a connection's subprocess servers
 // strictly forbid auto-spawning replacement daemons across all execution paths.
 func TestIntegrationSubprocessServerNeverAutoSpawns(t *testing.T) {

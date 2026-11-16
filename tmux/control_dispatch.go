@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -269,7 +270,7 @@ func (c *Connection) drainRequests() {
 	}
 }
 
-func buildRequestWire(r *controlRequest) (string, string, error) {
+func buildRequestWire(r *controlRequest, clientPID int) (string, string, error) {
 	text, err := r.plan.text()
 	if err != nil {
 		return "", "", err
@@ -280,8 +281,13 @@ func buildRequestWire(r *controlRequest) (string, string, error) {
 		return "", "", err
 	}
 
+	// Read-only control clients may run list-clients but not display-message.
 	suffix, _ := emptyPlan(
-		command("display-message", "-p", string(bytes.TrimSuffix([]byte(nonce), []byte{'\n'}))),
+		command(
+			"list-clients",
+			"-F", string(bytes.TrimSuffix([]byte(nonce), []byte{'\n'})),
+			"-f", fmt.Sprintf("#{==:#{client_pid},%d}", clientPID),
+		),
 	).text()
 	if int64(len(text)+len(suffix)) > r.bytes {
 		return "", "", ErrInputLimit
@@ -308,7 +314,7 @@ func (c *Connection) dispatchRequest(r *controlRequest) bool {
 		return true
 	}
 
-	payload, nonce, err := buildRequestWire(r)
+	payload, nonce, err := buildRequestWire(r, c.clientPID)
 	if err != nil {
 		c.deliver(r, failedResult(), err, EffectNotSent)
 		return true

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -137,6 +138,8 @@ type Connection struct {
 	frames        chan controlFrame
 	ready         chan error
 	done          chan struct{}
+	//exhaustruct:optional
+	clientPID int
 	//exhaustruct:optional
 	work        sync.WaitGroup
 	cmd         *exec.Cmd
@@ -337,7 +340,7 @@ func (c *Connection) Client(ctx context.Context) (Client, error) {
 
 	pid := c.cmd.Process.Pid
 
-	clients, err := c.Server().ClientsWith(ctx, QueryOptions{
+	clients, err := c.lookupServer().ClientsWith(ctx, QueryOptions{
 		Filter: Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
 	})
 	if err != nil {
@@ -447,7 +450,7 @@ func (c *Connection) Stderr() []byte {
 func (c *Connection) resolveCreatedSession(ctx context.Context) (Session, error) {
 	pid := c.cmd.Process.Pid
 
-	clients, err := c.Server().ClientsWith(ctx, QueryOptions{
+	clients, err := c.lookupServer().ClientsWith(ctx, QueryOptions{
 		Filter: Format(fmt.Sprintf("#{==:#{client_pid},%d}", pid)),
 	})
 	if err != nil {
@@ -471,13 +474,22 @@ func (c *Connection) resolveCreatedSession(ctx context.Context) (Session, error)
 		return Session{}, ErrNotFound
 	}
 
-	session, err := c.Server().Session(ctx, sid)
+	session, err := c.lookupServer().Session(ctx, sid)
 	if err != nil {
 		_ = c.Close()
 		return Session{}, err
 	}
 
 	return session, nil
+}
+
+func (c *Connection) lookupServer() *Server {
+	// tmux 3.8 rejects most commands from read-only control clients.
+	if slices.Contains(c.opts.Flags, ClientFlagReadOnly) {
+		return c.SubprocessServer()
+	}
+
+	return c.Server()
 }
 
 func (c *Connection) closedError() error {
@@ -844,6 +856,8 @@ func (s *Server) setupControlProcess(
 			return err //nolint:wrapcheck // command start error is propagated directly to caller
 		}
 
+		c.clientPID = c.cmd.Process.Pid
+
 		_ = slave.Close()
 		_ = errChild.Close()
 
@@ -899,6 +913,8 @@ func (s *Server) setupControlProcess(
 
 		return err //nolint:wrapcheck // command start error is propagated directly to caller
 	}
+
+	c.clientPID = c.cmd.Process.Pid
 
 	_ = inChild.Close()
 	_ = outChild.Close()
