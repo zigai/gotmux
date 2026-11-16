@@ -103,10 +103,12 @@ type WindowLinkInfo struct {
 // These are raw buffer coordinates; they do not claim to be capture-relative positions.
 type SelectionInfo struct {
 	// StartX, StartY are the 0-based coordinates where selection began.
-	StartX, StartY int
+	StartX int
+	StartY int
 
 	// EndX, EndY are the current 0-based coordinates of the selection endpoint.
-	EndX, EndY int
+	EndX int
+	EndY int
 
 	// Rectangle indicates whether rectangular block selection is active.
 	Rectangle bool

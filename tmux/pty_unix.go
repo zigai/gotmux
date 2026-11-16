@@ -22,7 +22,12 @@ func ptyIoctl(fd int, request uintptr, arg unsafe.Pointer) error {
 }
 
 func setTerminalDimensions(slave *os.File, cols uint16, rows uint16) {
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+	size := struct {
+		Rows    uint16
+		Columns uint16
+		Xpixel  uint16
+		Ypixel  uint16
+	}{
 		Rows:    rows,
 		Columns: cols,
 		Xpixel:  0,

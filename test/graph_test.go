@@ -111,8 +111,9 @@ func TestIntegrationUnprobedHandleLists(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name          string
-		probed, found func() ([]string, error)
+		name   string
+		probed func() ([]string, error)
+		found  func() ([]string, error)
 	}{
 		{
 			"Session.Windows",

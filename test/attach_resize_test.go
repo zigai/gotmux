@@ -135,7 +135,12 @@ func drainPTY(t *testing.T, master *os.File) {
 func resizePTY(t *testing.T, master *os.File, slave *os.File, rows uint16, cols uint16) {
 	t.Helper()
 
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+	size := struct {
+		Rows    uint16
+		Columns uint16
+		Xpixel  uint16
+		Ypixel  uint16
+	}{
 		Rows:    rows,
 		Columns: cols,
 		Xpixel:  0,

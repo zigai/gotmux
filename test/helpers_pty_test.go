@@ -38,7 +38,12 @@ func attachmentTerminal(t *testing.T) *os.File {
 func setTerminalSize(t *testing.T, slave *os.File) {
 	t.Helper()
 
-	size := struct{ Rows, Columns, Xpixel, Ypixel uint16 }{
+	size := struct {
+		Rows    uint16
+		Columns uint16
+		Xpixel  uint16
+		Ypixel  uint16
+	}{
 		Rows:    24,
 		Columns: 80,
 		Xpixel:  0,

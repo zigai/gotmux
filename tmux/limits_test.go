@@ -186,7 +186,8 @@ func TestCommandTimeoutStopsTheCommand(t *testing.T) {
 
 func TestOutputLimitAfterStartIsUnknown(t *testing.T) {
 	for _, tc := range []struct {
-		name, redirect string
+		name     string
+		redirect string
 	}{
 		{"stdout", ""},
 		{"stderr", " >&2"},
@@ -638,8 +639,9 @@ func TestNamesTmuxWouldAlterAreRejected(t *testing.T) {
 
 func TestPopupDismissalIsNotAnError(t *testing.T) {
 	for _, tc := range []struct {
-		name, script string
-		wantErr      bool
+		name    string
+		script  string
+		wantErr bool
 	}{
 		{"closed before its program ended", "exit 129\n", false},
 		{"tmux diagnostic", "echo 'no current client' >&2\nexit 129\n", true},
