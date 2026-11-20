@@ -165,7 +165,18 @@ func cleanupDaemon(
 
 	// Pane programs outlive the server for a moment and may still write into HOME, which is
 	// the fixture directory, such as bash saving its history on SIGHUP.
+	waitForPanePrograms(ctx, tb, panes, dir)
+}
+
+func waitForPanePrograms(ctx context.Context, tb testing.TB, panes []tmux.PaneInfo, dir string) {
+	tb.Helper()
+
 	for _, pane := range panes {
+		// tmux reports no PID for a dead pane, and kill(0, 0) would probe this process's group.
+		if pane.PID <= 0 {
+			continue
+		}
+
 		if err := waitForExit(ctx, pane.PID); err != nil {
 			tb.Errorf("fixture pane process %d outlived cleanup at %s: %v", pane.PID, dir, err)
 		}
