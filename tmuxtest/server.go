@@ -6,10 +6,12 @@ package tmuxtest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 	"time"
 
@@ -17,10 +19,11 @@ import (
 )
 
 const (
-	cleanupTimeout = 5 * time.Second
-	startupTimeout = 10 * time.Second
-	defaultWidth   = 100
-	defaultHeight  = 30
+	cleanupTimeout   = 5 * time.Second
+	exitPollInterval = 10 * time.Millisecond
+	startupTimeout   = 10 * time.Second
+	defaultWidth     = 100
+	defaultHeight    = 30
 )
 
 // NewServer starts an isolated, real tmux daemon fixture with an initial session named "fixture".
@@ -146,10 +149,42 @@ func cleanupDaemon(
 		}
 	}
 
-	if known {
-		err := server.KillMatching(ctx, id)
-		if err != nil && !errors.Is(err, tmux.ErrNoServer) {
-			tb.Errorf("fixture cleanup failed at %s: %v", dir, err)
+	if !known {
+		return
+	}
+
+	panes, err := server.Panes(ctx)
+	if err != nil && !errors.Is(err, tmux.ErrNoServer) {
+		tb.Errorf("fixture cleanup could not list panes at %s: %v", dir, err)
+	}
+
+	err = server.KillMatching(ctx, id)
+	if err != nil && !errors.Is(err, tmux.ErrNoServer) {
+		tb.Errorf("fixture cleanup failed at %s: %v", dir, err)
+	}
+
+	// Pane programs outlive the server for a moment and may still write into HOME, which is
+	// the fixture directory, such as bash saving its history on SIGHUP.
+	for _, pane := range panes {
+		if err := waitForExit(ctx, pane.PID); err != nil {
+			tb.Errorf("fixture pane process %d outlived cleanup at %s: %v", pane.PID, dir, err)
+		}
+	}
+}
+
+func waitForExit(ctx context.Context, pid int) error {
+	ticker := time.NewTicker(exitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for process exit: %w", ctx.Err())
+		case <-ticker.C:
 		}
 	}
 }
