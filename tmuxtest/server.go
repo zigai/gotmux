@@ -153,7 +153,7 @@ func cleanupDaemon(
 		return
 	}
 
-	panes, err := server.Panes(ctx)
+	panes, err := livePanes(ctx, server)
 	if err != nil && !errors.Is(err, tmux.ErrNoServer) {
 		tb.Errorf("fixture cleanup could not list panes at %s: %v", dir, err)
 	}
@@ -166,6 +166,24 @@ func cleanupDaemon(
 	// Pane programs outlive the server for a moment and may still write into HOME, which is
 	// the fixture directory, such as bash saving its history on SIGHUP.
 	waitForPanePrograms(ctx, tb, panes, dir)
+}
+
+func livePanes(ctx context.Context, server *tmux.Server) ([]tmux.PaneInfo, error) {
+	sessions, err := server.Sessions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list sessions: %w", err)
+	}
+
+	if len(sessions) == 0 {
+		return nil, nil
+	}
+
+	panes, err := server.Panes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list panes: %w", err)
+	}
+
+	return panes, nil
 }
 
 func waitForPanePrograms(ctx context.Context, tb testing.TB, panes []tmux.PaneInfo, dir string) {

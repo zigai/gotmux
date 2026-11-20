@@ -117,3 +117,22 @@ func TestCleanupSkipsDeadPanes(t *testing.T) {
 		}
 	}
 }
+
+func TestCleanupHandlesServerWithoutSessions(t *testing.T) {
+	server := tmuxtest.NewServer(t)
+
+	if err := server.Options().Set(t.Context(), "exit-empty", "off"); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions, err := server.Sessions(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, session := range sessions {
+		if err := session.Handle().Kill(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
